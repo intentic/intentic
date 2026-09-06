@@ -42,10 +42,10 @@ const columns: PricingColumn[] = [
         eyebrow: "Our machine",
         name: "Hosted",
         price: `Free, then $${hosted.priceUsd}`,
-        priceNote: "a month via Stripe, cancel any time",
+        priceNote: "a month per hosted sandbox via Stripe, cancel any time",
         includes: [
             `Free: one hosted sandbox, ${hosted.freeHours} awake hours a month, removed after ${idleWeeks} weeks unopened`,
-            "On the plan: always on, no hour ceiling, never removed",
+            "On the plan: always on, no hour ceiling, never removed. Add a second hosted sandbox for another slot",
             `${hosted.cpus} shared vCPUs, ${hosted.memoryGb} GB memory, ${hosted.diskGb} GB disk`,
             "The same workspace and every feature, on either",
             "Sleeps while you are away; a sleeping machine spends no hours",
@@ -60,7 +60,7 @@ const faq: FaqItem[] = [
         id: "is-any-of-it-paid",
         question: "Is any of it paid?",
         answer: [
-            `The product is not: every sandbox, capability and shared workspace is free, with no tiers and no card, and all of intentic is MIT. The one paid thing is a hosted sandbox at $${hosted.priceUsd} a month, for people who would rather not run a machine.`,
+            `The product is not: every sandbox, capability and shared workspace is free, with no tiers and no card, and all of intentic is MIT. The one paid thing is a hosted sandbox at $${hosted.priceUsd} a month each, for people who would rather not run a machine.`,
         ],
     },
     {

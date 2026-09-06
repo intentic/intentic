@@ -8,6 +8,7 @@ import { createPrisma } from "./prisma.js";
 import { startHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
+import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
@@ -39,6 +40,9 @@ startHostedPool(prisma, config, logger);
 // Ends the environment builds whose builder never reported, destroys builders past their timeout, and keeps
 // every building app to one sandbox machine and one builder (hosted-build.ts).
 startHostedBuilds(prisma, config, logger);
+// The hour meter's hourly tick: close the stretch of every machine that stopped, count the open ones live,
+// and stop a free machine whose owner's month is spent (hosted-meter.ts).
+startHostedMeter(prisma, config, logger);
 // Watches the hosted lane against Fly and says so when the two disagree (hosted-health.ts). Reads only: it is
 // the alarm the sweeps above never had, and the reason a fleet destroyed under its rows was found by a user.
 startHostedHealth(prisma, config, logger);

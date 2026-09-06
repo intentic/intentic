@@ -39,7 +39,15 @@ vi.mock(`./useChat-view`, () => ({
         selectAccount: () => {},
     }),
 }));
-vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
+// The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
+const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
+vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+// The free lane's meter as the strip reads it: settable, so the threshold is the platform's rule (hostedHours.ts)
+// and the strip's own concern is only whether to stand.
+const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(undefined);
+const lowOnHours = ref(false);
+const planOffered = ref(true);
+vi.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
 vi.mock(`../../agents/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => undefined,
@@ -84,6 +92,9 @@ beforeEach(() => {
     provider.value = TRIAL_PROVIDER;
     reachable.value = true;
     streaming.value = false;
+    active.value = undefined;
+    hostedMeter.value = undefined;
+    lowOnHours.value = false;
     trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
     resume.mockClear();
     loadTrialStatus.mockClear();
@@ -195,4 +206,32 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
     const sentence = [...element.querySelectorAll(`span`)].find((span) => span.textContent?.includes(`Free trial isn't answering`) === true);
     expect(sentence?.className).toContain(`min-w-[14rem]`);
     expect(sentence?.className).not.toContain(`min-w-0`);
+});
+
+/* THE FREE LANE'S LAST HOURS, above the composer, to the one person spending them. Only on a hosted sandbox, only
+ * to its owner (a guest spends hours they cannot buy), only while the meter says low, and with the door to
+ * Billing where a plan is sold. */
+it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, async () => {
+    provider.value = `claude` as AgentProvider;
+    hostedMeter.value = { usedMinutes: 2_160, allowanceMinutes: 2_400, remainingMinutes: 240, fraction: 0.1, resetsAt: `2026-10-01T00:00:00.000Z` };
+    lowOnHours.value = true;
+    active.value = { hosted: { region: `arn`, warm: true }, role: `owner` };
+    const root = mount();
+    await nextTick();
+    expect(root.textContent).toContain(`4 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Billing`);
+
+    // A guest on the same sandbox is told nothing: the hours are the owner's to buy back.
+    active.value = { hosted: { region: `arn`, warm: true }, role: `maintainer` };
+    await nextTick();
+    expect(root.textContent).not.toContain(`left this month`);
+
+    // Nor is anyone on a sandbox the platform does not run, or while most of the month is still there.
+    active.value = { hosted: null, role: `owner` };
+    await nextTick();
+    expect(root.textContent).not.toContain(`left this month`);
+    active.value = { hosted: { region: `arn`, warm: true }, role: `owner` };
+    lowOnHours.value = false;
+    await nextTick();
+    expect(root.textContent).not.toContain(`left this month`);
 });

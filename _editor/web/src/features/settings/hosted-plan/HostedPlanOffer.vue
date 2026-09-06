@@ -58,6 +58,8 @@ const assurances = [
                     <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ priceUsd }}</span>
                     <span class="text-sm text-muted">/month</span>
                 </div>
+                <!-- The unit, said where the price is: a slot is a machine, and a second machine is a second slot. -->
+                <p class="mt-1 text-2xs text-subtle">per hosted sandbox</p>
                 <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud mt-3 w-full" @click="emit(`checkout`)" />
                 <p class="mt-2 text-center text-2xs text-subtle">Paid through Stripe · cancel any time</p>
             </div>

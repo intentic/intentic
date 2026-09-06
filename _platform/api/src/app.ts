@@ -96,7 +96,7 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
 // /sandbox/local-dns. sandbox.zones is the one route handed an infra secret (the Cloudflare token), and only
 // transiently, it lists zones for the picker and drops the token, never persisting or logging it.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger): { app: Hono<AppEnv>; auth: Auth } => {
-    const auth = createAuth(config, prisma);
+    const auth = createAuth(config, prisma, logger);
 
     const app = new Hono<AppEnv>();
 

@@ -413,10 +413,21 @@ model HostedPlan {
     user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
     stripeCustomerId     String   @unique
     stripeSubscriptionId String   @unique
+    // The subscription's one item, which a slot change (quantity) is addressed to. Empty on a row mirrored
+    // before the item was read; the slot write reads the subscription fresh in that case.
+    stripeItemId         String   @default("")
     status               String
     // When the paid period runs out (Stripe's current_period_end) — display only ("renews on …"); the
     // plan answer keys off `status`, which the webhook keeps current through every renewal and lapse.
     currentPeriodEnd     DateTime
+    // The portal's cancel: Stripe keeps `status` active until the period ends and says so here instead. The
+    // Billing page reads it to say "ends" rather than "renews" to somebody who just cancelled.
+    cancelAtPeriodEnd    Boolean  @default(false)
+    // How many hosted sandboxes the plan covers: the item's quantity, one slot each (docs/design/billing-view.md).
+    quantity             Int      @default(1)
+    // Stripe's `created` of the event that last wrote this row. Webhooks arrive out of order; an event older
+    // than the last one applied is dropped rather than rolling the mirror back (hosted-plan.ts).
+    syncedAt             DateTime @default(now())
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt
 

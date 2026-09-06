@@ -61,7 +61,7 @@ const confirmDelete = async (): Promise<void> => {
                 icon="trash"
                 tone="danger"
                 title="Delete account"
-                description="Permanently removes your account and shared access."
+                description="Permanently removes your account, shared access, and any hosted plan: the subscription is cancelled with it."
             >
                 <template #control>
                     <Button v-if="!confirmingDelete" label="Delete" severity="danger" size="small" @click="confirmingDelete = true" />

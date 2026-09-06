@@ -9,6 +9,8 @@ import { trialStatus } from "../accounts/providerCatalog";
 import { loadTrialStatus } from "../models/useChat-catalog";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { hoursLeftLine } from "../../settings/hosted-plan/hostedHours";
+import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 
@@ -28,7 +30,20 @@ import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
  * chats side by side, a banner about the wrong one is worse than no banner. */
 
 const { conversation, provider, account, accounts, streaming } = usePaneView();
-const { reachable } = useSandbox();
+const { reachable, active } = useSandbox();
+
+/* THE LAST FREE HOURS, said above the composer: the person typing is the one spending them, and a machine that
+ * will not wake next week is a worse way to learn the month is nearly out than a line here today. Only on a
+ * hosted sandbox, only to its owner (a guest spends hours they cannot buy), and only in the last stretch
+ * (hostedHours.ts's threshold): a count over every session from the first minute would read as the limit about
+ * to hit rather than the forty hours it had, the trial strip's own lesson. Spent, the wake gate takes over. */
+const { meter: hostedMeter, lowOnHours, offered: planOffered } = useHostedPlan();
+const hoursNotice = computed(() => {
+    if (!lowOnHours.value || hostedMeter.value === undefined || (active.value?.hosted ?? null) === null || active.value?.role !== `owner`) {
+        return undefined;
+    }
+    return `${hoursLeftLine(hostedMeter.value)}. A sleeping machine spends none; ${planOffered.value ? `the hosted plan lifts the ceiling` : `it resets on the first`}.`;
+});
 const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
@@ -157,6 +172,17 @@ const activeAccountReauth = computed(() => {
         </Button>
     </div>
     <ChatAccountPanel />
+    <!-- THE FREE LANE'S LAST HOURS: the meter's own line, amber, with the door to Billing where the plan is sold.
+         Same box as the trial strip below, because it is the same kind of sentence (what this chat is running on,
+         and for how much longer). -->
+    <div
+        v-if="hoursNotice"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
+    >
+        <Icon name="clock" class="shrink-0" />
+        <span class="min-w-[14rem] flex-1">{{ hoursNotice }}</span>
+        <Button v-if="planOffered" :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true" class="shrink-0">Billing</Button>
+    </div>
     <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing; this says it for as
          long as the choice is in force, because the person typing may not be the person who picked, and a
          conversation can outlive the click that started it. Exhausted, the same strip becomes the signpost to

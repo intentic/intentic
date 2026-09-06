@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
-import { hostedBudgetOf, openHostedStretch, settleHostedStretch, usageMonth } from "./hosted-usage.js";
+import { hostedBudgetOf, hostedUsedMinutes, openHostedStretch, settleHostedStretch, usageMonth, usageResetsAt } from "./hosted-usage.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -11,7 +11,8 @@ const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>
     ({
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
-        hostedMachine: { update: vi.fn().mockResolvedValue({}) },
+        // No open stretch unless a test says so: the live half of the meter reads the owner's woken machines.
+        hostedMachine: { update: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
         ...over,
     }) as unknown as PrismaClient;
 
@@ -29,6 +30,43 @@ afterEach(() => {
 describe(`the hosted hour meter`, () => {
     it(`keys a month the way the rows are keyed`, () => {
         expect(usageMonth(new Date(`2026-08-13T23:59:00.000Z`))).toBe(`2026-08`);
+    });
+
+    it(`resets on the first of the next month, UTC, December included`, () => {
+        expect(usageResetsAt(new Date(`2026-08-13T23:59:00.000Z`)).toISOString()).toBe(`2026-09-01T00:00:00.000Z`);
+        expect(usageResetsAt(new Date(`2026-12-31T23:59:00.000Z`)).toISOString()).toBe(`2027-01-01T00:00:00.000Z`);
+    });
+
+    /* THE OPEN STRETCH COUNTS. A machine awake for 39 hours used to read as 40 left, because only a settled
+     * row was ever read; the ceiling was a cap on stopping, not on hours. The live figure is the row plus
+     * the minutes since each of the owner's machines woke, attributed to the month the stretch STARTED in,
+     * exactly as settling will attribute it. */
+    describe(`the live figure`, () => {
+        const now = new Date(`2026-08-13T12:00:00.000Z`);
+
+        it(`adds the minutes since each open stretch began to the settled row`, async () => {
+            const prisma = prismaWith({
+                hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 100 }) },
+                hostedMachine: {
+                    update: vi.fn(),
+                    findMany: vi.fn().mockResolvedValue([{ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }, { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) }]),
+                },
+            });
+            expect(await hostedUsedMinutes(prisma, `u1`, now)).toBe(100 + 120 + 30);
+        });
+
+        it(`leaves a stretch that began last month to last month's row`, async () => {
+            const prisma = prismaWith({ hostedMachine: { update: vi.fn(), findMany: vi.fn().mockResolvedValue([{ wokeAt: new Date(`2026-07-31T23:00:00.000Z`) }]) } });
+            expect(await hostedUsedMinutes(prisma, `u1`, now)).toBe(0);
+        });
+
+        it(`is what the budget reads, so an awake machine can run a month out`, async () => {
+            const prisma = prismaWith({
+                hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 2_300 }) },
+                hostedMachine: { update: vi.fn(), findMany: vi.fn().mockResolvedValue([{ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }]) },
+            });
+            expect(await hostedBudgetOf(prisma, config(), `u1`, now)).toMatchObject({ usedMinutes: 2_420, remainingMinutes: 0 });
+        });
     });
 
     describe(`whose month it is, and whether any is left`, () => {

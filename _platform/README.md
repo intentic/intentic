@@ -11,5 +11,7 @@ the platform deliberately keeps the way back in (wake/stop/destroy), the trade A
 full. Commands still never pass through here.
 
 The one paid thing is the **hosted plan** ([api/src/sandbox/hosted/hosted-plan.ts](api/src/sandbox/hosted/hosted-plan.ts)):
-a Stripe subscription that lifts the hosted lane's hour ceiling and its idle collection for one account.
-Nothing else reads it; every feature is in the free product ([docs/design/pricing-model.md](../docs/design/pricing-model.md)).
+a Stripe subscription, one slot per hosted sandbox, that lifts the hosted lane's hour ceiling and its idle
+collection for one account. Nothing else reads it; every feature is in the free product
+([docs/design/pricing-model.md](../docs/design/pricing-model.md)). The editor's one page about it is
+Settings ▸ Billing ([docs/design/billing-view.md](../docs/design/billing-view.md)).

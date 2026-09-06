@@ -27,7 +27,9 @@ export const HOSTED_STUCK_AFTER_MS = 60_000;
 // gate can never draw the setup door under the sign-in sentence.
 export type ConnectionAction =
     | { readonly kind: "setup"; readonly label: string }
-    | { readonly kind: "signin"; readonly label: string };
+    | { readonly kind: "signin"; readonly label: string }
+    // The Billing page: the wake was refused because the free lane's month is spent, and the plan lifts it.
+    | { readonly kind: "billing"; readonly label: string };
 
 export interface ConnectionNotice {
     readonly title: string;
@@ -48,6 +50,12 @@ export interface ConnectionNoticeInput {
     readonly hostedMachine: boolean;
     // How long the current run of failures has lasted (connection.unavailableSince). 0 while nothing has failed.
     readonly outageMs: number;
+    /* The platform REFUSED the last wake for spent hours (useSandbox's wake reflex, PAYMENT_REQUIRED). The one
+     * network-shaped outage with a named cause and a price on the remedy: the machine is asleep and will stay
+     * so until the month resets or the plan is bought. `owner` decides who is offered the plan: a guest on a
+     * shared sandbox cannot buy the owner's, and a Subscribe button for them would sell the wrong person. */
+    readonly hoursSpent?: boolean;
+    readonly owner?: boolean;
 }
 
 /* The patient wait, in the three shapes the browser can actually observe. Its own function because the arm it
@@ -71,6 +79,28 @@ const waitingNotice = (kind: "timeout" | "closed" | "network", name: string): Co
     };
 };
 
+/* THE MONTH IS SPENT. Not a wait at all, and said before any wait: the platform declined to start the machine,
+ * the meter (Billing, the avatar row) has read zero for a while, and the two ways out are the plan and a
+ * computer of the reader's own. Addressed to whoever is reading: the owner is offered the plan, a guest is told
+ * whose hours they are and offered nothing to buy. */
+const hoursSpentNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
+    if (!input.hostedMachine || input.hoursSpent !== true) {
+        return undefined;
+    }
+    if (input.owner === false) {
+        return {
+            title: `"${name}" has used its free hours for this month`,
+            body: `The owner's free hosted hours are spent, so the machine stays asleep until the month resets or the owner moves it to the hosted plan. Nothing on your side causes this.`,
+            action: undefined,
+        };
+    }
+    return {
+        title: `"${name}" has used its free hours for this month`,
+        body: `Free hosted sandboxes get a monthly allowance of awake hours; this one has spent it, so the machine stays asleep until the month resets. The hosted plan keeps it always on. Or move it to your own computer, free, with no hours at all.`,
+        action: { kind: `billing`, label: `See the plan` },
+    };
+};
+
 /* …and the wait that has stopped being one. Undefined whenever this is still an ordinary outage — a sandbox on
  * the reader's own computer (nothing here can tell a closed laptop from a slow pull), or one of ours that has
  * not yet had its minute. */
@@ -82,6 +112,13 @@ const stuckHostedNotice = (input: ConnectionNoticeInput, name: string): Connecti
               action: { kind: `setup`, label: `Check the machine` },
           }
         : undefined;
+
+/* The three network-shaped causes. They differ only in what the browser observed, and for the first minute they
+ * are all the same thing to a reader — a wait — so they keep their own words and no button. Past that, on a
+ * machine we run, they are all the same thing again: it is not coming back on its own, and the screen that can
+ * say why is one click away. A wake the platform REFUSED outranks both: that is not a wait at any age. */
+const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" | "network", name: string): ConnectionNotice =>
+    hoursSpentNotice(input, name) ?? stuckHostedNotice(input, name) ?? waitingNotice(kind, name);
 
 export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice => {
     const { failure } = input;
@@ -114,13 +151,9 @@ export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice
                 body: `This sandbox refused the Google account you're signed in with. Ask its owner to invite you, or switch accounts.`,
                 action: { kind: `signin`, label: `Sign in again` },
             };
-        /* The three network-shaped causes. They differ only in what the browser observed, and for the first
-         * minute they are all the same thing to a reader — a wait — so they keep their own words and no
-         * button. Past that, on a machine we run, they are all the same thing again: it is not coming back on
-         * its own, and the screen that can say why is one click away. */
         case `timeout`:
         case `closed`:
         case `network`:
-            return stuckHostedNotice(input, name) ?? waitingNotice(failure.kind, name);
+            return networkNotice(input, failure.kind, name);
     }
 };

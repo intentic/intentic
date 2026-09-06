@@ -5,6 +5,8 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { stopMachine } from "../sandbox/hosted/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
+import { cancelHostedPlan } from "../sandbox/hosted/hosted-plan.js";
+import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
 
 /* THE ADMIN MUTATIONS — the only writes on the admin surface, behind three gates the ROUTES enforce
  * (requireAdmin, the ADMIN_MUTATIONS switch, the typed confirmation); what lives here is the action itself,
@@ -33,12 +35,22 @@ export const stopHostedMachine = async (prisma: PrismaClient, config: Config, sa
  * Settings). The same teardown per sandbox as the owner's own delete — the rows go, which is itself what
  * revokes their reachability (reachability.ts: the ingress refuses a tunnel whose sandbox is not here), and
  * the hosted machines are destroyed after. Teardown failures downgrade to the reaper's problem exactly as they
- * do in the owner flow: an app with no row is what the daily hosted reap destroys. */
-export const deleteUserAccount = async (prisma: PrismaClient, config: Config, logger: Logger, userId: string): Promise<AdminActionResult> => {
+ * do in the owner flow: an app with no row is what the daily hosted reap destroys. The Stripe subscription is
+ * cancelled FIRST, while the plan row still names it: it is the one thing about an account that is not a row
+ * of ours and does not cascade (hosted-plan.ts). */
+export const deleteUserAccount = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    userId: string,
+    // Injectable so tests drive the cancel without Stripe, the plan routes' precedent.
+    gateway?: StripeGateway,
+): Promise<AdminActionResult> => {
     const sandboxes = await prisma.sandbox.findMany({
         where: { ownerId: userId },
         select: { id: true, hosted: { select: { appName: true } } },
     });
+    await cancelHostedPlan(prisma, config, logger, userId, gateway);
     const user = await prisma.user.delete({ where: { id: userId }, select: { email: true } });
     for (const sandbox of sandboxes) {
         if (sandbox.hosted !== null) {
@@ -49,5 +61,5 @@ export const deleteUserAccount = async (prisma: PrismaClient, config: Config, lo
             }
         }
     }
-    return { ok: true, message: `${user.email} erased: sandboxes, grants and the hosted plan's mirror are gone with the account.` };
+    return { ok: true, message: `${user.email} erased: sandboxes, grants and the hosted plan are gone with the account.` };
 };

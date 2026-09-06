@@ -5,6 +5,7 @@ import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { useSandbox } from "../client/useSandbox";
+import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
 import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
@@ -48,6 +49,9 @@ const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // so the honest next rung is a bigger machine that costs nothing, and it deserves saying where the owner
 // already is rather than only on a setup page they finished.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
+// Where this machine stands under its owner's plan ("12 h of 40 h left this month", "covered by your Hosted
+// plan"), the same sentence Billing and the avatar row use, so the three cannot disagree.
+const { machineStanding, offered: planOffered } = useHostedPlan();
 
 // Inline renaming (owner only), strictly in place: its pencil and commit pair belong to the name, not to a
 // second page-level action column. The field and title share their box, and the controls remain no larger than
@@ -406,6 +410,12 @@ const save = async (): Promise<void> => {
              /setup, which is where moving a sandbox onto it happens. -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
             <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
+            <!-- THE MACHINE'S STANDING, first: what this box costs its owner this month is the fact a reader of
+                 this card came for more often than the upgrade below it, and it was nowhere in the app. -->
+            <p v-if="machineStanding" class="text-xs text-muted">
+                <span class="text-content">{{ machineStanding }}</span>
+                <template v-if="planOffered"> · <RouterLink to="/settings/billing" class="text-link hover:underline">Billing</RouterLink></template>
+            </p>
             <p class="text-xs leading-relaxed text-muted">
                 This sandbox is a small starter machine we host for you. When it feels tight, move it to
                 <span class="text-content">your own device</span>: no hour limit, nothing metered, and the only place your GPU is.

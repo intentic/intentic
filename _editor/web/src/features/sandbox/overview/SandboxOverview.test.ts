@@ -22,6 +22,11 @@ vi.mock(`./useSandboxVersion`, () => ({
 }));
 vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
 vi.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => ref(`live`) }));
+// The hosted plan is account-wide state the card only QUOTES (one line, hostedHours.ts owns the words), so it
+// is a settable sentence here rather than a query needing a Vue Query client.
+const machineStanding = ref<string | undefined>(undefined);
+const planOffered = ref(false);
+vi.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ machineStanding, offered: planOffered }) }));
 vi.mock(`./SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -223,4 +228,21 @@ it(`reports an unreadable file without writing anything`, async () => {
     field.dispatchEvent(new Event(`change`));
     await vi.waitFor(() => expect(el.textContent).toContain(`Couldn't read that file as an image.`));
     expect(update).not.toHaveBeenCalled();
+});
+
+/* THE MACHINE'S STANDING under its owner's plan, on the hosted card: the fact a reader of that card came for more
+ * often than the upgrade below it, and one that was nowhere in the app. Quoted from the shared sentence, with
+ * the door to Billing only where a plan is sold, and only to the owner (a member cannot buy the owner's). */
+it(`states the machine's standing on the hosted card, with Billing where a plan is sold`, async () => {
+    machineStanding.value = `12 h of 40 h left this month`;
+    planOffered.value = true;
+    const root = mount(sandboxRow({ role: `owner`, hosted: { region: `arn`, warm: true } }));
+    await nextTick();
+    expect(root.textContent).toContain(`12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Billing`);
+
+    planOffered.value = false;
+    await nextTick();
+    expect(root.textContent).toContain(`12 h of 40 h left this month`);
+    expect(root.textContent).not.toContain(`Billing`);
 });

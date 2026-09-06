@@ -129,11 +129,13 @@ and a ceiling built before it has been seen is the kind of number that ends up o
 defended. If it appears, the fix is a `hosted.planMonthlyHours` knob enforced at wake exactly like the free
 lane's, published on the page as "up to N hours", and N is read from the panel, not guessed.
 
-### One hosted sandbox
+### One hosted sandbox per slot
 
-Keep `hosted.perUser` at one for the plan too. "Ten agents in parallel" is ten agents in one sandbox, which
+The free lane stays at one (`hosted.perUser`). "Ten agents in parallel" is ten agents in one sandbox, which
 the shape carries; a second hosted sandbox is a second disk and a second box, and the honest price for it is
-another plan. Offer that when someone asks, as an add-on, not as a tier.
+another $20: the plan is **per hosted sandbox**, the subscription item's quantity is the slot count, and the
+Billing page adds or removes one ([billing-view.md](billing-view.md) §3 has the argument and the fallback on
+cancel). An add-on, not a tier.
 
 ## 6. The page
 
@@ -169,11 +171,10 @@ paragraph becomes "bring your own model subscription, run it on your own hardwar
 thing we sell is a hosted sandbox for people who would rather not run a machine, and it is never a meter on
 model usage or a tier on features"; the economics band's three points stay as they are, because they are true.
 
-In the app: Settings ▸ Membership becomes Settings ▸ Hosted (plan state, awake hours this month on the free
-lane, the Stripe button and portal); the avatar menu's credit row becomes the free lane's hours row (the
-sandbox summary already carries `hours.allowance` and `hours.remaining`); the offer card says "Keep your hosted
-sandbox always on" instead of "Unlock every premium extension"; the hour-cap message at wake already says the
-right thing.
+In the app: Settings ▸ Membership becomes Settings ▸ Billing (plan state, awake hours this month, the hosted
+sandboxes and slots, the Stripe button and portal; [billing-view.md](billing-view.md)); the avatar menu's
+credit row becomes the free lane's hours row; the offer card says "Keep your hosted sandbox always on" instead
+of "Unlock every premium extension"; the wake's refusal for spent hours is a gate state with the plan on it.
 
 ## 7. What changes in the source
 

@@ -198,6 +198,15 @@ export const configSchema = z.object({
              * running out means the next visit offers the upgrade, not that the box dies under someone's
              * hands. 0 disables the ceiling (self-hosters metering nothing). HOSTED_MONTHLY_HOURS. */
             monthlyHours: z.coerce.number().int().nonnegative().default(40),
+            /* THE CEILING'S BACKSTOP. The meter charges a stretch when the machine stops, and the machine
+             * stops from the inside (the daemon's idle-stop), where the owner is root: a pane that prints a
+             * line every minute keeps a free machine awake, and an awake machine used to be one that was
+             * never charged. The hourly meter tick (hosted-meter.ts) now counts a running machine's open
+             * stretch live and STOPS a metered owner's machines once the month is spent by more than this
+             * many minutes. The grace is what keeps "never under someone's hands" true in every ordinary
+             * case: the editor's meter reads zero and its strip has said so long before the platform acts.
+             * HOSTED_OVER_BUDGET_GRACE_MINUTES. */
+            overBudgetGraceMinutes: z.coerce.number().int().nonnegative().default(60),
             /* THE FREE LANE'S EXPIRY, in days since the machine was last woken. A hosted disk bills every day
              * it exists, so a machine nobody has opened since spring is the free tier's largest cost and its
              * least useful one. Non-members only; a member's machine is never collected.

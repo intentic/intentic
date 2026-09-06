@@ -3,14 +3,22 @@ import { AnchoredOverlay, Avatar, browserOwnsClick, vAction } from "@intentic/ui
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useAuth } from "../features/auth/useAuth";
+import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
 
-/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name) and
- * the account actions (Settings, Sign out). The sandbox and its status live in the rail's top switcher;
- * personal preferences (theme) live on the /settings page. */
+/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name), the
+ * one line about money or hours (the hosted plan's row, a link to Billing), and the account actions (Settings,
+ * Sign out). The sandbox and its status live in the rail's top switcher; personal preferences (theme) live on
+ * the /settings page. */
 
 const { user, signOut } = useAuth();
 const route = useRoute();
+
+/* THE PLAN'S ROW: "12 h of 40 h left this month" on the free lane, "Hosted plan · renews Oct 1" on it, amber
+ * when few hours are left, a card is failing or the plan is ending. Absent where the platform sells no plan.
+ * It is the only place the free lane's hours were ever going to be seen without being looked for, and before
+ * it existed a person learned their month was spent from a machine that would not wake. */
+const { planRow } = useHostedPlan();
 
 /* THE SETTINGS PAGES HAVE NO TILE, SO THE CONTROL THAT OPENS THEM IS THE TILE. /settings and its tabs are
  * reached from this avatar's menu and from nowhere else in the rail, which left the whole area as the one place
@@ -104,6 +112,16 @@ const logout = async (): Promise<void> => {
 
             <div class="my-1 border-t border-line"></div>
 
+            <RouterLink
+                v-if="planRow"
+                to="/settings/billing"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-content/5"
+                :class="planRow.tone === `warning` ? `text-warning` : `text-content`"
+                @click="dismiss"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="credit-card" class="text-xs" :class="planRow.tone === `warning` ? `` : `text-muted`" /></span>
+                <span class="truncate">{{ planRow.text }}</span>
+            </RouterLink>
             <RouterLink
                 to="/settings"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"

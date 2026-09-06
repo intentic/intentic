@@ -38,13 +38,20 @@ export const DEMO_SANDBOX: SandboxSummary = {
 };
 
 // A platform that sells the hosted plan, to an account that holds it: the state in which Settings shows the
-// Hosted tab at all, which is the only reason the demo answers this.
+// Billing tab at all, which is the only reason the demo answers this. The hosted half is what the page lists
+// under the plan: one slot, one machine in it, awake hours with no ceiling beside them.
 const DEMO_HOSTED_PLAN: HostedPlanState = {
     enabled: true,
     onPlan: true,
     status: `active`,
     renewsAt: `2026-10-01T00:00:00.000Z`,
     priceUsd: 20,
+    hosted: {
+        slots: 1,
+        machines: [{ sandboxId: DEMO_SANDBOX.id, name: DEMO_SANDBOX.name, region: `arn`, wokeAt: new Date(Date.now() - 2 * 3_600_000).toISOString() }],
+        usage: { month: new Date().toISOString().slice(0, 7), usedMinutes: 12_720, allowanceMinutes: null, resetsAt: `2026-10-01T00:00:00.000Z` },
+        shape: { cpus: 4, memoryMb: 4096, volumeGb: 10 },
+    },
 };
 
 const SESSION = {
@@ -67,7 +74,7 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
             return json({ sandboxes: [DEMO_SANDBOX] });
         case `/rpc/billing/plan`:
             return json({ plan: `pro`, entitlements: { sandboxes: 5, members: 10 } });
-        // The plan's on/off answer, which is also what decides whether Settings shows the Hosted tab at all.
+        // The plan's on/off answer, which is also what decides whether Settings shows the Billing tab at all.
         case `/rpc/hosted-plan`:
             return json(DEMO_HOSTED_PLAN);
         case `/rpc/invite/list`:

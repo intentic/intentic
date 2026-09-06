@@ -128,6 +128,9 @@ services:
             # The free lane's ceiling (awake hours per calendar month for a non-member) and its expiry (days
             # since last wake before the disk is collected, with one warning email first). Either at 0 disables.
             HOSTED_MONTHLY_HOURS: ${HOSTED_MONTHLY_HOURS:-}
+            # How far past the ceiling a running free machine gets before the hourly meter tick stops it (the
+            # machine stops from the inside otherwise, and an owner can keep it awake). Default an hour.
+            HOSTED_OVER_BUDGET_GRACE_MINUTES: ${HOSTED_OVER_BUDGET_GRACE_MINUTES:-}
             HOSTED_IDLE_DAYS: ${HOSTED_IDLE_DAYS:-}
             HOSTED_IDLE_WARN_DAYS: ${HOSTED_IDLE_WARN_DAYS:-}
             # The warm pool, PER REGION: machines built and stopped before anyone asks, so claiming the free

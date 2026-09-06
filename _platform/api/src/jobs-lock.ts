@@ -28,6 +28,10 @@ export const JOB_HOSTED_CANARY = 5;
 // charges a finished build's minutes to its owner once, and force-destroys builders past their timeout, and
 // two replicas doing either to the same row would bill twice and race a delete.
 export const JOB_HOSTED_BUILD = 6;
+// The hosted lane's hour meter (hosted-meter.ts): settles stopped stretches and stops machines whose owner's
+// month is spent. Exclusive because it charges (two replicas settling one stretch would bill it twice) and
+// because one stop per machine is the whole point.
+export const JOB_HOSTED_METER = 7;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

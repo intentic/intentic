@@ -3,8 +3,10 @@ import { classifyFailure, type ConnectionFailure } from "../live/connection";
 import { connectionNotice, HOSTED_STUCK_AFTER_MS } from "./connectionNotice";
 
 // The ordinary case every test below varies one fact of: somebody's own computer, freshly unreachable.
-const notice = (failure: ConnectionFailure | undefined, over: { hostedMachine?: boolean; outageMs?: number; sandboxName?: string } = {}) =>
-    connectionNotice({ failure, sandboxName: `laptop`, hostedMachine: false, outageMs: 0, ...over });
+const notice = (
+    failure: ConnectionFailure | undefined,
+    over: { hostedMachine?: boolean; outageMs?: number; sandboxName?: string; hoursSpent?: boolean; owner?: boolean } = {},
+) => connectionNotice({ failure, sandboxName: `laptop`, hostedMachine: false, outageMs: 0, ...over });
 
 describe(`connectionNotice`, () => {
     it(`offers nothing to click while an ordinary first connect is in flight`, () => {
@@ -75,5 +77,34 @@ describe(`a machine the platform runs, that is not coming back`, () => {
      * machine we do not run. */
     it(`leaves a sandbox on the reader's own computer waiting, however long it takes`, () => {
         expect(notice(dead, { hostedMachine: false, outageMs: 60 * HOSTED_STUCK_AFTER_MS }).action).toBeUndefined();
+    });
+});
+
+/* THE MONTH IS SPENT. The platform refused the wake (PAYMENT_REQUIRED) and the reflex kept that answer; before
+ * it did, this screen said "isn't answering" and sent the reader to check a machine that was fine. The refusal
+ * is not a wait, so it is said at once rather than after the minute, and it is addressed: the owner is offered
+ * the plan, a guest is told whose hours they are and offered nothing to buy. */
+describe(`a hosted machine whose owner's free hours are spent`, () => {
+    const asleep = classifyFailure({ message: `failed to fetch` });
+
+    it(`says so at once, before any wait, and offers the plan to the owner`, () => {
+        const shown = notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 0 });
+        expect(shown.title).toBe(`"laptop" has used its free hours for this month`);
+        expect(shown.action).toEqual({ kind: `billing`, label: `See the plan` });
+    });
+
+    it(`outranks the stuck-machine door once the minute has passed`, () => {
+        expect(notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 60 * HOSTED_STUCK_AFTER_MS }).action?.kind).toBe(`billing`);
+    });
+
+    it(`sells a guest nothing, and names whose hours they are`, () => {
+        const shown = notice(asleep, { hostedMachine: true, hoursSpent: true, owner: false });
+        expect(shown.action).toBeUndefined();
+        expect(shown.body).toContain(`owner`);
+    });
+
+    // A refusal can only be about a machine the platform runs; on the reader's own computer the flag is noise.
+    it(`means nothing for a sandbox on the reader's own computer`, () => {
+        expect(notice(asleep, { hostedMachine: false, hoursSpent: true, owner: true }).action).toBeUndefined();
     });
 });

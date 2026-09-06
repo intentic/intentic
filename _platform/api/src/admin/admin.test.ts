@@ -3,6 +3,7 @@ import type { ORPCError } from "@orpc/server";
 import { describe, expect, it } from "vitest";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
+import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
@@ -104,6 +105,8 @@ describe(`adminOverview`, () => {
                     { status: `past_due`, _count: { _all: 1 } },
                 ],
                 count: async () => 1,
+                // Two active plans, one of them covering two hosted sandboxes: three slots billed.
+                aggregate: async () => ({ _sum: { quantity: 3 } }),
             },
             hostedMachine: { count: async () => 5 },
         } as unknown as PrismaClient;
@@ -114,7 +117,7 @@ describe(`adminOverview`, () => {
             sandboxes: 9,
             activeDaemons: 3,
             activeSandboxes: { day: 4, week: 5, month: 6 },
-            plans: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 40 },
+            plans: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 60 },
             hostedMachines: 5,
             // trial has a key and the plan has Stripe; hosted, wallet and push are unconfigured.
             lanes: { trial: true, hostedPlan: true, hosted: false, wallet: false, push: false },
@@ -750,21 +753,45 @@ describe(`admin actions`, () => {
         expect(result.message).toContain(`sb1`);
     });
 
-    it(`erasure deletes the user row and reports the address it erased (no hosted: nothing external)`, async () => {
-        let deleted: Record<string, unknown> | undefined;
-        const prisma = {
+    // The erasure's prisma: one sandbox with no machine, a user row to delete, and a plan row (or none).
+    const erasurePrisma = (plan: { stripeSubscriptionId: string; status: string } | null, onDelete: (args: Record<string, unknown>) => void) =>
+        ({
             sandbox: { findMany: async () => [{ id: `sb1`, hosted: null }] },
+            hostedPlan: { findUnique: async () => plan },
             user: {
                 delete: async (args: Record<string, unknown>) => {
-                    deleted = args;
+                    onDelete(args);
                     return { email: `gone@example.com` };
                 },
             },
-        } as unknown as PrismaClient;
+        }) as unknown as PrismaClient;
+
+    it(`erasure deletes the user row and reports the address it erased (no hosted, no plan: nothing external)`, async () => {
+        let deleted: Record<string, unknown> | undefined;
+        const prisma = erasurePrisma(null, (args) => {
+            deleted = args;
+        });
         const result = await deleteUserAccount(prisma, configWith(), logger, `u1`);
         expect(result.ok).toBe(true);
         expect(result.message).toContain(`gone@example.com`);
         expect(deleted).toMatchObject({ where: { id: `u1` } });
+    });
+
+    /* THE SUBSCRIPTION IS NOT A ROW OF OURS. The cascade takes the plan's mirror; Stripe's subscription kept
+     * charging a customer with no account left to open the portal from. It is cancelled before the row goes,
+     * while the row still names it. */
+    it(`erasure cancels the account's live subscription before the cascade takes its row`, async () => {
+        const order: string[] = [];
+        const prisma = erasurePrisma({ stripeSubscriptionId: `sub_1`, status: `active` }, () => order.push(`delete`));
+        const gateway = {
+            cancelSubscription: async (id: string) => {
+                order.push(`cancel ${id}`);
+                return { id, customer: `cus_1`, status: `canceled`, currentPeriodEnd: new Date(), cancelAtPeriodEnd: false, itemId: ``, quantity: 1 };
+            },
+        } as unknown as StripeGateway;
+        const result = await deleteUserAccount(prisma, configWith(), logger, `u1`, gateway);
+        expect(result.ok).toBe(true);
+        expect(order).toEqual([`cancel sub_1`, `delete`]);
     });
 
     const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;

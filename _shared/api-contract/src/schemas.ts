@@ -400,20 +400,66 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
-// The caller's hosted plan, as the settings card renders it. `enabled: false` (a platform with no plan
-// configured) means the card does not exist; everything else describes the caller: `onPlan` is the
-// entitlement answer, `status` is Stripe's word for the state (shown only when it isn't "active", past_due is
-// worth a sentence), `renewsAt` is display. The price rides along so the card can never disagree with the
-// platform about the number on the button, and it is for everyone: the person deciding whether to buy is
-// precisely the one who does not have it yet.
+/* THE CALLER'S HOSTED PLAN, as the Billing page renders it (docs/design/billing-view.md). `enabled: false` (a
+ * platform with no plan configured) means the page does not exist; everything else describes the caller:
+ * `onPlan` is the entitlement answer, `comped` says it came from the operator's comp list rather than a
+ * subscription (nothing to manage, nothing to buy), `status` is Stripe's word for the state (past_due is worth
+ * a sentence), `renewsAt` is display and `cancelAtPeriodEnd` turns "renews" into "ends": the portal's cancel
+ * leaves the status active until the period runs out, and a page that could not see that told people who had
+ * just cancelled that they would renew. The price rides along so the page can never disagree with the
+ * platform about the number on the button, and it is for everyone: the person deciding whether to buy is
+ * precisely the one who does not have it yet.
+ *
+ * `hosted` is the lane as it applies to THIS account, present for a signed-in caller on a platform that runs
+ * machines at all: how many hosted sandboxes they may have (slots), the ones they have, this month's meter,
+ * and what a slot is. One read for one page, and the same read the avatar row and the Overview card use. */
+export const HostedPlanMachineSchema = z.object({
+    sandboxId: z.string(),
+    name: z.string(),
+    region: z.string(),
+    // Awake since (or stopped with its stretch not yet settled). Null when asleep and settled.
+    wokeAt: z.iso.datetime().nullable(),
+});
+export type HostedPlanMachine = z.infer<typeof HostedPlanMachineSchema>;
+
+export const HostedPlanUsageSchema = z.object({
+    // The calendar month the meter is keyed by, `YYYY-MM` UTC.
+    month: z.string(),
+    // Awake minutes so far, live: a machine that is up right now counts the minutes since it woke.
+    usedMinutes: z.number().int().nonnegative(),
+    // The free lane's ceiling in minutes; null when this owner is unmetered (on the plan, or a platform with
+    // no ceiling), in which case `usedMinutes` is information with nothing beside it.
+    allowanceMinutes: z.number().int().nonnegative().nullable(),
+    // When the month rolls over (the first of next month, UTC).
+    resetsAt: z.iso.datetime(),
+});
+export type HostedPlanUsage = z.infer<typeof HostedPlanUsageSchema>;
+
+export const HostedPlanHostedSchema = z.object({
+    // Hosted sandboxes this account may have: the plan's quantity while it is live, the free lane's one otherwise.
+    slots: z.number().int().nonnegative(),
+    machines: z.array(HostedPlanMachineSchema),
+    usage: HostedPlanUsageSchema,
+    // The machine every slot is, the same on the free lane and the plan.
+    shape: z.object({ cpus: z.number().int().positive(), memoryMb: z.number().int().positive(), volumeGb: z.number().int().positive() }),
+});
+export type HostedPlanHosted = z.infer<typeof HostedPlanHostedSchema>;
+
 export const HostedPlanStateSchema = z.object({
     enabled: z.boolean(),
     onPlan: z.boolean(),
+    comped: z.boolean().optional(),
     status: z.string().optional(),
     renewsAt: z.iso.datetime().optional(),
+    cancelAtPeriodEnd: z.boolean().optional(),
     priceUsd: z.number(),
+    hosted: HostedPlanHostedSchema.optional(),
 });
 export type HostedPlanState = z.infer<typeof HostedPlanStateSchema>;
+
+// The most hosted sandboxes one plan sells. A number a person can reach by pressing a button, and one the
+// platform's own cost can absorb without anybody looking; more is a conversation.
+export const HOSTED_PLAN_MAX_SLOTS = 10;
 
 // Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale), this caps
 // what the API will persist (~110 kB decoded; a 128px webp/jpeg is ~5-10 kB) so no multi-megabyte string

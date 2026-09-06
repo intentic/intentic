@@ -23,7 +23,7 @@ import {
 } from "./hosted/hosted.js";
 import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/hosted-build.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
-import { hostedPlanEnabled, onHostedPlan } from "./hosted/hosted-plan.js";
+import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
@@ -116,10 +116,14 @@ const restartOrRebuild = async (
  * The hour ceiling applies to a NEW machine as much as to a wake: a machine boots the moment it is created, so
  * without it here, releasing a spent machine and provisioning another would be the way around the limit. */
 const assertHostedAllowance = async (context: OrpcContext, userId: string): Promise<void> => {
-    const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } });
-    if (used >= context.config.hosted.perUser) {
+    const [used, slots] = await Promise.all([
+        context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } }),
+        // The plan's slot count while it is live, the free lane's one otherwise (hosted-plan.ts).
+        hostedSlotsOf(context.prisma, context.config, userId),
+    ]);
+    if (used >= slots) {
         throw new ORPCError(`BAD_REQUEST`, {
-            message: `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first`,
+            message: `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first, or add a slot to your plan`,
         });
     }
     const budget = await hostedBudgetOf(context.prisma, context.config, userId);
@@ -299,17 +303,20 @@ export const sandboxRoutes = {
         if (!hostedEnabled(context.config)) {
             return { enabled: false, remaining: 0 };
         }
-        const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
-        // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it, and
-        // is omitted entirely for the unmetered (the hosted plan, ceiling-less platforms), a limit that does not
-        // apply to you should not appear on your screen at all.
-        const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
-        // Said separately from "unmetered": a platform with no ceiling is also unmetered, and its card must
-        // not claim a plan nobody bought.
-        const plan = hostedPlanEnabled(context.config) && (await onHostedPlan(context.prisma, context.config, user.id));
+        const [used, slots, budget, plan] = await Promise.all([
+            context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } }),
+            hostedSlotsOf(context.prisma, context.config, user.id),
+            // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it,
+            // and is omitted entirely for the unmetered (the hosted plan, ceiling-less platforms), a limit
+            // that does not apply to you should not appear on your screen at all.
+            hostedBudgetOf(context.prisma, context.config, user.id),
+            // Said separately from "unmetered": a platform with no ceiling is also unmetered, and its card
+            // must not claim a plan nobody bought.
+            hostedPlanEnabled(context.config) ? onHostedPlan(context.prisma, context.config, user.id) : Promise.resolve(false),
+        ]);
         return {
             enabled: true,
-            remaining: Math.max(0, context.config.hosted.perUser - used),
+            remaining: Math.max(0, slots - used),
             ...(budget.metered
                 ? { hours: { allowance: Math.round(budget.allowanceMinutes / 60), remaining: Math.floor(budget.remainingMinutes / 60) } }
                 : {}),

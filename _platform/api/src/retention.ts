@@ -5,7 +5,6 @@ import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import { sweepHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
-import { settleHostedStretches } from "./sandbox/hosted/hosted-usage.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
@@ -106,19 +105,10 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         } catch (error) {
             logger.error({ err: error }, `hosted reap sweep failed`);
         }
-        /* The hour meter's daily settle: close the stretch of every machine that has stopped since anyone
-         * last looked. Without this a box woken once and asleep an hour later stays uncounted until its owner
-         * happens to return, which is precisely the account the meter most needs to be right about.
-         *
-         * Before the idle sweep deliberately: settling reads machine state anyway, and a machine about to be
-         * collected should have its last stretch on the books before its app stops existing. */
-        try {
-            await settleHostedStretches(prisma, config, logger);
-        } catch (error) {
-            logger.error({ err: error }, `hosted meter sweep failed`);
-        }
         // Collect the free machines nobody has opened in weeks (one warning email first). A machine on the
-        // hosted plan is never touched, nor is anything currently running.
+        // hosted plan is never touched, nor is anything currently running. The hour meter's settle used to
+        // ride here daily; it is the hourly meter tick's now (hosted-meter.ts), so a machine collected here
+        // has had its last stretch on the books for at most an hour, not a day.
         try {
             logger.info(await reapIdleHosted(prisma, config, logger), `hosted idle sweep completed`);
         } catch (error) {

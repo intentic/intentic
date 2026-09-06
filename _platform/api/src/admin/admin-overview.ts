@@ -20,7 +20,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const adminOverview = async (prisma: PrismaClient, config: Config, now: () => Date = () => new Date()): Promise<AdminOverview> => {
     const at = now();
     const seenSince = (ms: number) => prisma.sandbox.count({ where: { lastSeenAt: { gte: new Date(at.getTime() - ms) } } });
-    const [users, sandboxes, activeDaemons, day, week, month, plansByStatus, canceled30d, hostedMachines] = await Promise.all([
+    const [users, sandboxes, activeDaemons, day, week, month, plansByStatus, canceled30d, hostedMachines, activeSlots] = await Promise.all([
             prisma.user.count(),
             prisma.sandbox.count(),
             seenSince(ACTIVE_DAEMON_WINDOW_MS),
@@ -32,6 +32,8 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             // update stamp is the cancellation's arrival for a status that never changes again afterwards.
             prisma.hostedPlan.count({ where: { status: `canceled`, updatedAt: { gte: new Date(at.getTime() - 30 * DAY_MS) } } }),
             prisma.hostedMachine.count(),
+            // Slots, not rows: a plan covering three hosted sandboxes bills three times the price.
+            prisma.hostedPlan.aggregate({ where: { status: `active` }, _sum: { quantity: true } }),
         ]);
     const planCount = (status: string) => plansByStatus.find((row) => row.status === status)?._count._all ?? 0;
     const active = planCount(`active`);
@@ -47,7 +49,7 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             canceled30d,
             // Display arithmetic, never accounting: Stripe stays the money's source of truth. Trialing rows
             // are excluded on purpose — they pay nothing yet, and PLAN_STATUSES is about entitlement.
-            mrrUsd: active * config.hostedPlan.priceUsd,
+            mrrUsd: (activeSlots._sum.quantity ?? 0) * config.hostedPlan.priceUsd,
         },
         hostedMachines,
         lanes: {

@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { removeStoredValue, storeValue } from "../../../lib/browserStorage";
@@ -164,10 +165,27 @@ const hostedRelease = async (sandboxId: string): Promise<SandboxSummary> => {
  * "asleep", and the fix is a platform call this browser can simply make. Fired from the connection state
  * rather than a screen, so every way of arriving at a sleeping sandbox (switcher, deep link, reload) wakes it
  * without any surface having to remember to. Throttled per sandbox; wake is idempotent (waking a running
- * machine is a no-op), so a wake raced with a boot costs nothing. Failures are swallowed: the connection UI
- * already narrates the outage, and the reflex retries on the next throttle window. */
+ * machine is a no-op), so a wake raced with a boot costs nothing.
+ *
+ * ONE REFUSAL IS KEPT: the platform's PAYMENT_REQUIRED, the free lane's month being spent. Every other failure
+ * is swallowed (the connection UI already narrates the outage, and the reflex retries on the next window), but
+ * this one is not an outage, it is the one moment the hosted plan is deserved, and swallowing it left the
+ * gate saying "isn't answering" over a machine the platform had declined to start. The refusal is per
+ * sandbox and cleared by a wake that goes through (a fresh month, a plan bought in another tab), so the gate
+ * that reads it stops saying so the moment it stops being true. */
 const WAKE_THROTTLE_MS = 60_000;
 const wokeAt = new Map<string, number>();
+// The sandbox whose last wake the platform refused for spent hours, with the platform's own sentence.
+const wakeRefused = ref<{ readonly sandboxId: string; readonly message: string } | undefined>(undefined);
+const recordWake = (sandboxId: string, outcome: unknown): void => {
+    if (outcome instanceof ORPCError && outcome.code === `PAYMENT_REQUIRED`) {
+        wakeRefused.value = { sandboxId, message: outcome.message };
+        return;
+    }
+    if (wakeRefused.value?.sandboxId === sandboxId && outcome === undefined) {
+        wakeRefused.value = undefined;
+    }
+};
 watch(
     () => [active.value?.id, active.value?.hosted !== null && active.value?.hosted !== undefined, connection.value] as const,
     ([id, hosted, state]) => {
@@ -184,9 +202,14 @@ watch(
             return;
         }
         wokeAt.set(id, Date.now());
-        void apiClient.sandbox.wake({ sandboxId: id }).catch(() => undefined);
+        void apiClient.sandbox
+            .wake({ sandboxId: id })
+            .then(() => recordWake(id, undefined))
+            .catch((error: unknown) => recordWake(id, error));
     },
 );
+// Whether the ACTIVE sandbox's last wake was refused for spent hours (the gate's question).
+const activeWakeRefused = computed(() => (wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined));
 
 // Rename a sandbox and/or set its switcher logo, `image: null` clears it (owner-only; the API enforces).
 // Writing the returned row into the list cache is what repaints the rail chip in the same tick as the hub's
@@ -254,6 +277,7 @@ export function useSandbox() {
         daemonUrl,
         connection,
         reachable,
+        activeWakeRefused,
         list,
         refresh,
         select,

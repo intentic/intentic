@@ -58,7 +58,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             delete: vi.fn().mockResolvedValue({}),
             ...overrides[`hostedPoolMachine`],
         },
-        hostedMachine: { update: vi.fn().mockResolvedValue({}), ...overrides[`hostedMachine`] },
+        // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so.
+        hostedMachine: { update: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]), ...overrides[`hostedMachine`] },
         // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction.
         sandbox: { update: vi.fn().mockResolvedValue({}), ...overrides[`sandbox`] },
     }) as unknown as OrpcContext[`prisma`];
@@ -704,7 +705,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
         const member = fakePrisma({
             hostedMachine: { count: vi.fn().mockResolvedValue(0) },
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+            // A plan row as the slot read selects it: status and how many hosted sandboxes it covers.
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, quantity: 1 }) },
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,

@@ -5,9 +5,9 @@ import type { HubTab } from "../../shell/hub/hubNav";
 import { computed } from "vue";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import SettingsAppearance from "./SettingsAppearance.vue";
+import SettingsBilling from "./SettingsBilling.vue";
 import SettingsData from "./SettingsData.vue";
 import SettingsKeybindings from "./SettingsKeybindings.vue";
-import SettingsHosted from "./SettingsHosted.vue";
 import SettingsNotifications from "./SettingsNotifications.vue";
 import SettingsProfile from "./SettingsProfile.vue";
 
@@ -23,9 +23,11 @@ import SettingsProfile from "./SettingsProfile.vue";
  *
  * Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
 
-/* The hosted plan only exists on a platform that sells one (off by default, and self-hosted platforms keep it
- * off), and the tab appears when the answer is yes. Until the answer lands the tab is simply absent, which is
- * also the right rendering for a platform where it will never land: a failed read costs nothing but the row. */
+/* BILLING is the one page about money, and it is named for the errand rather than for the product: a person
+ * who wants to stop paying looks for "Billing", and "Hosted" between Profile and Appearance read as a
+ * preference. It exists only on a platform that sells the hosted plan (off by default, and self-hosted
+ * platforms keep it off). Until the answer lands the tab is simply absent, which is also the right rendering
+ * for a platform where it will never land: a failed read costs nothing but the row. */
 const { offered: planOffered } = useHostedPlan();
 
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
@@ -33,7 +35,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
         key: `settings`,
         items: [
             { slug: `profile`, label: `Profile`, icon: `user` },
-            ...(planOffered.value ? ([{ slug: `hosted`, label: `Hosted`, icon: `star` }] as const) : []),
+            ...(planOffered.value ? ([{ slug: `billing`, label: `Billing`, icon: `credit-card` }] as const) : []),
             { slug: `appearance`, label: `Appearance`, icon: `palette` },
             { slug: `notifications`, label: `Notifications`, icon: `volume-up` },
             { slug: `keybindings`, label: `Keybindings`, icon: `bolt` },
@@ -53,7 +55,7 @@ const DEFAULT = `profile`;
     >
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
-            <SettingsHosted v-else-if="slug === `hosted`" />
+            <SettingsBilling v-else-if="slug === `billing`" />
             <SettingsAppearance v-else-if="slug === `appearance`" />
             <SettingsNotifications v-else-if="slug === `notifications`" />
             <SettingsKeybindings v-else-if="slug === `keybindings`" />

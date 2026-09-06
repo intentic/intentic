@@ -16,7 +16,7 @@ import { connectionNotice } from "./connectionNotice";
  * "unreachable" screen. The connection machine flips to `online` the moment the daemon answers, and the real
  * views render. */
 
-const { active, connection } = useSandbox();
+const { active, connection, activeWakeRefused } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 
@@ -34,6 +34,10 @@ const notice = computed(() =>
         // right to name a cause instead of waiting politely forever.
         hostedMachine: (active.value?.hosted ?? null) !== null,
         outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
+        // The platform's own word on the last wake: refused for spent hours, or not. Owner-addressed, because
+        // only the owner can buy the plan that lifts it.
+        hoursSpent: activeWakeRefused.value !== undefined,
+        owner: active.value?.role === `owner`,
     }),
 );
 
@@ -74,6 +78,14 @@ const signIn = async (): Promise<void> => {
             >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
+            <!-- The plan and the other way out, side by side: the second is free and must never read as the
+                 lesser option. Both are places, so both are links. -->
+            <template v-else-if="notice.action?.kind === `billing`">
+                <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" class="ui-button-loud">
+                    <template #icon><Icon name="arrow-right" /></template>
+                </Button>
+                <Button :as="RouterLink" :to="setupTo" label="Run it on my computer" severity="secondary" />
+            </template>
         </template>
     </GateCard>
 </template>

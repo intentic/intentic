@@ -4,8 +4,10 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
 import { oneTap, oneTimeToken } from "better-auth/plugins";
+import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
+import { cancelHostedPlan } from "./sandbox/hosted/hosted-plan.js";
 import type { PrismaClient } from "@intentic/prisma";
 
 export type Auth = ReturnType<typeof createAuth>;
@@ -28,7 +30,7 @@ const encryptAccountTokens = (config: Config, account: { accessToken?: string | 
 // trusted origin so post-sign-in redirects back to it are allowed. localhost:47145 and the API's
 // :6480 are same-site, so the SameSite=Lax session cookie still rides cross-port. Both are https in dev
 // (the @intentic/localhost-https cert), which the Secure attribute on that cookie requires.
-export const createAuth = (config: Config, prisma: PrismaClient) =>
+export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger) =>
     betterAuth({
         secret: config.betterAuth.secret,
         baseURL: config.api.url,
@@ -49,8 +51,15 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
             },
             // GDPR Art. 17: self-service account deletion (Settings → delete account). Google-only users have
             // no password, so Better Auth requires a fresh session instead. The PrismaClient cascades remove
-            // sessions/accounts/sandboxes/grants with the user row.
-            deleteUser: { enabled: true },
+            // sessions/accounts/sandboxes/grants with the user row. The hosted plan's Stripe subscription is
+            // NOT a row of ours and does not cascade: it is cancelled first, while the plan row still names
+            // it, or the deleted account keeps being charged (hosted-plan.ts).
+            deleteUser: {
+                enabled: true,
+                beforeDelete: async (user) => {
+                    await cancelHostedPlan(prisma, config, logger, user.id);
+                },
+            },
         },
         databaseHooks: {
             // Consent capture: stamp which clickwrap version the login page showed when the account was created.

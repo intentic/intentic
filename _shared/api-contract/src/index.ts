@@ -17,6 +17,7 @@ import {
     DaemonUrlSchema,
     HostedBuildStateSchema,
     HostedBuildStatusSchema,
+    HOSTED_PLAN_MAX_SLOTS,
     HostedOfferSchema,
     HostedPlanStateSchema,
     HostedRebuildInputSchema,
@@ -212,7 +213,9 @@ export const desktopContract = {
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),
 };
 
-/* THE HOSTED PLAN, browser side: where the settings card reads its state and where its two buttons go.
+/* THE HOSTED PLAN, browser side: where the Billing page reads its state and where its buttons go. `setSlots`
+ * is the one plan write the platform makes itself: how many hosted sandboxes the subscription covers, refused
+ * below the number the account already has (remove a sandbox first, the provision gate's rule in reverse).
  * `checkout` and `portal` both answer a Stripe-hosted URL for the browser to navigate to, the platform hosts
  * no payment UI of its own. Both refuse (NOT_FOUND) on a platform whose plan is off; Stripe's webhook is plain
  * HTTP under /hosted-plan, not part of this contract, because no browser session could authenticate it. */
@@ -220,6 +223,10 @@ export const hostedPlanContract = {
     state: oc.route({ method: "GET", path: "/hosted-plan" }).output(HostedPlanStateSchema),
     checkout: oc.route({ method: "POST", path: "/hosted-plan/checkout" }).output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
+    setSlots: oc
+        .route({ method: "POST", path: "/hosted-plan/slots" })
+        .input(z.object({ quantity: z.number().int().min(1).max(HOSTED_PLAN_MAX_SLOTS) }))
+        .output(HostedPlanStateSchema),
 };
 
 /* THE PUSH RELAY. APNs on behalf of daemons that hold no vendor secret (schemas.ts explains the split).

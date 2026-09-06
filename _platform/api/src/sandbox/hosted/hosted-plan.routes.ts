@@ -31,14 +31,16 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
             .object({ mode: z.literal(`subscription`), client_reference_id: z.string(), subscription: z.string() })
             .safeParse(object);
         if (session.success) {
-            await applySubscription(prisma, await stripe().subscription(session.data.subscription), session.data.client_reference_id);
+            await applySubscription(prisma, await stripe().subscription(session.data.subscription), { userId: session.data.client_reference_id });
         }
     };
 
-    const onSubscriptionChanged = async (object: unknown): Promise<void> => {
+    // `eventAt` is the event's own `created`, the ordering guard in applySubscription; an event without one
+    // (a hand-sent test event) is taken as now.
+    const onSubscriptionChanged = async (object: unknown, eventAt: Date): Promise<void> => {
         const subscription = subscriptionFromEvent(object, now);
         if (subscription !== undefined) {
-            await applySubscription(prisma, subscription);
+            await applySubscription(prisma, subscription, { eventAt });
         }
     };
 
@@ -53,15 +55,17 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
         if (!verifyStripeSignature(payload, c.req.header(`stripe-signature`), config.hostedPlan.stripeWebhookSecret, now)) {
             return c.json({ error: `bad signature` }, 400);
         }
-        const event = z.object({ type: z.string(), data: z.object({ object: z.unknown() }) }).safeParse(JSON.parse(payload));
+        const event = z
+            .object({ type: z.string(), created: z.number().optional(), data: z.object({ object: z.unknown() }) })
+            .safeParse(JSON.parse(payload));
         if (!event.success) {
             return c.json({ error: `malformed event` }, 400);
         }
-        const { type, data } = event.data;
+        const { type, created, data } = event.data;
         if (type === `checkout.session.completed`) {
             await onCheckoutCompleted(data.object);
         } else if (type === `customer.subscription.updated` || type === `customer.subscription.deleted`) {
-            await onSubscriptionChanged(data.object);
+            await onSubscriptionChanged(data.object, created === undefined ? now() : new Date(created * 1000));
         }
         return c.json({ received: true });
     });

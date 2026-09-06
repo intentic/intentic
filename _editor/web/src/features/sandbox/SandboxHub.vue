@@ -97,7 +97,9 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
  * serves it fine, it just isn't on localhost). */
 const BOX_ROWS: readonly HubTab[] = [
     { slug: `overview`, label: `Overview`, icon: `info-circle` },
-    { slug: `usage`, label: `Usage`, icon: `credit-card` },
+    // A clock, not a bank card: this tab is the AI plans' allowances and when they reopen. The bank card is
+    // Settings ▸ Billing's, the one place in the app about money, and a reader looking for that clicked here.
+    { slug: `usage`, label: `Usage`, icon: `clock` },
 ];
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
 const BUILT_IN = new Set([...BOX_ROWS, ...configurationRows(0), ...reachRows(0)].map((tab) => tab.slug));

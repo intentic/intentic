@@ -12,6 +12,12 @@ a free machine awake forever for nothing.**
 Every file below is read from the tree; every figure is from `_platform/api/src/config.ts` or
 [pricing-model.md §2](pricing-model.md).
 
+**Status (2026-09-06, same day):** all four steps of §6 landed. §1 and §2 describe the tree as it was that
+morning and are kept as the record of why; the code now is §4 and §5: `SettingsBilling.vue` at
+`/settings/billing`, `hostedHours.ts` for the shared sentences, the wake refusal kept in `useSandbox.ts` and
+said by `connectionNotice.ts`, `hosted-meter.ts` for the hourly tick, `hostedPlan.setSlots` for slots, and
+`cancelHostedPlan` on both deletions.
+
 ## 1. What exists
 
 | Surface | Where | What it says |
