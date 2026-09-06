@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { connect, createServer } from "node:net";
+import { hostname } from "node:os";
 import { promisify } from "node:util";
 
 /* WHERE THIS TIER'S WORLD HAS TO LIVE, and why there is no choice about it.
@@ -78,6 +79,23 @@ const reaches = async (port: number, timeoutMs: number): Promise<boolean> =>
         client.once(`error`, () => settle(false));
     });
 
+/* WHICH DAEMON ANSWERED, and over what, for the failure below. `docker info`'s Name is the daemon's OWN host,
+ * so a socket belonging to another machine names that machine — the difference between "loopback does not work
+ * here" and "those containers are somebody else's", which is the entire content of that failure and has twice
+ * been deduced rather than read. Both nights it was the second: a job container with the runner's socket
+ * mounted (run 34030369992), and then the same container after being given a dockerd of its own, which could
+ * not listen on the mounted socket's path and left the runner's daemon answering (run 34053040446).
+ */
+const daemonIdentity = async (): Promise<string> => {
+    const address = process.env[`DOCKER_HOST`] ?? `the default socket`;
+    try {
+        const { stdout } = await run(`docker`, [`info`, `--format`, `{{.Name}}`], { timeout: 10_000 });
+        return `${stdout.trim()} over ${address}`;
+    } catch {
+        return `a daemon that will not say, over ${address}`;
+    }
+};
+
 /* Prove that a container's published port is reachable on loopback from here, before anything depends on it.
  *
  * This is the tier's one environmental requirement, and it is checked once, against the first container up, so
@@ -87,7 +105,8 @@ const reaches = async (port: number, timeoutMs: number): Promise<boolean> =>
  * knowing that the loopback is only the half of it that gets caught: every bind mount this tier makes (the
  * run's TLS pair, the SPA front's config) names a path in the process's OWN filesystem, which a daemon
  * elsewhere silently mounts as an empty directory. One arrangement fixes both, so CI uses it: nightly.yml's
- * `onboarding` job starts a dockerd INSIDE its own container instead of borrowing the runner's.
+ * `onboarding` job starts a dockerd INSIDE its own container, on a socket path of its own — the default one is
+ * a bind mount of the runner's, which a daemon cannot take and a client cannot tell apart.
  */
 export const requireLoopback = async (port: number, what: string, timeoutMs = 60_000): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
@@ -98,10 +117,11 @@ export const requireLoopback = async (port: number, what: string, timeoutMs = 60
         await new Promise((resolveWait) => setTimeout(resolveWait, 500));
     }
     throw new Error(
-        `${what} published a port that this process cannot reach at ${HOST}:${port}. The onboarding tier serves its whole ` +
+        `${what} published a port that this process cannot reach at ${HOST}:${port}. It was published by ` +
+            `${await daemonIdentity()}, and this process is on ${hostname()}. The onboarding tier serves its whole ` +
             `world on loopback, so the daemon it drives has to be the one this process is on: run it on the machine ` +
-            `whose Docker this is, or — in a container, which is what CI does — give the container a dockerd of its own ` +
-            `rather than mounting somebody else's socket.`,
+            `whose Docker this is, or — in a container, which is what CI does — give the container a dockerd of its own, ` +
+            `on a socket path of its own, rather than driving somebody else's.`,
     );
 };
 

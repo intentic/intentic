@@ -19,8 +19,10 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 // harness plays the outside-executor role of recreate.sh). No Cloudflare, no Google, no Claude: the only
 // requirement is a Docker daemon. Gated behind INTENTIC_E2E like cli.e2e.test.ts; `pnpm e2e` sets it.
 //
-// SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead (CI's nightly points it at
-// the freshly published :latest; local debugging can point it anywhere).
+// SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead — for local debugging, and
+// NOT for the nightly, which builds from its own checkout. Pointing it at `:latest` there had this suite
+// asserting today's contract against the last image a green main published: 19 hours and one whole feature
+// behind, on a webhookToken the daemon in that image had never had (run 34053040446, nightly.yml says the rest).
 // No secrets: a Docker daemon is the whole requirement, so this tier runs on every nightly rather than waiting
 // on a credential. It is the one that always has something to say.
 const tier = e2eTier("sandbox daemon end-to-end (real container, loopback)", { enabledBy: "INTENTIC_E2E" });

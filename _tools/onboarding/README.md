@@ -121,10 +121,16 @@ compose folder and the CLI lane's sandbox standing after a failure, which is the
 daemon's log and reproducing the run to get one.
 
 In CI this is nightly.yml's `onboarding` job, on the desktop runner because the CLI lane needs the Rust
-toolchain that image bakes. That job is the one on the fleet that does NOT mount the runner's Docker socket: it
-starts a dockerd inside its own container (`--privileged`, with the layer store on a host directory), so "where
-Docker publishes" is the process running the journey. Mounting the socket the way every neighbouring job does
-is what the requirement above rules out, and it is how this job failed the first night it ran.
+toolchain that image bakes. That job is the one on the fleet that does not DRIVE the runner's Docker: it starts
+a dockerd inside its own container (`--privileged`, with the layer store on a host directory), so "where Docker
+publishes" is the process running the journey. It failed two nights running on the two ways of getting that
+wrong. First it mounted the runner's socket, which the requirement above rules out. Then, given a daemon of its
+own, it let that daemon take the default listen path — and the runner mounts the host's socket over
+`/var/run/docker.sock` in every container job whatever the workflow's `volumes:` say. A bind-mounted socket
+cannot be replaced, so the new daemon died at startup on `device or resource busy` and the runner's went on
+answering `docker version` as if nothing had happened. The job's daemon now listens on a path of its own and
+names it in `DOCKER_HOST`, which is also what the tier's own failure message reads back when the port is
+unreachable.
 
 ## Key files
 

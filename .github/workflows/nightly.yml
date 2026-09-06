@@ -55,8 +55,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 180
     env:
-      # Runs the freshly published :latest sandbox image rather than rebuilding from source.
-      SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
+      # SANDBOX_E2E_IMAGE is deliberately UNSET — the image build step below says why.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       DISCORD_E2E_BOT_TOKEN: ${{ secrets.DISCORD_E2E_BOT_TOKEN }}
       DISCORD_E2E_SENDER_TOKEN: ${{ secrets.DISCORD_E2E_SENDER_TOKEN }}
@@ -67,8 +66,9 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      # The sandbox image is a private package and the host daemon behind the mounted socket holds no registry
-      # credential — pulls authenticate client-side, so this login is what testcontainers presents.
+      # Whatever these tiers still PULL from a private package — the CLI lane's dind-host, or an image a
+      # debugging run points SANDBOX_E2E_IMAGE at — authenticates client-side, because the host daemon behind
+      # the mounted socket holds no registry credential. The daemon under test is built below, not pulled.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -81,7 +81,42 @@ jobs:
           path: .cache/intentic-e2e
           key: intentic-e2e-whisper
       - run: mkdir -p "$HOME/.cache" "$GITHUB_WORKSPACE/.cache/intentic-e2e" && ln -sfn "$GITHUB_WORKSPACE/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
+      # The iq models the image bakes (~57 MB from HuggingFace), on the key ci.yml's images job uses, so the
+      # fetch happens once per change of the fetch script rather than once a night.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      # THE DAEMON UNDER TEST IS THE ONE THIS CHECKOUT BUILDS, and the tier means nothing otherwise.
+      #
+      # This job used to pass `SANDBOX_E2E_IMAGE=ghcr.io/intentic/sandbox:latest` on the strength of the word
+      # "freshly". That tag moves in ONE place — ci.yml's `images` job, gated on `verify-core` passing on a push
+      # to main — so a red main FREEZES it, and this suite then asserts today's contract against whatever daemon
+      # last passed. On the night this was written that daemon was 19 hours old: the two automation specs failed
+      # on a `webhookToken` the published image had never heard of, because door tokens landed at 11:04 and the
+      # last green main was 00:12 (run 34053040446; `grep -r webhookToken /opt/sandbox` in that image finds
+      # nothing). The suite was right, the image was old, and no commit could have turned the job green.
+      #
+      # Building it here is the harness's own default when the variable is empty (e2e-harness.ts), the path every
+      # developer already runs, and the same trees the images job publishes — the artifact, one build earlier. It
+      # costs a `docker build` of pure COPYs on top of the turbo cache this fleet keeps warm.
+      #
+      # Whether the PUBLISHED image boots is a different question, and ci.yml answers it where it is asked:
+      # smoke-image.sh runs against both halves before any moving tag points at them.
+      #
+      # IN A STEP, not inside the suite, because the suite's budget is the wrong one to spend it from: the
+      # harness builds in `beforeAll`, which allows 20 minutes, and a build with no warm layers spends longer
+      # than that on chromium and ffmpeg alone — measured here, and it fails as 43 skipped tests and a timeout
+      # that names nothing. `build:sandbox` is the same trees, the same composed Dockerfile and the same layers
+      # (a tag of its own, which is all that differs), so the harness's own build behind it is a cache replay.
+      - run: pnpm build:sandbox
       - run: pnpm e2e
+      # Tonight's build displaces last night's layers under the same tag, and a dangling layer on a runner that
+      # outlives the job is nobody's to evict. Same rule, filter and `always()` as the onboarding job's prune.
+      - if: always()
+        run: docker image prune -f --filter until=336h || true
 
   # THE ONBOARDING JOURNEY (@intentic/onboarding), once per way of getting a sandbox.
   #
@@ -100,12 +135,15 @@ jobs:
   #
   # THE ONE JOB ON THIS FLEET THAT DOES NOT DRIVE THE HOST'S DAEMON, and the only tier that cannot. It serves
   # its whole world on LOOPBACK ports and bind-mounts a per-run TLS pair into the containers it starts
-  # (_tools/onboarding/src/docker.ts and certs.ts each say why in full), and the mounted host socket every
-  # other job here uses breaks both: a port the host's daemon publishes is on the HOST's loopback, and a bind
-  # mount names a path in the HOST's filesystem — neither of which is this process's. So the daemon comes to
-  # the process instead. That was not a near miss: the tier's own check refused to go further and the job died
-  # on `postgres published a port that this process cannot reach` (run 34030369992), which is the sentence
-  # that check exists to print.
+  # (_tools/onboarding/src/docker.ts and certs.ts each say why in full), and the host's daemon breaks both: a
+  # port it publishes is on the HOST's loopback, and a bind mount names a path in the HOST's filesystem —
+  # neither of which is this process's. So the daemon comes to the process instead. That was not a near miss:
+  # the tier's own check refused to go further and the job died on `postgres published a port that this process
+  # cannot reach` (run 34030369992), which is the sentence that check exists to print.
+  #
+  # Removing the socket from `volumes:` below did NOT remove it from the container — the runner mounts it into
+  # every container job regardless — so the daemon this job starts also needs a LISTEN PATH of its own. The
+  # step below has the account; without it the arrangement looks correct and behaves exactly as it did before.
   onboarding:
     runs-on: [self-hosted, intentic, desktop]
     container:
@@ -156,10 +194,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dockerd --bip 10.90.0.1/24 --default-address-pool base=10.91.0.0/16,size=24 > /tmp/dockerd.log 2>&1 &
+          # ON A SOCKET OF ITS OWN, because /var/run/docker.sock IS NOT THIS JOB'S TO LISTEN ON. The runner puts
+          # `-v /var/run/docker.sock:/var/run/docker.sock` in the `docker create` line of every container job it
+          # starts, whatever this file's `volumes:` say, and a bind-mounted socket cannot be replaced: dockerd
+          # dies at startup on `can't create unix socket /var/run/docker.sock: device or resource busy` while
+          # `docker version` goes on answering — from the HOST's daemon, which was never down.
+          #
+          # That is how the wait below passed in 190ms against a daemon this job did not start (run 34053040446):
+          # the world then came up on the runner, its ports were published on the RUNNER's loopback, and the
+          # journey died on `postgres published a port that this process cannot reach` — the same sentence as the
+          # night before, printed for the opposite reason, on an arrangement that reads as correct.
+          #
+          # DOCKER_HOST carries the path to every later step and to the tier itself, and it is also what makes
+          # the wait honest: an answer here can only come from the daemon this step just started.
+          export DOCKER_HOST=unix:///run/onboarding-docker.sock
+          echo "DOCKER_HOST=$DOCKER_HOST" >> "$GITHUB_ENV"
+          dockerd --host "$DOCKER_HOST" --bip 10.90.0.1/24 --default-address-pool base=10.91.0.0/16,size=24 > /tmp/dockerd.log 2>&1 &
           for _ in $(seq 1 60); do
             if docker version --format '{{.Server.Version}}' > /dev/null 2>&1; then
-              echo "this job's dockerd is up: $(docker version --format '{{.Server.Version}}')"
+              echo "this job's dockerd is up on $DOCKER_HOST: $(docker version --format '{{.Server.Version}}')"
               exit 0
             fi
             sleep 1
