@@ -343,3 +343,56 @@ test("the same report from an edit and then a command is said once", async () =>
     ).toContain("TS2304");
     expect(await bash(hooks, "PostToolUse")).toEqual({});
 });
+
+/* THE SECOND LANGUAGE ON THE SAME SEAM. Everything below drives the python half through a fake runner, for the
+ * reason the TypeScript ones above use one: what is being tested is the hook's contract — which checker a file
+ * goes to, what rides back, and what is said once — not what ruff or pyright think of a file. The real tools
+ * are exercised in python-diagnostics.integration.test.ts, where they can be. */
+
+const PY = `${WORKSPACE_ROOT}/app/main.py`;
+
+// The TypeScript runner is handed a clean answer throughout, so nothing it says can be mistaken for the python
+// half's.
+const pythonHooks = (pythonDiag: DiagRunner) => editDiagnosticsHooks(undefined, checked(), RESOLVABLE, undefined, [], pythonDiag);
+
+test("a python edit is checked by the python runner, and reported as python", async () => {
+    const seen: string[] = [];
+    const hooks = pythonHooks(async ({ file }) => {
+        seen.push(file);
+        return { kind: "checked", lines: [`${file}:2:12: error F821: Undefined name \`x\``] };
+    });
+    const context = contextOf(await fire(hooks, { file_path: PY }));
+    expect(seen).toEqual([PY]);
+    expect(context).toContain(`Python diagnostics for ${PY} after this edit:`);
+    expect(context).toContain("error F821");
+    expect(context).toContain("Fix the errors this edit introduced before finishing.");
+});
+
+test("the qualification a half-run check carries rides with its findings, and is said once", async () => {
+    const note = "Note: this sandbox has no `pyright`, so the type half of this check did not run.";
+    const hooks = pythonHooks(async ({ file }) => ({ kind: "checked", lines: [`${file}:1:1: error F821: Undefined name \`x\``], note }));
+    expect(contextOf(await fire(hooks, { file_path: PY }))).toContain(note);
+    // Same file, same errors, and the note already told: there is nothing new to say.
+    expect(await fire(hooks, { file_path: PY })).toEqual({});
+});
+
+test("a clean python file still says what did not run, because silence would claim more than was checked", async () => {
+    const note = "Note: no `.venv` was found above this file, so imports were not resolved.";
+    const hooks = pythonHooks(async () => ({ kind: "checked", lines: [], note }));
+    expect(contextOf(await fire(hooks, { file_path: PY }))).toBe(note);
+    expect(await fire(hooks, { file_path: PY })).toEqual({});
+});
+
+test("a python check that could not run says so, once, and never reads as a clean file", async () => {
+    const hooks = pythonHooks(async () => ({ kind: "unavailable" }));
+    expect(contextOf(await fire(hooks, { file_path: PY }))).toContain("Python diagnostics are unavailable for this edit");
+    expect(await fire(hooks, { file_path: PY })).toEqual({});
+});
+
+test("each language goes to its own checker, and a file neither reads goes to no checker", async () => {
+    const hooks = editDiagnosticsHooks(undefined, withErrors, RESOLVABLE, undefined, [], async () => {
+        throw new Error("the python checker was asked about a file that is not python");
+    });
+    expect(contextOf(await fire(hooks, { file_path: `${WORKSPACE_ROOT}/src/app.ts` }))).toContain("TypeScript diagnostics");
+    expect(await fire(hooks, { file_path: `${WORKSPACE_ROOT}/README.md` })).toEqual({});
+});

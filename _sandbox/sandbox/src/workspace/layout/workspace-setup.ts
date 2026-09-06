@@ -27,7 +27,10 @@ export interface WorkspaceProject {
     readonly recipe: SetupRecipe;
 }
 
-// ready      , the marker (node_modules/.venv) is on disk AND satisfies the manifests; tooling can be trusted.
+// ready      , the marker (node_modules/.venv) is on disk. For node that includes a walk of everything the
+//               manifests declare, so the tooling can be trusted outright; for python it is the marker and
+//               nothing more, and every sentence built from this state says which of the two it got
+//               (deps-tools.ts) rather than promising a measurement nobody made.
 // installing , this project's install panel is running right now.
 // needs-setup, no marker, and the manager is available to fix it.
 // unsupported, no marker and the manager isn't in this sandbox, so offering an install would just fail in a
@@ -122,8 +125,14 @@ export const discoverProjects = async (root: string): Promise<WorkspaceProject[]
  *
  * The drift walk runs only AFTER the marker is found, and only for node: it is the one ecosystem whose declared
  * dependencies can be read off a manifest and looked for by name. A python project with a .venv is reported
- * `ready` on the marker alone, exactly as before, claiming to have measured it would be the same conflation
- * the chores probes refuse (unmeasured is not clean).
+ * `ready` on the marker alone; claiming to have measured it would be the same conflation the chores probes
+ * refuse (unmeasured is not clean), so the readers say which measurement they got instead.
+ *
+ * THIS RUNS ON THE MAIN TREE AND IS READ INSIDE A WORKTREE, which is only sound because the marker is mirrored
+ * into every isolated turn (@intentic/constants/mirror-roots). While `.venv` was not in that set, this function
+ * answered `ready` off the main checkout's environment for a turn whose own tree had no environment at all: the
+ * one state worse than "not installed" is "installed" said to somebody it is not true for. A marker added to
+ * the recipes without being added to the mirror set reintroduces exactly that.
  */
 export const setupStateOf = async (
     root: string,

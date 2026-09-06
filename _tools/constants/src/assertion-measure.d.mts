@@ -7,8 +7,13 @@ export interface AssertionMeasure {
 }
 export type Weakening = "downgrade" | "narrowing";
 export const NARROWING: number;
+export const TEST_FILE: RegExp;
 export const EXACT: readonly string[];
 export const LOOSE: readonly string[];
+export const PY_EXACT: readonly string[];
+export const PY_LOOSE: readonly string[];
 export function measure(source: string): AssertionMeasure;
+export function measurePython(source: string): AssertionMeasure;
+export function measureFile(source: string, path: string): AssertionMeasure;
 export function weakened(before: AssertionMeasure | undefined, after: AssertionMeasure): Weakening | undefined;
 export function describeWeakening(path: string, shape: Weakening, before: AssertionMeasure, after: AssertionMeasure): string;

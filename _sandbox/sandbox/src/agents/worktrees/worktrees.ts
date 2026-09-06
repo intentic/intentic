@@ -142,7 +142,8 @@ const eachRepo = async (
 // notice tells it, every turn, to run an install that would cost minutes and a duplicate tree per agent.
 // Mirroring is the cheap answer: one symlink per dir, at the same relative path, pointing at the main
 // checkout's. Node and TypeScript both resolve through symlinks by default, so tooling in a worktree behaves
-// as it does in /work.
+// as it does in /work. A python `.venv` rides the same link and needs no relocation: its console scripts and
+// `pyvenv.cfg` name the main checkout's interpreter by absolute path, which is a path that still exists.
 //
 // The tradeoff this accepts, deliberately: the tree is SHARED, not copied. A worktree's `pnpm add` writes into
 // the main checkout's node_modules (its package.json/lockfile edits stay in the worktree, where they belong),

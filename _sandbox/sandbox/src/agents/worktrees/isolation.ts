@@ -75,11 +75,11 @@ const SHELF = "refs";
  * above from @intentic/constants/mirror-roots.
  *
  * A worktree is TRACKED files only, and the two things a package's dependents resolve THROUGH are both
- * untracked: its installed tree (`node_modules`) and its build output (`dist`, `generated`, the entry every
- * `exports` map points at once the sources are compiled). Mirroring only the first is why a fresh turn could
- * import a third-party package but not a sibling workspace one: `vitest run` in an app that imports a local
- * lib died at collection with "Failed to resolve entry for package", and every route to a green suite began
- * with a build the agent had to know to run.
+ * untracked: its installed tree (`node_modules`, and `.venv` where the project is python) and its build output
+ * (`dist`, `generated`, the entry every `exports` map points at once the sources are compiled). Mirroring only
+ * the first is why a fresh turn could import a third-party package but not a sibling workspace one: `vitest
+ * run` in an app that imports a local lib died at collection with "Failed to resolve entry for package", and
+ * every route to a green suite began with a build the agent had to know to run.
  *
  * CACHES ARE DELIBERATELY ABSENT (`.cache`, `.turbo`, `.astro`). `.cache/tsbuildinfo` is the main checkout's
  * record of what its dist was built FROM; handed to a turn whose sources have since moved, an incremental

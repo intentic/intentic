@@ -96,8 +96,16 @@ export const managerFromPackageJson = (text: string): string | undefined => {
     return NODE_MANAGERS.has(name) ? name : undefined;
 };
 
-// Every file whose presence at the top of a directory makes it a project root worth a recipe.
-const MANIFESTS = new Set(["package.json", ...NODE_LOCKFILES.map(([file]) => file), ...PYTHON_RECIPES.map(([file]) => file)]);
+/* Every file whose presence at the top of a directory makes it a project root worth a recipe. Exported as the
+ * set and not only as the predicate below, because it is the enumeration a guard has to walk: every marker
+ * these names can produce must be a directory an isolated turn mirrors, or the daemon measures readiness on a
+ * tree the agent cannot see (workspace/layout/workspace-setup.test.ts holds that invariant, and the marker
+ * comment on `.venv` in @intentic/constants/mirror-roots says what it cost to learn). */
+export const MANIFESTS: ReadonlySet<string> = new Set([
+    "package.json",
+    ...NODE_LOCKFILES.map(([file]) => file),
+    ...PYTHON_RECIPES.map(([file]) => file),
+]);
 
 export const isManifest = (name: string): boolean => MANIFESTS.has(name);
 

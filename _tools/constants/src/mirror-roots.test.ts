@@ -12,8 +12,18 @@ import { MIRRORED_DIRS, replacedMirrorRoots } from "./mirror-roots.mjs";
 // The command that caused the incident, exactly as `_platform/prisma`'s build script used to spell it.
 const PRISMA_BUILD = "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsgo";
 
-test("the mirror roots are the three trees a checkout cannot carry", () => {
-    expect([...MIRRORED_DIRS].toSorted()).toEqual(["dist", "generated", "node_modules"]);
+test("the mirror roots are the installed trees and the build outputs a checkout cannot carry", () => {
+    expect([...MIRRORED_DIRS].toSorted()).toEqual([".venv", "dist", "generated", "node_modules"]);
+});
+
+test("a python environment is a mirror root, so removing one outright is reported like any other", () => {
+    // The shape a `uv sync --reinstall` wrapper or a "clean the env" script reaches for. Emptying it is fine;
+    // replacing the directory strands every live turn's overlay exactly as `rm -rf dist` does.
+    expect(replacedMirrorRoots("rm -rf .venv && uv sync")).toEqual([".venv"]);
+    expect(replacedMirrorRoots("rm -rf services/api/.venv")).toEqual(["services/api/.venv"]);
+    expect(replacedMirrorRoots("find . -mindepth 1 -path '*/.venv/*' -delete")).toEqual([]);
+    // The sibling names a project may use are NOT mirrored, so nothing here may report them.
+    expect(replacedMirrorRoots("rm -rf venv env")).toEqual([]);
 });
 
 test("the removal that emptied every agent's prisma output is reported, and the cache beside it is not", () => {

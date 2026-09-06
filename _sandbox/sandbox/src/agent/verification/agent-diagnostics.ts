@@ -5,6 +5,7 @@ import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../..
 import { modulesNear, type NearbyModules } from "../../workspace/deps/dependency-drift.js";
 import type { ShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
+import { PYTHON_EXTENSIONS, PYTHON_UNAVAILABLE_NOTE, runPythonDiag } from "./python-diagnostics.js";
 
 /* Post-edit diagnostics feedback, the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
@@ -15,6 +16,12 @@ import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
  * There used to be a resident JS-compiler daemon here to make per-edit checks affordable; the native compiler
  * made cold checks as fast as the daemon's warm answers, and the ~1 GB per workspace view it stayed resident to
  * protect is simply given back.
+ *
+ * A SECOND LANGUAGE ANSWERS ON THE SAME SEAM. A `.py` edit is checked by ruff and pyright instead
+ * (python-diagnostics.ts), which is a different pair of tools and the identical contract: errors only, the
+ * agent's own paths, silence when there is nothing to say, and `unavailable` — never silence — when the tools
+ * could not answer. Everything below this line is language-agnostic: which checker a file goes to is one lookup
+ * in `everything`, and a third language is that lookup plus a runner.
  *
  * The whole loop is GATED on the dependencies actually being installed. Without node_modules the compiler
  * cannot resolve a single import, not even `node:path`, whose types ship in @types/node, so it reports
@@ -32,7 +39,9 @@ import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
  * Diagnostics still run, the rest of the file's errors are real and worth having, with the cause named
  * alongside them so an unresolved import is read as the install being behind rather than as a mistake. */
 
-// The checker is TypeScript/JavaScript only, other files are never checked.
+// What the TypeScript compiler is asked about. A python file goes to the other checker (python-diagnostics.ts);
+// anything else is not checked here at all, which is why `everything` names the extension sets rather than
+// asking each checker to recognise its own files — the file decides which question is even askable.
 const CHECKED_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 
 // Bound the feedback so a cascading break can't flood the transcript: errors only, first lines, capped chars.
@@ -47,7 +56,18 @@ const SHELL_FILES = 20;
 // refusing: it reached the file's project and could not load it well enough to vouch for anything, so it
 // checked nothing rather than answer from a half-loaded program. The refusal reason names checker-side paths
 // the agent may have no window onto, so it is not carried here, the notice below says what is true from here.
-export type DiagAnswer = { readonly kind: "checked"; readonly lines: readonly string[] } | { readonly kind: "unavailable" };
+export type DiagAnswer =
+    | {
+          readonly kind: "checked";
+          readonly lines: readonly string[];
+          /* What the model has to know to read those lines for what they are, carried beside them rather than
+           * folded into them. A checker made of two halves can have one of them not run — python's type half
+           * without an environment or without pyright (python-diagnostics.ts) — and the findings that remain are
+           * true, just narrower than a clean report looks. The TypeScript checker answers whole or refuses, so
+           * it never sets this. */
+          readonly note?: string;
+      }
+    | { readonly kind: "unavailable" };
 
 // One file's check, and everything about WHERE it is asked. `placement` enters the compiler into the view the
 // paths are named for (undefined when that is this process's own), and `named` turns a file the checker
@@ -75,9 +95,11 @@ const runNativeDiag: DiagRunner = async ({ file, placement, named }) => {
 };
 
 // Compress to the error lines the model must act on. Warnings/suggestions are dropped, they'd steer the model
-// into unrequested cleanup; a clean file (or one with only non-errors) yields undefined.
+// into unrequested cleanup; a clean file (or one with only non-errors) yields undefined. The severity is what
+// is matched, not the code that follows it: every checker on this seam emits `path:line:col: <severity> <code>:
+// message`, and a filter naming TS's code prefix silently threw away every python diagnostic ever produced.
 const errorLines = (lines: readonly string[]): string | undefined => {
-    const errors = lines.filter((line) => line.includes(": error TS")).slice(0, MAX_LINES);
+    const errors = lines.filter((line) => line.includes(": error ")).slice(0, MAX_LINES);
     return errors.length === 0 ? undefined : errors.join("\n").slice(0, MAX_CHARS);
 };
 
@@ -123,10 +145,11 @@ const staleNote = (missing: readonly string[]): string =>
     "a mistake in this code: do not edit working source to satisfy one, and do not run an install; the daemon " +
     "installs them once this turn ends, so this package's own checks are available next turn, not this one.";
 
-/* PostToolUse on the native Edit/Write, AND on Bash: type-check the touched files and feed compile errors back.
- * Silent on clean files, non-TS files, and any failure, feedback must never break or stall an edit. Created once
- * per turn (baseOptions), so `explained` scopes each standing notice to one telling per turn: the model needs
- * a reason once, not stapled to every edit it makes for the rest of the conversation.
+/* PostToolUse on the native Edit/Write, AND on Bash: check the touched files and feed the errors back.
+ * Silent on clean files, files in a language no checker here reads, and any failure: feedback must never break
+ * or stall an edit. Created once per turn (baseOptions), so `explained` scopes each standing notice to one
+ * telling per turn: the model needs a reason once, not stapled to every edit it makes for the rest of the
+ * conversation.
  *
  * THE SHELL IS AN EDITOR TOO. A model told to prefer `sed -i`, a heredoc or a script (the harness's own
  * bypass-mode instructions say exactly that) writes files this hook never heard of when it listened to the edit
@@ -159,37 +182,62 @@ const staleNote = (missing: readonly string[]): string =>
  * added later needs nothing but a place in the list. Undefined ⇒ nothing to say, the common answer. */
 export type EditReviewer = (file: string, how: string) => Promise<string | undefined>;
 
+/* WHERE THE CHECKS STAND, settled once for the turn and handed to every checker on the seam. Named here rather
+ * than derived inside each one, because the three answers are one decision — asked in whose names, entered into
+ * whose namespace, reported back in whose names — and a checker that got two of them from the turn and the
+ * third from its own reading of `anchor` would be checking one tree and reporting about another. */
+const checkBoundary = (
+    placement: TurnPlacement | undefined,
+): {
+    readonly checkPlacement: CheckPlacement | undefined;
+    readonly asAgentNames: (file: string) => string;
+    readonly inTurn: (file: string) => string;
+} => {
+    const plan = placement?.plan;
+    const anchor = placement?.anchor;
+    if (anchor === undefined) {
+        return {
+            checkPlacement: undefined,
+            asAgentNames: (file) => fromWorktree(file, plan),
+            inTurn: (file) => inWorktree(file, plan),
+        };
+    }
+    // Anchored: the turn is asked in its own names and answers in them, so nothing is translated either way.
+    return {
+        checkPlacement: { enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) },
+        asAgentNames: (file) => file,
+        inTurn: (file) => file,
+    };
+};
+
 export const editDiagnosticsHooks = (
     placement?: TurnPlacement,
     diag: DiagRunner = runNativeDiag,
     modules: ModulesProbe = modulesNear,
     shell?: ShellEditTracker,
     reviewers: readonly EditReviewer[] = [],
+    pythonDiag: DiagRunner = runPythonDiag,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const plan = placement?.plan;
-    const anchor = placement?.anchor;
-    // Both halves of the boundary, settled once: an anchored turn is asked in its own names and answers in
-    // them, so nothing is translated in either direction.
-    const checkPlacement: CheckPlacement | undefined =
-        anchor === undefined ? undefined : { enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) };
-    const asAgentNames = anchor === undefined ? (file: string): string => fromWorktree(file, plan) : (file: string): string => file;
+    const { checkPlacement, asAgentNames, inTurn } = checkBoundary(placement);
     // Per PACKAGE, not per turn: a turn that edits two packages has two different answers to give, and one
-    // shared flag would silence whichever it reached second. The absent and refused cases key on "", they are
-    // the same fact, and there is only ever one of it worth saying.
+    // shared flag would silence whichever it reached second. A standing note is keyed by its own text, so each
+    // distinct sentence is said once and two different ones do not silence each other.
     const explained = new Set<string>();
     // The last thing said about each file, so the same thing is not said twice running. Agents edit in bursts,
     // six edits to one file inside a minute re-check the same program and produce the same list, and one report
     // went out verbatim 2,923 times across the transcripts. Per file rather than global: two files failing the
     // same way are two facts.
     const lastReport = new Map<string, string>();
-    // The absent-tree and refused-checker cases are one fact, no truthful diagnostics from here, said once per
-    // turn and keyed on "".
-    const unavailableOnce = (): string | undefined => {
-        if (explained.has("")) {
+    /* A standing note, said the first time it applies and not again: keyed on the sentence itself, because what
+     * makes one worth repeating is having something different to say. The absent-tree and refused-checker cases
+     * are one fact — no truthful diagnostics from here — and so share one sentence and one telling; python's
+     * qualifications are different sentences and get their own. */
+    const oncePerTurn = (note: string): string | undefined => {
+        if (explained.has(note)) {
             return undefined;
         }
-        explained.add("");
-        return UNAVAILABLE_NOTE;
+        explained.add(note);
+        return note;
     };
     // Whether a drifted tree is news: keyed by the missing names themselves, so an install that fixed half the
     // list has changed what the model needs to know and is allowed to say so again.
@@ -204,7 +252,7 @@ export const editDiagnosticsHooks = (
     /* One file's review, in the words the model reads, or undefined for nothing to say. `how` names what just
      * changed the file, "this edit" or "this command", because the sentence is about what the model just did. */
     const review = async (file: string, how: string): Promise<string | undefined> => {
-        const target = anchor === undefined ? inWorktree(file, plan) : file;
+        const target = inTurn(file);
         // Anchored, this reads the MAIN checkout's installed tree, which is the right answer,
         // because that tree is literally what the namespace binds in over the worktree's empty
         // directories, so it is what the agent resolves against. The one thing it cannot see is
@@ -213,11 +261,11 @@ export const editDiagnosticsHooks = (
         // explaining it. The errors are still right; only the reason for them goes unsaid.
         const nearby = await modules(target);
         if (nearby.kind === "absent") {
-            return unavailableOnce();
+            return oncePerTurn(UNAVAILABLE_NOTE);
         }
         const output = await diag({ file: target, placement: checkPlacement, named: asAgentNames });
         if (output?.kind === "unavailable") {
-            return unavailableOnce();
+            return oncePerTurn(UNAVAILABLE_NOTE);
         }
         const stale = firstSighting(nearby.missing);
         const errors = output === undefined ? undefined : errorLines(output.lines);
@@ -230,19 +278,41 @@ export const editDiagnosticsHooks = (
             // (a test, a lint) will fail on the same missing package.
             return stale ? staleNote(nearby.missing) : undefined;
         }
-        return report(file, how, errors, stale ? nearby.missing : undefined);
+        return report("TypeScript", file, how, errors, stale ? staleNote(nearby.missing) : undefined);
     };
-    // The errors themselves, unless they are this file's last report repeated with nothing new around them: a
-    // first drift sentence is new even when the errors under it are not.
-    const report = (file: string, how: string, errors: string, missing: readonly string[] | undefined): string | undefined => {
+    /* The python file's review. Structurally the TypeScript one with a different checker behind it, and two
+     * differences that are the checker's own: there is no installed-tree probe to gate on (python-diagnostics.ts
+     * decides for itself what it can answer, because the two halves of that check have different requirements),
+     * and what it hands back may carry a qualification — the type half did not run, or ran without an
+     * environment — which is said alongside the findings the first time it applies, exactly as a drifted tree
+     * is. A clean file with a qualification still says the qualification: "nothing found" is a weaker claim
+     * when half the check did not run, and the model has to know which one it was given. */
+    const reviewPython = async (file: string, how: string): Promise<string | undefined> => {
+        const output = await pythonDiag({ file: inTurn(file), placement: checkPlacement, named: asAgentNames });
+        if (output === undefined || output.kind === "unavailable") {
+            return oncePerTurn(PYTHON_UNAVAILABLE_NOTE);
+        }
+        const qualifier = output.note === undefined ? undefined : oncePerTurn(output.note);
+        const errors = errorLines(output.lines);
+        if (errors === undefined) {
+            lastReport.delete(file);
+            return qualifier;
+        }
+        return report("Python", file, how, errors, qualifier);
+    };
+    /* The errors themselves, unless they are this file's last report repeated with nothing new around them: a
+     * sentence being said for the first time is new even when the errors under it are not. `extra` is whatever
+     * the checker needs said beside its findings — a drifted node tree, a python check that ran with one half —
+     * already reduced to the one telling it gets, so this decides only where it goes. */
+    const report = (language: string, file: string, how: string, errors: string, extra: string | undefined): string | undefined => {
         const repeat = lastReport.get(file) === errors;
         lastReport.set(file, errors);
-        if (repeat && missing === undefined) {
+        if (repeat && extra === undefined) {
             return undefined;
         }
         return (
-            `TypeScript diagnostics for ${file} after ${how}:\n${errors}\n` +
-            `${missing === undefined ? "" : `${staleNote(missing)}\n`}Fix the errors ${how} introduced before finishing.`
+            `${language} diagnostics for ${file} after ${how}:\n${errors}\n` +
+            `${extra === undefined ? "" : `${extra}\n`}Fix the errors ${how} introduced before finishing.`
         );
     };
     const said = (context: string | undefined): HookJSONOutput =>
@@ -252,8 +322,10 @@ export const editDiagnosticsHooks = (
      * TypeScript's; a reviewer is asked about every file and gates itself (a rule's `when.paths`). */
     const everything = async (file: string, how: string): Promise<string | undefined> => {
         const notes: string[] = [];
-        if (CHECKED_EXTENSIONS.has(extname(file))) {
-            const context = await review(file, how);
+        const extension = extname(file);
+        const checked = CHECKED_EXTENSIONS.has(extension) ? review : PYTHON_EXTENSIONS.has(extension) ? reviewPython : undefined;
+        if (checked !== undefined) {
+            const context = await checked(file, how);
             if (context !== undefined) {
                 notes.push(context);
             }

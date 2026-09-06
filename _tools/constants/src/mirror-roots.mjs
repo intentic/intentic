@@ -1,9 +1,9 @@
 /* THE DIRECTORIES AN ISOLATED TURN MOUNTS OVER, and the one thing the main checkout must never do to them.
  *
- * A worktree holds TRACKED files only, so the two trees a package's dependents resolve THROUGH — its installed
- * tree (`node_modules`) and its build output (`dist`, `generated`) — cannot be checked out and have to come
- * from the main tree. The daemon supplies them as overlayfs mounts, one per directory, the MAIN checkout's copy
- * as the lowerdir and a per-conversation upper layer for whatever the turn writes
+ * A worktree holds TRACKED files only, so the trees a project's own code resolves THROUGH — its installed tree
+ * (`node_modules` for node, `.venv` for python) and its build output (`dist`, `generated`) — cannot be checked
+ * out and have to come from the main tree. The daemon supplies them as overlayfs mounts, one per directory, the
+ * MAIN checkout's copy as the lowerdir and a per-conversation upper layer for whatever the turn writes
  * (_sandbox/sandbox/src/agents/isolation.ts, which imports this set rather than keeping its own).
  *
  * AN OVERLAY RESOLVES ITS LOWERDIR ONCE, AT MOUNT TIME, and holds that dentry for the life of the mount.
@@ -48,7 +48,17 @@
 // isolation.ts for why a mirrored `.cache` would hand a turn the main checkout's idea of what its dist was
 // built from. Nothing mounts a `.cache`, so it is free to be removed outright, and the build scripts fixed for
 // this still do exactly that to theirs.
-export const MIRRORED_DIRS = new Set(["node_modules", "dist", "generated"]);
+//
+// `.venv` IS PYTHON'S `node_modules` and belongs here for the identical reason: the interpreter resolves every
+// third-party import through it, `pip`/`uv` write it, and .gitignore keeps it out of the checkout, so without
+// the mirror a python project's isolated turn imports nothing at all — while the readiness the daemon measures
+// on the main tree reports it installed (workspace/layout/workspace-setup.ts). A venv survives being seen from
+// elsewhere because the mount puts it back at the path it was built for: an isolated turn's worktree IS /work,
+// so the absolute interpreter path in `pyvenv.cfg` and in every console script's shebang resolves exactly as it
+// did on the main tree. `.venv` ONLY, not `venv`/`env`: that is the name the setup recipes create and look for,
+// and every name in this set is also one the checkout gate refuses to see removed, so a name here that the
+// daemon does not itself write buys noise rather than protection.
+export const MIRRORED_DIRS = new Set(["node_modules", ".venv", "dist", "generated"]);
 
 // A path's last segment, with quotes and trailing slashes taken off. `"$PKG/dist"` and `./generated/` both name
 // a mirror root; `node_modules/.pnpm/onnxruntime-web@*` does not, and neither does `dist/*`, which removes the

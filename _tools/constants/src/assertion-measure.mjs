@@ -54,6 +54,16 @@
 // Asserted text that shrinks past this fraction of what it was, with no test removed, is a narrowing.
 export const NARROWING = 0.75;
 
+/* WHICH FILES THIS IS ASKED ABOUT, one copy for both readers. It lived twice — once in the push gate and once
+ * in the daemon's built-in — and the two spellings were identical right up until one of them learned about a
+ * second language, at which point the gate and the turn-ending check would have been measuring different sets
+ * of files while both claiming to hold the same line.
+ *
+ * Two conventions, because two ecosystems name their tests: `foo.test.ts` / `foo.spec.tsx`, and pytest's own
+ * collection rule, `test_foo.py` / `foo_test.py`. Anything else — a `conftest.py`, a fixture module, a helper
+ * beside a suite — is not a test file to the tools that run them and is not one here. */
+export const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?|(^|\/)(test_[^/]+|[^/]+_test)\.py)$/;
+
 /* The vocabulary. Exact matchers pin a value; loose ones admit a family of them. `toThrow` and `toHaveProperty`
  * are both depending on their arguments (a message or a value makes them exact) and are counted as neither, so
  * a file that trades between them moves no number. Asymmetric matchers (`expect.any`, `objectContaining`) loosen
@@ -222,6 +232,192 @@ export const measure = (source) => {
     const tests = [...source.matchAll(TEST_CASE)].length;
     return { exact: exactCount, loose: looseCount, chars, tests };
 };
+
+/* ── PYTHON ───────────────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The same three numbers, read off a language whose assertions are STATEMENTS rather than matcher calls. What is
+ * being measured is identical — how much a file pins down — so the vocabulary is mapped onto the one above
+ * rather than invented: `assert a == b` is `toBe`, `assert a in b` is `toContain`, a bare `assert value` is
+ * `toBeTruthy`, and `assert x == approx(y)` is loosened by its `approx` the way an `expect.any` loosens the
+ * matcher it sits inside. unittest's method names map the same way, and `assertRaises` is counted as neither for
+ * the reason `toThrow` is: a message argument makes it exact and no argument makes it loose, so a file that
+ * trades between them should move no number.
+ *
+ * A COMPOUND ASSERT COUNTS AS BOTH. `assert "x" in got and len(got) == 3` is one statement doing two things,
+ * and the JS side would have counted it as two matchers; counting it as one or the other here would let a file
+ * hide a loosening behind an exact operator on the same line.
+ *
+ * The one place this reads less than the TypeScript half: an assertion whose comparison is hidden in a helper
+ * (`assert_row_matches(row)`) counts as a bare truthiness assert, which is under-reporting, the direction the
+ * header already commits to. */
+export const PY_EXACT = [
+    "assertEqual",
+    "assertNotEqual",
+    "assertIs",
+    "assertIsNot",
+    "assertIsNone",
+    "assertIsNotNone",
+    "assertListEqual",
+    "assertDictEqual",
+    "assertSetEqual",
+    "assertTupleEqual",
+    "assertSequenceEqual",
+    "assertMultiLineEqual",
+    "assertCountEqual",
+    "assertAlmostEqual",
+];
+export const PY_LOOSE = [
+    "assertTrue",
+    "assertFalse",
+    "assertIn",
+    "assertNotIn",
+    "assertIsInstance",
+    "assertNotIsInstance",
+    "assertGreater",
+    "assertGreaterEqual",
+    "assertLess",
+    "assertLessEqual",
+    "assertRegex",
+    "assertNotRegex",
+    "assertWarns",
+    "assertLogs",
+];
+const pyExact = new Set(PY_EXACT);
+const pyLoose = new Set(PY_LOOSE);
+
+const PY_EXACT_OP = /==|!=|\bis\b/;
+const PY_LOOSE_OP = /\bin\b|<=|>=|<|>|\bisinstance\s*\(|\bapprox\s*\(/;
+const PY_ASSERT = /^[ \t]*assert\b/gm;
+const PY_METHOD = /\bassert[A-Z][A-Za-z]*\s*\(/g;
+const PY_TEST_CASE = /^[ \t]*(?:async\s+)?def\s+test\w*\s*\(/gm;
+
+/* ONE WALK, TWO OUTPUTS: a copy of the source with every comment and every string's CONTENTS replaced by
+ * spaces, and a count of how many characters each string held, by position. Same length as the source, so an
+ * offset into one is an offset into the other — which is what lets the operator scan read code that cannot
+ * contain a quoted `==`, while the text count reads the strings that scan just blanked.
+ *
+ * Doing it in one pass, strings and comments together, is the whole point: a `#` inside a string is not a
+ * comment and a quote inside a comment does not open a string. The TypeScript half's header records what the
+ * other order costs — an apostrophe in a comment swallowing the rest of the file. Triple-quoted strings are
+ * tracked because a docstring spans lines and everything after it would otherwise read as code. */
+// One string literal, blanked in `code` and counted in `text`: where it ends, so the walk resumes past it. A
+// single-quoted string cannot cross a newline — an unterminated one is a syntax error, and stopping at the line
+// end keeps one stray quote from blanking the rest of the file.
+const blankString = (source, code, text, start) => {
+    const ch = source[start];
+    const quote = source.startsWith(ch.repeat(3), start) ? ch.repeat(3) : ch;
+    let i = start + quote.length;
+    while (i < source.length && !source.startsWith(quote, i)) {
+        if (quote.length === 1 && source[i] === "\n") {
+            return i;
+        }
+        text[i] = 1;
+        code[i] = " ";
+        i += source[i] === "\\" ? 2 : 1;
+    }
+    return Math.min(i + quote.length - 1, source.length - 1);
+};
+
+const blankComment = (source, code, start) => {
+    let i = start;
+    while (i < source.length && source[i] !== "\n") {
+        code[i] = " ";
+        i += 1;
+    }
+    return i;
+};
+
+const blankPython = (source) => {
+    const code = [...source];
+    const text = new Uint8Array(source.length);
+    for (let i = 0; i < source.length; i += 1) {
+        const ch = source[i];
+        if (ch === "#") {
+            i = blankComment(source, code, i);
+        } else if (ch === '"' || ch === "'") {
+            i = blankString(source, code, text, i);
+        }
+    }
+    return { code: code.join(""), text };
+};
+
+const OPENERS = new Set(["(", "[", "{"]);
+const CLOSERS = new Set([")", "]", "}"]);
+
+// Where the statement starting at `from` ends: the first newline at bracket depth zero that is not escaped by a
+// trailing backslash. Read off the blanked code, so a bracket or a backslash inside a string cannot extend it.
+const statementEnd = (code, from) => {
+    let depth = 0;
+    for (let i = from; i < code.length; i += 1) {
+        const ch = code[i];
+        depth += OPENERS.has(ch) ? 1 : 0;
+        depth -= CLOSERS.has(ch) ? 1 : 0;
+        const ends = ch === "\n" && depth <= 0 && code[i - 1] !== "\\";
+        if (ends) {
+            return i;
+        }
+    }
+    return code.length;
+};
+
+const charsIn = (text, from, to) => {
+    let chars = 0;
+    for (let i = from; i < to; i += 1) {
+        chars += text[i];
+    }
+    return chars;
+};
+
+// The `assert` statements: one classification per statement, by the operators it uses.
+const assertStatements = (code, text) => {
+    const totals = { exact: 0, loose: 0, chars: 0 };
+    for (const match of code.matchAll(PY_ASSERT)) {
+        const end = statementEnd(code, match.index);
+        const statement = code.slice(match.index, end);
+        const isExact = PY_EXACT_OP.test(statement);
+        // No operator at all is a bare truthiness assert, which admits every value that is not falsy.
+        totals.exact += isExact ? 1 : 0;
+        totals.loose += PY_LOOSE_OP.test(statement) || !isExact ? 1 : 0;
+        totals.chars += charsIn(text, match.index, end);
+    }
+    return totals;
+};
+
+// unittest's assertion methods: classified by name, like a matcher.
+const assertMethods = (code, text) => {
+    const totals = { exact: 0, loose: 0, chars: 0 };
+    for (const match of code.matchAll(PY_METHOD)) {
+        const name = match[0].slice(0, match[0].search(/\s*\(/));
+        // A name in neither set is one this deliberately counts as neither (assertRaises), or a project's own
+        // helper. Its text is not counted either: nothing here knows what it pins.
+        if (!pyExact.has(name) && !pyLoose.has(name)) {
+            continue;
+        }
+        totals.exact += pyExact.has(name) ? 1 : 0;
+        totals.loose += pyLoose.has(name) ? 1 : 0;
+        totals.chars += charsIn(text, match.index, statementEnd(code, match.index));
+    }
+    return totals;
+};
+
+export const measurePython = (source) => {
+    const { code, text } = blankPython(source);
+    const statements = assertStatements(code, text);
+    const methods = assertMethods(code, text);
+    return {
+        exact: statements.exact + methods.exact,
+        loose: statements.loose + methods.loose,
+        chars: statements.chars + methods.chars,
+        tests: [...code.matchAll(PY_TEST_CASE)].length,
+    };
+};
+
+/* THE ENTRY POINT BOTH READERS CALL. Which measure a file gets is decided here, once, from its name: the push
+ * gate and the turn-ending check must never disagree about what a file's numbers mean. A test file this cannot
+ * recognise gets the TypeScript measure, which reads a foreign language as zero of everything — no matchers, no
+ * asserted text — and `weakened` then finds nothing, so an unknown language is silently unmeasured rather than
+ * loudly wrong. */
+export const measureFile = (source, path) => (path.endsWith('.py') ? measurePython(source) : measure(source));
 
 // Weaker, in either of the two shapes the header names. `before` absent (a new file) can only be stronger.
 export const weakened = (before, after) => {

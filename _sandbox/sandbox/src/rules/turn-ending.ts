@@ -3,12 +3,13 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
 import { notFoundBinary } from "../agent/providers/agent-installs.js";
-import { TEST_FILE, TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
+import { TEST_FILE } from "@intentic/constants/assertion-measure";
+import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
 import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/verification/agent-removals.js";
 import {
     commandExitCode,
     createVerificationLedger,
-    type ScriptsProbe,
+    type ChecksProbe,
     type VerificationLedger,
     verifyEditsMessage,
 } from "../agent/verification/agent-verification.js";
@@ -90,7 +91,7 @@ export interface TurnEndingDeps {
     readonly cwd?: string | undefined;
     // Told when a rule actually said something, so the settings list can show what has been earning its place.
     readonly onFired?: ((rule: Rule) => void) | undefined;
-    readonly scripts?: ScriptsProbe | undefined;
+    readonly checks?: ChecksProbe | undefined;
     // How `verify-removals` reads a file and asks git about a line. Injected together because a test that
     // supplies one and not the other is a test half against a real workspace.
     readonly read?: FileReader | undefined;
@@ -206,7 +207,7 @@ const nothingMeasured = (label: string, command: string, run: RuleCommandRun, un
  * added to the contract is a compile error here until it is answered, which is the only thing that keeps a rule
  * from saving cleanly in the settings screen and then quietly doing nothing. */
 const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => Promise<string | undefined>> = {
-    "verify-edits": (deps, ledgers) => verifyEditsMessage(ledgers.verification, deps.isolation, deps.scripts),
+    "verify-edits": (deps, ledgers) => verifyEditsMessage(ledgers.verification, deps.isolation, deps.checks),
     "verify-removals": async (deps, ledgers) =>
         ledgers.removal === undefined
             ? undefined

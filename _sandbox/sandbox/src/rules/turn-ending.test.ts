@@ -3,14 +3,17 @@ import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
-import type { ScriptsProbe } from "../agent/verification/agent-verification.js";
+import type { ChecksProbe } from "../agent/verification/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
 import { type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
 
-const SCRIPTS: ScriptsProbe = async () => ["test", "lint", "dev"];
-const NO_PACKAGE: ScriptsProbe = async () => undefined;
+// The commands a project offers, already chosen: which manifest entries become which command, and what is
+// never offered (a `dev` script, a suite a python project never mentions), is the probe's own business and is
+// held to it in agent-verification.integration.test.ts.
+const CHECKS: ChecksProbe = async () => ["pnpm test", "pnpm lint"];
+const NO_PROJECT: ChecksProbe = async () => undefined;
 
 const VERIFY: Rule = {
     id: "verify-edits",
@@ -86,7 +89,7 @@ const stop = async (hooks: ReturnType<typeof turnEndingHooks>, stop_hook_active 
     return (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
 };
 
-const armed = (rules: readonly Rule[], deps: TurnEndingDeps = {}) => turnEndingHooks(rules, { scripts: SCRIPTS, ...deps });
+const armed = (rules: readonly Rule[], deps: TurnEndingDeps = {}) => turnEndingHooks(rules, { checks: CHECKS, ...deps });
 
 const PASSED = "all good\n--- [exit 0, 2s] 40 lines filtered to 12\n";
 const FAILED = "1 failed\n--- [exit 1, 2s] 40 lines filtered to 12\n";
@@ -279,15 +282,13 @@ describe("the verify-removals built-in", () => {
 });
 
 describe("the verify-edits built-in", () => {
-    test("edited code with no check is asked to run the workspace's own script", async () => {
+    test("edited code with no check is asked to run the project's own check", async () => {
         const hooks = armed([VERIFY]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         const nudge = await stop(hooks);
         expect(nudge).toContain("/work/src/a.ts");
         expect(nudge).toContain("`pnpm test`");
         expect(nudge).toContain("`pnpm lint`");
-        // `dev` is a script but not a check: offering it would be worse than offering nothing.
-        expect(nudge).not.toContain("pnpm dev");
     });
 
     test("a passing check means the turn ends silently", async () => {
@@ -311,8 +312,8 @@ describe("the verify-edits built-in", () => {
         expect(await stop(hooks)).toContain("2 failed");
     });
 
-    test("a workspace with no package.json is told to pick its own check, not given an invented one", async () => {
-        const hooks = armed([VERIFY], { scripts: NO_PACKAGE });
+    test("a file under no project at all is told to pick its own check, not given an invented one", async () => {
+        const hooks = armed([VERIFY], { checks: NO_PROJECT });
         await edit(hooks, "/srv/thing.py");
         const nudge = await stop(hooks);
         expect(nudge).toContain("thing.py");

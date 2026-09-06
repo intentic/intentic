@@ -19,6 +19,11 @@ profile:
   node 24 (which runs `.ts` files directly: `tsx` is a shim over it), pnpm/npm.
 - **Python libraries**: **PyYAML** and **Pillow** are baked, so `import yaml` and `from PIL import Image`
   work with no venv. They are the only two; anything else still needs pip inside a venv.
+- **Python projects**: `uv` (+ `uvx`), `ruff` and `pyright` ride the `python` feature pack, which the standard
+  image bakes — so `uv sync` installs a `pyproject.toml` project, and the daemon checks every `.py` edit with
+  ruff (plus pyright where the project's `.venv` resolves). On an image without that pack the daemon says a
+  python project is `unsupported` and reports edits as unchecked rather than guessing; adding it back is the
+  pack, not a hand-written step.
 - **First-party CLIs**: `intentic`, `iq`, `lsp`.
 - **Search & data** (ripgrep, `jq`, `yq` (YAML, for shell pipelines) in Python just `import yaml`),
   sqlite3, xmllint, file, tree.

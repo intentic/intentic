@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { measure, weakened } from "@intentic/constants/assertion-measure";
-import { TEST_FILE, verifyTestsMessage } from "./agent-tests.js";
+import { measure, measureFile, measurePython, TEST_FILE, weakened } from "@intentic/constants/assertion-measure";
+import { verifyTestsMessage } from "./agent-tests.js";
 
 /* The measure behind the ratchet (@intentic/constants/assertion-measure) is one copy, read by the push gate and by
  * the built-in below; these are the judgments it has to make, on the shapes the 08-31 sweep produced. */
@@ -110,6 +110,90 @@ test("y", () => { expect(u).toBe("bob"); });`;
         expect(TEST_FILE.test("a.spec.tsx")).toBe(true);
         expect(TEST_FILE.test("testing.ts")).toBe(false);
         expect(TEST_FILE.test("a.ts")).toBe(false);
+        // pytest's own collection rule, and nothing wider: a project's fixtures and helpers live beside its
+        // tests under names like these, and measuring them would report on files no runner treats as tests.
+        expect(TEST_FILE.test("tests/test_api.py")).toBe(true);
+        expect(TEST_FILE.test("api_test.py")).toBe(true);
+        expect(TEST_FILE.test("conftest.py")).toBe(false);
+        expect(TEST_FILE.test("tests/helpers.py")).toBe(false);
+        expect(TEST_FILE.test("contest_python.py")).toBe(false);
+    });
+});
+
+/* THE PYTHON ARM OF THE SAME MEASURE. Python asserts with a statement where TypeScript calls a matcher, so the
+ * counting is different code answering the same question, and these are the shapes it has to get right for the
+ * ratchet's verdict to mean anything on a pytest suite. */
+describe(`the assertion measure, on python`, () => {
+    const STRONG = `import pytest
+
+
+def test_greeting():
+    assert greet("ada") == "Hello, ada!"
+
+
+def test_rows():
+    assert rows(2) == [{"id": 1}, {"id": 2}]
+`;
+    // The same two tests after the move this whole mechanism exists to catch: an equality becomes a membership,
+    // and an equality becomes a bare truthiness check.
+    const WEAK = `import pytest
+
+
+def test_greeting():
+    assert "ada" in greet("ada")
+
+
+def test_rows():
+    assert rows(2)
+`;
+
+    test(`an equality pins a value, a membership and a bare assert do not`, () => {
+        expect(measurePython(STRONG)).toEqual({ exact: 2, loose: 0, chars: 18, tests: 2 });
+        expect(measurePython(WEAK)).toEqual({ exact: 0, loose: 2, chars: 6, tests: 2 });
+        expect(weakened(measurePython(STRONG), measurePython(WEAK))).toBe(`downgrade`);
+        expect(weakened(measurePython(STRONG), measurePython(STRONG))).toBeUndefined();
+    });
+
+    test(`unittest's methods are read like matchers, and assertRaises like toThrow: as neither`, () => {
+        const source = `class T(unittest.TestCase):
+    def test_a(self):
+        self.assertEqual(got, "abc")
+        self.assertIn("a", got)
+        with self.assertRaises(ValueError):
+            f()
+`;
+        expect(measurePython(source)).toEqual({ exact: 1, loose: 1, chars: 4, tests: 1 });
+    });
+
+    test(`comments and docstrings are not assertions, whatever they contain`, () => {
+        // The failure this is for is the TypeScript half's own: a walker that reads prose as code counts an
+        // apostrophe as a quote and swallows the file. Here the prose holds an assert, an operator and quotes.
+        const source = `# assert this == "not code"
+def test_x():
+    """A docstring with == and 'quotes' in it."""
+    assert x == "ab"  # assert y in z
+`;
+        expect(measurePython(source)).toEqual({ exact: 1, loose: 0, chars: 2, tests: 1 });
+    });
+
+    test(`an assert spanning lines is measured whole, brackets and all`, () => {
+        // The common pytest shape for a real expectation. Reading only its first line would leave the file's
+        // biggest pinned literal uncounted, and a reformat would then read as a narrowing.
+        const source = `def test_big():
+    assert result == {
+        "a": 1,
+        "b": "text",
+    }
+`;
+        expect(measurePython(source)).toEqual({ exact: 1, loose: 0, chars: 6, tests: 1 });
+    });
+
+    test(`a file is measured as the language its name says, so the two versions cannot be read differently`, () => {
+        // The dispatch both readers share. A python file measured by the TypeScript vocabulary reads as zero of
+        // everything, which is the silent-wrong answer this exists to prevent.
+        expect(measureFile(STRONG, `tests/test_api.py`)).toEqual(measurePython(STRONG));
+        expect(measure(STRONG)).toEqual({ exact: 0, loose: 0, chars: 0, tests: 0 });
+        expect(measureFile(CORPUS[0] ?? ``, `a.test.ts`)).toEqual(measure(CORPUS[0] ?? ``));
     });
 });
 

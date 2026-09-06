@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { TEST_FILE } from "./agent-tests.js";
+import { TEST_FILE } from "@intentic/constants/assertion-measure";
 
 /* WOULD THIS TEST HAVE PASSED BEFORE THE CHANGE IT TESTS?
  *
@@ -33,6 +33,13 @@ import { TEST_FILE } from "./agent-tests.js";
  * measured the first draft rather than the finished test, only where the edit tools could see the edit, and under
  * a 20-second budget sized to the agent's patience mid-turn. At the Stop the test is finished, the tree says
  * which files were touched whatever wrote them, and the moment already waits on a check that takes minutes.
+ *
+ * ONE RUNNER, SO ONE LANGUAGE. The mutant is served through a vite `load` hook, which is vitest's, so this can
+ * only answer for a test vitest runs: a python suite the ratchet next door measures perfectly well gets no
+ * answer from here, because `packageOf` finds no vitest config above it and every path out returns undefined.
+ * That is the honest shape of it — a check that cannot run says nothing, rather than reporting a pass it never
+ * observed — and it is what a pytest equivalent would have to replace, an import hook serving HEAD's modules,
+ * not a flag on this one.
  *
  * IT REPORTS, IT NEVER BLOCKS, and that is not timidity — two entirely legitimate cases pass this check:
  *   a test written BEFORE its implementation, which is red right now and which the agent can already see;

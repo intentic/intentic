@@ -56,7 +56,10 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   (the file's exact matchers, loose matchers and pinned literal text against the same file at HEAD, reporting a
   downgrade or a narrowing; the same measure the push gate refuses an undeclared weakening with,
   `_tools/constants/src/assertion-measure.mjs`, and the two are held to each other by a test), and the fault check
-  below. The first test file a turn edits is also told the two rules that apply at that moment, once. Reports,
+  below. That measure reads two languages: a TypeScript file by its matchers, a python file by what its `assert`
+  statements and unittest methods pin down, and the same module owns which files are test files at all — pytest's
+  collection rule as well as `*.test.ts`, one copy, so the push gate and the Stop cannot measure different sets.
+  The first test file a turn edits is also told the two rules that apply at that moment, once. Reports,
   never refuses: a refactor from prose to structure and a test written ahead of its implementation both pass
   honestly.
 - [src/agent/verification/agent-test-strength.ts](../src/agent/verification/agent-test-strength.ts): whether a test the agent wrote would have
@@ -67,7 +70,9 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   time it died between the revert and the restore. Same package only, because a sibling package resolves to its
   built output where there is nothing to swap. Asked at the Stop by `verify-tests` (above) rather than on the
   first edit of each test file, where it measured the first draft under a 20-second budget and only where the edit
-  tools could see the edit. Off with the rule; off runs no suite.
+  tools could see the edit. The `load` hook is vitest's, so this answers only for a test vitest runs: a python
+  suite the ratchet measures gets no answer here, and says nothing rather than reporting a pass it never observed.
+  Off with the rule; off runs no suite.
 - [src/agent/tools/agent-shell-edits.ts](../src/agent/tools/agent-shell-edits.ts): which files a shell command changed, for the
   hooks that only ever heard the edit tools. The dirty paths of the turn's repos and their mtimes are snapshotted
   before every Bash command and compared after it, so a file `sed -i` or a heredoc rewrote gets the same type

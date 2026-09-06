@@ -3,8 +3,8 @@
  *
  *   node _tools/checks/mirror-roots.mjs      # every package script and every tracked shell script
  *
- * `node_modules`, `dist` and `generated` are the three trees a worktree cannot check out, so an isolated turn
- * gets each of them as an overlayfs mount with the MAIN checkout's copy as its lowerdir. An overlay resolves
+ * `node_modules`, `.venv`, `dist` and `generated` are the trees a worktree cannot check out, so an isolated
+ * turn gets each of them as an overlayfs mount with the MAIN checkout's copy as its lowerdir. An overlay resolves
  * that lowerdir once, at mount time. Emptying it is harmless; REPLACING it — `rm -rf dist` and a `mkdir` after —
  * hands the path a new inode the mount cannot follow, and every live turn's merged view of that directory then
  * `readdir`s as completely empty, its own upper layer included, unrepairable from inside the turn. The full

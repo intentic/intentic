@@ -22,3 +22,9 @@ function, two callers, no disagreement.
 - It reads NAMES, never file contents. That is what keeps it pure, browser-safe and instant: and it is why a
   project with a misleading lockfile gets a misleading answer, which is the right trade for a first guess the
   user can correct.
+- **A recipe's `marker` has to be a directory isolated turns mirror** (`MIRRORED_DIRS` in
+  `@intentic/constants/mirror-roots`). The daemon looks for the marker on the MAIN tree and every reader of that
+  answer stands in a worktree, which carries tracked files only — so a marker that is not mirrored makes
+  "installed" a claim that is true where nobody is standing. `.venv` was exactly that until it was added to the
+  set. Adding an ecosystem is a row in the tables here PLUS its marker in that set, and
+  `_sandbox/sandbox/src/workspace/layout/workspace-setup.test.ts` fails if the second half is forgotten.

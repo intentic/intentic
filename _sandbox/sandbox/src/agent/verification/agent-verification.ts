@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import type { AgentEvent, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
 import { inWorktree, type IsolationPlan } from "../../agents/worktrees/isolation.js";
+import { onPath } from "../../platform/boot/on-path.js";
 
 /* DID THIS TURN PROVE ANYTHING?, the one question a turn that edited code should not end without answering,
  * and the one nothing in the daemon was asking.
@@ -349,31 +350,76 @@ export const createFrameLedger = (): FrameLedger => {
     };
 };
 
-// The scripts this workspace actually defines, nearest package.json wins. Injectable so the hook's tests need
-// no fixture tree. Undefined ⇒ no package.json above the file, which is a real answer: the nudge then asks for
-// a check without naming one rather than inventing `pnpm test` for a workspace that has no such script.
-export type ScriptsProbe = (fromPath: string) => Promise<readonly string[] | undefined>;
+/* WHAT THIS PROJECT'S OWN CHECKS ARE CALLED, as commands a user would type, from the nearest project above the
+ * edited file. Injectable so the hook's tests need no fixture tree. Undefined ⇒ no project above the file at
+ * all, which is a real answer: the nudge then asks for a check without naming one rather than inventing
+ * `pnpm test` for a workspace that has no such script. An empty list is the other real answer — there IS a
+ * project here and nothing in it is recognisable as a check.
+ *
+ * ONLY WHAT THE PROJECT GIVES EVIDENCE OF, in either language. A command that answers "command not found" reads
+ * to a model as the check finding a bug, and it will go looking for the bug: that is the whole reason the node
+ * side names only scripts the manifest defines, and it is why the python side reads the config rather than
+ * assuming a suite. */
+export type ChecksProbe = (fromPath: string) => Promise<readonly string[] | undefined>;
 
-const readPackageScripts: ScriptsProbe = async (fromPath) => {
-    for (let dir = dirname(resolve(fromPath)); ;) {
-        try {
-            const raw = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
-            return Object.keys(raw.scripts ?? {});
-        } catch {
-            const parent = dirname(dir);
-            if (parent === dir) {
-                return undefined;
-            }
-            dir = parent;
-        }
+const fileText = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
+
+const nodeChecks = async (dir: string): Promise<readonly string[] | undefined> => {
+    const raw = await fileText(join(dir, "package.json"));
+    if (raw === undefined) {
+        return undefined;
+    }
+    try {
+        const scripts = Object.keys((JSON.parse(raw) as { scripts?: Record<string, unknown> }).scripts ?? {});
+        return SUGGESTED_SCRIPTS.filter((name) => scripts.includes(name)).map((name) => `pnpm ${name}`);
+    } catch {
+        // A manifest that does not parse is not this project's answer; keep walking rather than claim it had none.
+        return undefined;
     }
 };
 
-// What to tell the agent to run: the defined scripts we know are checks, in preference order, as the command a
-// user would type. Empty ⇒ nothing recognisable, and the nudge says so instead of naming a script that would
-// exit "command not found" and read as the check finding a bug.
-const suggestedCommands = (scripts: readonly string[]): string[] =>
-    SUGGESTED_SCRIPTS.filter((name) => scripts.includes(name)).map((name) => `pnpm ${name}`);
+// Where a python project's config can live, most specific first. `pytest.ini` and `tox.ini` are evidence of a
+// suite by their very existence; a `pyproject.toml` has to say so.
+const PYTHON_CONFIGS = ["pytest.ini", "tox.ini", "pyproject.toml", "setup.cfg"] as const;
+
+/* HOW TO SPELL `pytest` SO IT RUNS. Outside an activated environment the bare name is routinely not on PATH —
+ * it is installed into the project's `.venv`, not the image — so the environment's own binary is named first.
+ * `uv run` is next because it resolves (and repairs) the project's environment on its own, and it only makes
+ * sense where there is a `pyproject.toml` for it to read. The bare name is the last resort, for a project whose
+ * suite is configured but whose environment this cannot find. */
+const pytestCommand = async (dir: string, pyproject: boolean): Promise<string> =>
+    (await fileText(join(dir, ".venv", "bin", "pytest"))) === undefined ? (pyproject ? "uv run pytest" : "pytest") : ".venv/bin/pytest";
+
+const pythonChecks = async (dir: string): Promise<readonly string[] | undefined> => {
+    const found = await Promise.all(PYTHON_CONFIGS.map(async (name) => [name, await fileText(join(dir, name))] as const));
+    const config = found.find(([, text]) => text !== undefined);
+    if (config === undefined) {
+        return undefined;
+    }
+    const [name, text] = config;
+    const pyproject = found.some(([candidate, candidateText]) => candidate === "pyproject.toml" && candidateText !== undefined);
+    const suite = name === "pytest.ini" || name === "tox.ini" || (text ?? "").includes("pytest");
+    // ruff is named only where the project configures it AND this image carries it: the `python` feature pack
+    // may simply not be here (environment/packs.ts), and naming an absent binary is the trap above.
+    const lint = (text ?? "").includes("[tool.ruff") && (await onPath("ruff"));
+    return [...(suite ? [await pytestCommand(dir, pyproject)] : []), ...(lint ? ["ruff check ."] : [])];
+};
+
+export const projectChecks: ChecksProbe = async (fromPath) => {
+    for (let dir = dirname(resolve(fromPath)); ; ) {
+        // Node first, for the reason the workspace map reads its manifests in this order: a python project that
+        // keeps a package.json for its tooling is described by the one that actually says something.
+        const checks = (await nodeChecks(dir)) ?? (await pythonChecks(dir));
+        if (checks !== undefined) {
+            return checks;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            return undefined;
+        }
+        dir = parent;
+    }
+};
 
 const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): string => {
     const paths = verdict.paths.slice(0, 8).map((path) => `- ${path}`);
@@ -382,7 +428,7 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
     const instruction =
         commands.length > 0
             ? `Run the check that covers it: ${commands.map((command) => `\`${command}\``).join(" or ")}, or a targeted subset of it (a single test file is fine and is often the better answer).`
-            : `This workspace defines no test/lint/typecheck script, so run whatever actually exercises the change, the package's own test binary, a targeted type-check, or a short throwaway script, and say which you chose.`;
+            : `Nothing above this file names a check this recognises, so run whatever actually exercises the change, the project's own test binary, a targeted type-check, or a short throwaway script, and say which you chose.`;
     const failedNote =
         verdict.failed === undefined
             ? ""
@@ -407,7 +453,7 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
 export const verifyEditsMessage = async (
     ledger: VerificationLedger,
     isolation?: IsolationPlan,
-    scripts: ScriptsProbe = readPackageScripts,
+    checks: ChecksProbe = projectChecks,
 ): Promise<string | undefined> => {
     const verdict = ledger.verdict();
     if (verdict === undefined) {
@@ -416,6 +462,6 @@ export const verifyEditsMessage = async (
     // The paths the agent named are the ones it reads back; the probe needs the daemon's view of them, which
     // under an unanchored isolated turn is a different file.
     const first = verdict.paths[0];
-    const defined = first === undefined ? undefined : await scripts(inWorktree(first, isolation));
-    return nudgeText(verdict, suggestedCommands(defined ?? []));
+    const defined = first === undefined ? undefined : await checks(inWorktree(first, isolation));
+    return nudgeText(verdict, defined ?? []);
 };

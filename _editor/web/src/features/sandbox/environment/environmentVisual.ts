@@ -58,6 +58,12 @@ const LOGOS: Readonly<Record<string, string>> = {
     python3: `python`,
     pip: `python`,
     pip3: `python`,
+    // The python pack's tools carry no mark of their own in the icon set, and each one is only ever met as
+    // part of a python row, so they take the language's.
+    uv: `python`,
+    uvx: `python`,
+    ruff: `python`,
+    pyright: `python`,
     sqlite: `sqlite`,
     sqlite3: `sqlite`,
     "c++": `cplusplus`,

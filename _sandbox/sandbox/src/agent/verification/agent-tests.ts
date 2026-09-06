@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type AssertionMeasure, measure, type Weakening, weakened } from "@intentic/constants/assertion-measure";
+import { type AssertionMeasure, measureFile, TEST_FILE, type Weakening, weakened } from "@intentic/constants/assertion-measure";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* THE `verify-tests` BUILT-IN: what a turn did to its tests, read when the turn tries to end.
@@ -34,8 +34,6 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  * would want to hear about, not verdicts, and a gate here would fight correct work several times for every weak
  * test it caught. */
 
-// What a test file is called, everywhere the daemon asks: the ratchet, the fault check, the first-edit note.
-export const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 /* Said once per turn, on the first edit of a test file, when a `verify-tests` rule stands (rules/turn-ending.ts).
  * Two sentences, at the moment they apply, the same economy the dependency notice keeps: the rules exist in
@@ -44,8 +42,8 @@ export const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 export const TEST_WRITING_NOTE =
     "Editing a test: derive fixture facts from their source (a schema's default, the tree, the same call the code makes) rather " +
     "than transcribing them, and fix a failing assertion by updating the expected value to the new truth, never by widening the " +
-    "matcher. The test files this turn touches are re-read when it ends: an assertion weaker than at HEAD, and a new test that " +
-    "passes against the pre-turn code, both come back as a follow-up.";
+    "matcher. The test files this turn touches are re-read when it ends: an assertion weaker than at HEAD comes back as a " +
+    "follow-up, and so does a new test that passes against the pre-turn code, wherever the suite can be re-run.";
 
 
 /* ── the built-in ─────────────────────────────────────────────────────────────────────────────────────────── */
@@ -93,10 +91,12 @@ const ratchetFindings = async (deps: VerifyTestsDeps, files: readonly string[]):
             continue;
         }
         // No HEAD version means the file is new this turn, which can only be stronger.
+        // Measured as the language its NAME says it is, both sides, or the two versions of one file would be
+        // read by two different vocabularies and every number would move.
         const before = await git(deps.root, ["show", `HEAD:${path}`])
-            .then((result) => measure(result.stdout))
+            .then((result) => measureFile(result.stdout, path))
             .catch(() => undefined);
-        const now = measure(after);
+        const now = measureFile(after, path);
         const shape = weakened(before, now);
         if (shape !== undefined && before !== undefined) {
             findings.push(describeWeakening(path, shape, before, now));

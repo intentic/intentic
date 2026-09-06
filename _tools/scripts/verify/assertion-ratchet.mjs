@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { describeWeakening, measure, weakened } from "../../constants/src/assertion-measure.mjs";
+import { describeWeakening, measureFile, TEST_FILE, weakened } from "../../constants/src/assertion-measure.mjs";
 import { changedPaths, git as gitIn } from "../lib/git.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -25,8 +25,6 @@ if (!worktree && (base === undefined || head === undefined)) {
     console.error("usage: assertion-ratchet.mjs <base> <head> | --worktree");
     process.exit(2);
 }
-
-const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 // Bound to this checkout once (lib/git.mjs), which is also where the buffer this needs is set: `git log` over
 // the two hundred commits a release tag can span goes past node's 1 MiB default.
@@ -70,8 +68,8 @@ const declared = () => {
 
 const findings = [];
 for (const [path, beforeText, afterText] of pairs()) {
-    const before = beforeText === undefined ? undefined : measure(beforeText);
-    const after = measure(afterText);
+    const before = beforeText === undefined ? undefined : measureFile(beforeText, path);
+    const after = measureFile(afterText, path);
     const shape = weakened(before, after);
     if (shape !== undefined) {
         findings.push(describeWeakening(path, shape, before, after));

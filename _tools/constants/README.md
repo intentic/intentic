@@ -17,7 +17,9 @@ The ports, paths and image references the daemon, the CLIs and the desktop app a
   [src/control-bytes.mjs](src/control-bytes.mjs) and [src/mirror-roots.mjs](src/mirror-roots.mjs): the four
   judgments the repository's checkout gates (`_tools/checks/`) and the daemon both make, kept as one copy each.
   Hand-written JavaScript for the same reason `node.mjs` is: a gate that runs before `pnpm install` imports them
-  by relative path, and the daemon imports them as subpaths of this package.
+  by relative path, and the daemon imports them as subpaths of this package. `assertion-measure.mjs` carries
+  three of them, not one: which files are test files (`TEST_FILE`), how strong a TypeScript file's assertions
+  are, and how strong a python file's are.
 
 ## How it fits
 
@@ -26,7 +28,10 @@ makes it the home of the few pure judgments a pre-install script and the daemon 
 they could both import would need an install to resolve. `mirror-roots.mjs` is the clearest case of that: the
 set of directories an isolated turn overlays is the daemon's business (`agents/isolation.ts` mounts them), and
 whether a build script may `rm -rf` one of them is a checkout gate's business, and the two answers have to be
-the same answer or a name added to one is a directory the other stops protecting. A port number that lives
+the same answer or a name added to one is a directory the other stops protecting. `assertion-measure.mjs` is
+the same shape of problem one level up: the push gate refuses an undeclared weakening and the daemon reports one
+at the Stop, so if the two disagreed about which files are tests, or about what a python `assert` is worth, a
+file could be measured by one and ignored by the other while both claimed to hold the same line. A port number that lives
 in two files is a port number that will eventually be two different numbers, which is the entire argument for
 this package existing. The same argument covers the directory layouts: `/work`, `/history`, `.intentic`,
 `/opt/intentic`: which were previously typed out by hand across dozens of files with nothing linking the copies.

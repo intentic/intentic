@@ -43,7 +43,17 @@ const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the 
 const line = (status: ProjectSetupStatus, canInstall: boolean): string => {
     switch (status.state) {
         case "ready":
-            return `${where(status)}: ready. Its type-checks, linters and tests mean what they say.`;
+            /* WHAT `ready` MEASURED IS NOT THE SAME IN EVERY ECOSYSTEM, and the sentence has to carry the
+             * difference or it is the most expensive kind of wrong: a model told its tooling can be trusted
+             * spends the next hour looking for the bug in its own code. Node's marker is walked against the
+             * manifest (dependency-drift.ts), so the strong claim is earned. Python's is the `.venv` existing
+             * and nothing else (workspace-setup.ts's setupStateOf), which answers "has this ever been set up"
+             * and says nothing about whether it holds what the project declares. */
+            return status.recipe.ecosystem === "node"
+                ? `${where(status)}: ready. Its type-checks, linters and tests mean what they say.`
+                : `${where(status)}: ready — \`${status.recipe.marker}\` is there, which is the whole measurement. ` +
+                      `Nothing walked it against ${status.recipe.evidence}, so an import that will not resolve can still be ` +
+                      `the environment being behind rather than a mistake in the code: say so rather than editing working source to satisfy it.`;
         case "installing":
             return `${where(status)}: installing right now. Its checks will be trustworthy once that finishes.`;
         case "stale":
@@ -84,12 +94,20 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                     }
                     const behind = projects.filter((project) => project.state !== "ready" && project.state !== "installing");
                     const stale = projects.some((project) => project.state === "stale");
+                    // The closing verdict has to survive the weakest measurement it covers: one project whose
+                    // marker was only looked FOR is enough to make "a failing import is your code" a claim
+                    // nothing here checked. Same distinction `line` draws, drawn once more for the summary
+                    // because that is the sentence a model reads when it skims.
+                    const unwalked = projects.some((project) => project.state === "ready" && project.recipe.ecosystem !== "node");
                     return ok(
                         [
                             ...projects.map((project) => line(project, deps.canInstall)),
                             "",
                             behind.length === 0
-                                ? "Everything is installed: a failing import here is a mistake in the code, not the tree."
+                                ? unwalked
+                                    ? "Everything has been installed at least once. Where that was all that was measured, an import that will not " +
+                                      "resolve can still be the environment rather than the code."
+                                    : "Everything is installed: a failing import here is a mistake in the code, not the tree."
                                 : stale
                                   ? "Drifted projects are queued for repair between turns. First-time setup still needs the explicit action shown " +
                                     "above. Everything marked ready checks normally in the meantime."
