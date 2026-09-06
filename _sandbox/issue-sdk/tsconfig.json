@@ -1,0 +1,18 @@
+/* A browser bundle, not a node lib: DOM types, bundler resolution, and no declaration/composite emit (Vite
+ * emits the artifact, tsgo never runs on this package). The deviations sit inline rather than in
+ * @intentic/tsconfig for the reason webchat-widget's copy gives: the non-Vue browser packages cannot extend
+ * tsconfig.vue.json without claiming a Vue toolchain neither of them has. */
+{
+    "compilerOptions": {
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "noEmit": true,
+        "target": "ES2022"
+    },
+    "include": ["./src/**/*", "./vite.config.ts", "./vitest.config.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

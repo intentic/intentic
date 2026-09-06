@@ -1,0 +1,99 @@
+import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { expect, test } from "vitest";
+import type { ComposeArgs } from "./setupCompose";
+import { composeBootstrap, composeFile } from "./setupCompose";
+
+const base: ComposeArgs = {
+    code: `abc123`,
+    hostname: `sandbox-0f00ba4dd12b.intentic.dev`,
+    image: `ghcr.io/intentic/sandbox:stable`,
+    googleClientId: `client-id.apps.googleusercontent.com`,
+    webOrigin: PLATFORM_WEB_ORIGIN,
+};
+
+test("intentic path: the bootstrap is claim → up, against the production platform, no -k", () => {
+    expect(composeBootstrap(base)).toBe(`curl -fsS https://api.intentic.dev/setup/claim -d code=abc123 > .env\ndocker compose up -d`);
+});
+
+test("local dev claims against the localhost platform with -k (repo CA)", () => {
+    expect(composeBootstrap({ ...base, platformUrl: `https://localhost:6480` })).toContain(
+        `curl -fsSk https://localhost:6480/setup/claim -d code=abc123 > .env`,
+    );
+});
+
+test("the compose file mirrors connect.sh: slugged names, origin alias, .env guards, inlined public url", () => {
+    const yaml = composeFile(base);
+    // Same names as connect.sh derives, so cleanup.sh + coexistence checks + workspace data stay compatible.
+    expect(yaml).toContain(`container_name: intentic-sandbox-sandbox-0f00ba4dd12b`);
+    // No tunnel container: the sandbox's own daemon dials the ingress edge from inside.
+    expect(yaml).not.toContain(`intentic-sandbox-tunnel`);
+    /* THE REACHABILITY PAIR, spelled as ingress-contract.ts pins it, because the entrypoint and the daemon read
+     * exactly these names and a compose file that hands down a name nobody reads starts a sandbox that is
+     * simply unreachable. The grant is guarded (`:?`) and the URL defaults (`:-`): a box with no proof of
+     * identity can serve nothing, while one with no edge address falls to the daemon's own default. */
+    expect(yaml).toContain(`INGRESS_URL: \${INGRESS_URL:-}`);
+    expect(yaml).toContain(`SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`);
+    // The hub-era vocabulary is gone rather than accepted alongside: reachability is a signature the edge
+    // verifies, not an account on a hub, so a lingering ZROK_* line would name a provisioning step that no
+    // longer exists and quietly shadow the workspace .env.
+    for (const retired of [`ZROK_TOKEN`, `ZROK_API`, `ZROK_NAMESPACE`]) {
+        expect(yaml, `${retired} belongs to the retired hub lane`).not.toContain(retired);
+    }
+    expect(yaml).toContain(`name: intentic-workspace-sandbox-0f00ba4dd12b`);
+    expect(yaml).toContain(`name: intentic-history-sandbox-0f00ba4dd12b`);
+    expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);
+    expect(yaml).toContain(`aliases: [intentic-sandbox-workspace]`);
+    // The capabilities connect.sh's run carries: SYS_ADMIN gives isolated turns their own mount namespace,
+    // while SYS_PTRACE lets production diagnostics inspect a wedged daemon. This drifted once already: a
+    // capability reached one creation path but not the others, leaving ordinarily-created sandboxes weaker.
+    expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
+    // Secrets come from the claimed .env, with a clear error when the bootstrap was skipped.
+    expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
+    expect(yaml).toContain(`SANDBOX_PUBLIC_URL: https://sandbox-0f00ba4dd12b.intentic.dev`);
+    expect(yaml).toContain(`PLATFORM_URL: https://api.intentic.dev`);
+    // The intentic path bakes NO Cloudflare token env: an empty one would shadow the workspace .env later.
+    expect(yaml).not.toContain(`CLOUDFLARE_API_TOKEN`);
+    expect(yaml).not.toContain(`agent-auth`);
+});
+
+test("a local-only dev image is marked pull_policy: never so `compose pull` skips it instead of failing", () => {
+    expect(composeFile({ ...base, image: `intentic-sandbox:dev`, platformUrl: `https://localhost:6480` })).toContain(`pull_policy: never`);
+});
+
+test("the production registry image is pull_policy: always so it tracks the moving :stable release", () => {
+    const yaml = composeFile(base);
+    expect(yaml).toContain(`image: ghcr.io/intentic/sandbox:stable`);
+    expect(yaml).toContain(`pull_policy: always`);
+    expect(yaml).not.toContain(`pull_policy: never`);
+});
+
+test("daemon-defaulted vars are omitted: the environment block stays minimal", () => {
+    const yaml = composeFile(base);
+    for (const noise of [
+        `WORKSPACE_ROOT`,
+        `HISTORY_ROOT`,
+        `SANDBOX_HOST`,
+        `SANDBOX_PORT`,
+        `PREVIEW_PORT`,
+        `SANDBOX_NAME:`,
+        `SANDBOX_IMAGE`,
+        `SYNC_PAIR_TOKEN`,
+    ]) {
+        expect(yaml, `${noise} should ride the daemon default`).not.toContain(noise);
+    }
+});
+
+test("an SPA served anywhere but the hosted app names itself as the daemon's CORS origin", () => {
+    // Without this the daemon allowlists app.intentic.dev alone and the SPA that just created the sandbox is
+    // blocked on its first /health: the failure reads as "sandbox unreachable", never as CORS.
+    expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: https://localhost:47145`);
+    expect(composeFile(base)).not.toContain(`WEB_ORIGIN`);
+});
+
+test("local dev rewrites the container-visible platform url and mounts the shared agent-auth volume", () => {
+    const yaml = composeFile({ ...base, platformUrl: `https://localhost:6480`, image: `intentic-sandbox:dev` });
+    expect(yaml).toContain(`PLATFORM_URL: https://host.docker.internal:6480`);
+    expect(yaml).toContain(`- agent-auth:/agent-auth`);
+    expect(yaml).toContain(`AGENT_AUTH_DIR: /agent-auth`);
+    expect(yaml).toContain(`name: intentic-dev-agent-auth`);
+});
