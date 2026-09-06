@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ui, Code, commandLang, InfoHint, OS_OPTIONS, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
-import { useInventory } from "../../composables/extensions/useInventory";
-import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { bashCommand, psCommand } from "../../environments/scriptCommand";
-import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
+import { useInventory } from "../../features/extensions/useInventory";
+import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { bashCommand, psCommand } from "../../app/environments/scriptCommand";
+import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSourceSwitch.vue";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 

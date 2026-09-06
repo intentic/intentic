@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
+import { ResourceGroupSchema, type Deployment } from "@intentic/api-contract";
 import { Button, Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
-import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
-import { groupAccent } from "../../composables/extensions/resourceVisual";
-import { reveal } from "../../composables/secrets/useSecrets";
-import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
-import { jsonBody } from "../../composables/sandbox/jsonBody";
-import { useDeployments } from "../../composables/extensions/useDeployments";
-import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
-import { useRole } from "../../composables/sandbox/useRole";
+import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
+import { groupAccent } from "../../features/extensions/resourceVisual";
+import { reveal } from "../../features/capabilities/connect/useSecrets";
+import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { jsonBody } from "../../features/sandbox/client/jsonBody";
+import { useDeployments } from "../../features/extensions/useDeployments";
+import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
+import { useRole } from "../../features/sandbox/secrets/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 

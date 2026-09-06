@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { ResourceView } from "@intentic-app/api-contract";
+import type { ResourceView } from "@intentic/api-contract";
 import { DagGraph, type DagEdge, type DagNode } from "@intentic/ui";
 import { computed, reactive } from "vue";
-import { statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
-import { groupAccent, resourceIcon, resourceLogoUrl } from "../../composables/extensions/resourceVisual";
+import { statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
+import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
 
 /* The desired-state dependency graph: each resource as a node, laid out left→right by dependency depth,
  * edges flowing from a dependency to its dependents: rendered by the shared DagGraph (dagre layout + Vue

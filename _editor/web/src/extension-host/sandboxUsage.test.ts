@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
 const sandboxJson = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
-vi.mock(`../composables/sandbox/sandboxClient`, () => ({ sandboxJson }));
+vi.mock(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 

@@ -5,21 +5,21 @@ import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
-import { initAnalytics } from "./composables/analytics";
-import { dropOutdatedMirrors } from "./composables/buildEpoch";
-import { describeError, installClientDiagnostics, reportClient } from "./composables/clientDiagnostics";
-import { installPerfConsole, installPerfReporter } from "./composables/perf";
-import { queryClient } from "./composables/queryPersistence";
-import { installSelfHeal, purgeIfMarked, reportStartupError } from "./composables/selfHeal";
-import { installDocumentAppearance } from "./composables/theme/documentAppearance";
+import { initAnalytics } from "./app/analytics";
+import { dropOutdatedMirrors } from "./app/buildEpoch";
+import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
+import { installPerfConsole, installPerfReporter } from "./app/perf";
+import { queryClient } from "./lib/queryPersistence";
+import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
+import { installDocumentAppearance } from "./features/settings/documentAppearance";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
-import "./composables/sandbox/sandboxScope";
+import "./features/sandbox/client/sandboxScope";
 // …and the one that remembers each sandbox's screen, so a switch lands where that sandbox was left.
-import "./composables/sandbox/sandboxScreen";
+import "./features/sandbox/client/sandboxScreen";
 // Publishes the app's vue + extension-api instances for extension bundles (see the import map in index.html).
 import "./extension-host/hostModules";
 import { router } from "./router";
-import { installNotificationTaps } from "./shell/notificationTaps";
+import { installNotificationTaps } from "./shell/notifications/notificationTaps";
 import "./styles.css";
 
 installDevStyles();

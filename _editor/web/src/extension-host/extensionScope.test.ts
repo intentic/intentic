@@ -32,10 +32,10 @@ vi.mock(`./apiImpl`, () => ({
     deactivateAllExtensions: () => void (state.deactivatedAll += 1),
 }));
 vi.mock(`./builtins`, () => ({ builtinModules: state.builtins }));
-vi.mock(`../composables/extensions/useExtensionSettings`, () => ({
+vi.mock(`../features/extensions/useExtensionSettings`, () => ({
     extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
 }));
-vi.mock(`../composables/sandbox/sandboxClient`, () => ({
+vi.mock(`../features/sandbox/client/sandboxClient`, () => ({
     sandboxJson: () => state.list(),
     sandboxRequest: () => Promise.resolve(new Response(``)),
     sandboxError: (response: Response) => new Error(String(response.status)),

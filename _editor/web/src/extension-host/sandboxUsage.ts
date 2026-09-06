@@ -1,6 +1,6 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { jsonBody } from "../composables/sandbox/jsonBody";
-import { sandboxJson } from "../composables/sandbox/sandboxClient";
+import { jsonBody } from "../features/sandbox/client/jsonBody";
+import { sandboxJson } from "../features/sandbox/client/sandboxClient";
 
 /* WHICH DECLARED ROUTE A CALL USED, counted here and reported to the daemon in batches.
  *

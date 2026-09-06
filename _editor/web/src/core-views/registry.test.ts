@@ -3,7 +3,7 @@ import * as acceptance from "@intentic/ext-acceptance";
 import * as documentation from "@intentic/ext-documentation";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
-import type { PanelSummary } from "@intentic-app/api-contract";
+import type { PanelSummary } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
 

@@ -56,6 +56,6 @@ export const coreViews: readonly ViewRegistration[] = [
                     repo: repo.repo,
                     props: { dir: repo.repo },
                 })),
-        view: async () => (await import(`../pages/workspace/DirectoryUiHost.vue`)).default,
+        view: async () => (await import(`../features/workspace/directory-ui/DirectoryUiHost.vue`)).default,
     },
 ];

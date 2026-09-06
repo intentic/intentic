@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
+import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
 import { computed, ref, watch } from "vue";
-import { useInventory } from "../../composables/extensions/useInventory";
-import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
+import { useInventory } from "../../features/extensions/useInventory";
+import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
 

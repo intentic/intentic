@@ -26,7 +26,7 @@ import { expect, test } from "vitest";
  * tests already run (surface-guard.test.ts, permissions.conformance.test.ts): the manifest package ships no
  * test harness, and giving it one to hold two checks would be the more expensive half of this. */
 
-const manifestPackage = join(repoRoot(import.meta.url), `_sandbox/extension-manifest`);
+const manifestPackage = join(repoRoot(import.meta.url), `_shared/extension-manifest`);
 
 const committedCopies = {
     "the copy that ships inside the package": join(manifestPackage, `intentic-extension.schema.json`),

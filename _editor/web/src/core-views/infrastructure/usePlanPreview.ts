@@ -1,12 +1,12 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../composables/extensions/reconcileStatus";
-import { useSecretKeys } from "../../composables/secrets/useSecrets";
-import { readIntenticLines } from "../../composables/intenticStream";
-import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
-import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { SECRETS, WORKSPACE_STATE } from "../../composables/queryKeys";
+import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
+import { useSecretKeys } from "../../features/capabilities/connect/useSecrets";
+import { readIntenticLines } from "../../lib/intenticStream";
+import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
+import { SECRETS, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { describeProvisionError } from "./provisionError";
 
 /* The pre-apply change preview: run `intentic deploy resolve` then `intentic deploy plan` in the sandbox (read + diff, nothing

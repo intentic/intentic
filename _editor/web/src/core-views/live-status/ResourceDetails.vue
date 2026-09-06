@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Deployment, ResourceView } from "@intentic-app/api-contract";
+import type { Deployment, ResourceView } from "@intentic/api-contract";
 import { Button, Card, StatusBadge } from "@intentic/ui";
 import { computed, reactive } from "vue";
-import { statusLabel, statusVariant } from "../../composables/extensions/reconcileStatus";
-import { groupAccent, resourceIcon, resourceLogoUrl } from "../../composables/extensions/resourceVisual";
+import { statusLabel, statusVariant } from "../../features/extensions/reconcileStatus";
+import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
 
 /* Details for the selected planned resource, shown below the dependency graph. Read-model only: everything is
  * already on the ResourceView (config, dependsOn, url, reason) or joined by id from the live deployments; the

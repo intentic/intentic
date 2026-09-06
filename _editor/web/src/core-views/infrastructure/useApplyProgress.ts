@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { readIntenticLines } from "../../composables/intenticStream";
-import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
-import { listTerminals, useTerminalsQuery } from "../../composables/terminal/terminalsQuery";
-import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { DEPLOYMENTS, INVENTORY, WORKSPACE_STATE } from "../../composables/queryKeys";
+import { readIntenticLines } from "../../lib/intenticStream";
+import { sandboxJson, sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { listTerminals, useTerminalsQuery } from "../../features/terminal/terminalsQuery";
+import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
+import { DEPLOYMENTS, INVENTORY, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
 

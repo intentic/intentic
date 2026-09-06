@@ -5,8 +5,8 @@ import { extensionApiVersion, satisfiesEngines, resetSandboxScope } from "@inten
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
-import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
-import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
+import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
+import { sandboxError, sandboxJson, sandboxRequest } from "../features/sandbox/client/sandboxClient";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
 

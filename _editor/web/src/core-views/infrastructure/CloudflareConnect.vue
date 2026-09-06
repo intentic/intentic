@@ -2,10 +2,10 @@
 import { Button, ui, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import CloudflareTokenField from "../../components/CloudflareTokenField.vue";
-import { CF_TOKEN_KEY, useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
-import { useInventory } from "../../composables/extensions/useInventory";
-import { useSecretKeys, useSecrets } from "../../composables/secrets/useSecrets";
+import CloudflareTokenField from "../../features/capabilities/connect/CloudflareTokenField.vue";
+import { CF_TOKEN_KEY, useCloudflareZones } from "../../features/extensions/useCloudflareZones";
+import { useInventory } from "../../features/extensions/useInventory";
+import { useSecretKeys, useSecrets } from "../../features/capabilities/connect/useSecrets";
 
 /* The reusable "Connect Cloudflare" step. Collects a Cloudflare API token (unless the sandbox already has
  * one) plus the zone it manages, writes CLOUDFLARE_API_TOKEN to the sandbox .env and declares the

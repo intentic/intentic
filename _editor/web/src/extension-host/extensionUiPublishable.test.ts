@@ -17,7 +17,7 @@ import { describe, expect, test } from "vitest";
  * It lives in the web app rather than beside the kit for the same reason extensionUiNames.test.ts does: the kit
  * is a `.vue` graph with no test runner of its own, and the app is where its guards already are. */
 
-const manifestPath = join(repoRoot(import.meta.url), `_editor/extension-ui/package.json`);
+const manifestPath = join(repoRoot(import.meta.url), `_shared/extension-ui/package.json`);
 const manifest = JSON.parse(readFileSync(manifestPath, `utf8`)) as {
     private?: boolean;
     dependencies?: Record<string, string>;

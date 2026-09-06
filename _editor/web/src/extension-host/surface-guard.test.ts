@@ -26,7 +26,7 @@ import { expect, test } from "vitest";
  * The grain is TOP-LEVEL KEYS on purpose. That is precisely where a mismatch is silent: an unknown key inside a
  * contribution entry fails the parse loudly and the author sees it, an unknown key at the top is dropped. */
 
-const sdkRoot = join(repoRoot(import.meta.url), `_sandbox/extension-api`);
+const sdkRoot = join(repoRoot(import.meta.url), `_shared/extension-api`);
 
 interface RecordedSurface {
     readonly manifest: readonly string[];

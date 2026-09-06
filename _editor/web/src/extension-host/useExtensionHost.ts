@@ -1,8 +1,8 @@
 import { watch } from "vue";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { usePanels } from "../composables/extensions/usePanels";
-import { activeSandboxId } from "../composables/sandbox/activeSandbox";
-import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
+import { usePanels } from "../features/extensions/usePanels";
+import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
+import { useSandbox } from "../features/sandbox/client/useSandbox";
 import type { HostBindings } from "./apiImpl";
 import { loadExtensions, retireExtensions } from "./loader";
 

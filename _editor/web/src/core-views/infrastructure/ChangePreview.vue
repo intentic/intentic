@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button, Card, ui, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
-import { type PlanStep, statusDot } from "../../composables/extensions/reconcileStatus";
-import SecretField from "../../components/SecretField.vue";
+import { type PlanStep, statusDot } from "../../features/extensions/reconcileStatus";
+import SecretField from "../../features/capabilities/connect/SecretField.vue";
 import type { usePlanPreview } from "./usePlanPreview";
 
 /* The pre-apply review: what applying the current wants WOULD do to the infra, grouped by verb (create /

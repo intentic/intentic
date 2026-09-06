@@ -9,7 +9,7 @@ import { expect, test } from "vitest";
  * be imported in node, so (like the shim generator) we compare names.mjs against the runtime (value) exports
  * declared in src/index.ts, statically. Keep the two in sync when adding or removing an export. */
 
-const indexPath = join(repoRoot(import.meta.url), "_editor/extension-ui/src/index.ts");
+const indexPath = join(repoRoot(import.meta.url), "_shared/extension-ui/src/index.ts");
 
 // Runtime (value) export names declared by an `export { … } from "…"` file: excludes `export type { … }` blocks
 // and `type X` entries (types are erased, so they aren't in the host-provided module), and resolves `X as Y`/
