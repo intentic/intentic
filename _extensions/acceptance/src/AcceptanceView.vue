@@ -21,7 +21,7 @@ import DevServerChip from "./DevServerChip.vue";
 import { matchesStoryRevision, reposOf, RUNS_DIR, SCAN_RUNS, storyStanding, type Verdict } from "./runs";
 import RunControls from "./RunControls.vue";
 import RunReport from "./RunReport.vue";
-import { type Story, storyMarkdown, targetKeyOf } from "./stories";
+import { newStoryMarkdown, type Story, targetKeyOf } from "./stories";
 import StoryComposer from "./StoryComposer.vue";
 import StoryRow from "./StoryRow.vue";
 import TargetChip from "./TargetChip.vue";
@@ -351,7 +351,7 @@ const attempt = async (action: () => Promise<void>): Promise<void> => {
  * tab is a story that can be lost by closing it. */
 const create = (input: { readonly path: string; readonly title: string }): Promise<void> =>
     attempt(async () => {
-        await save({ path: input.path, markdown: storyMarkdown({ title: input.title, narrative: ``, criteria: [] }) });
+        await save({ path: input.path, markdown: newStoryMarkdown(input.title) });
         editing.value = input.path;
         created.value = input.path;
     });

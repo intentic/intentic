@@ -2,8 +2,11 @@
 //
 // This module builds DOM, so it needs a document. jsdom rather than happy-dom for the same reason the markdown
 // tests next door give: happy-dom's parsing is not faithful enough to assert against.
+//
+// The module itself lives in the design system now (`@intentic/ui/markdown`), with the surface it builds for,
+// and is tested from here beside the block splitter's suite, which tests that package the same way.
 import { describe, expect, test } from "vitest";
-import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "./markdownSourceDom";
+import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "@intentic/ui/markdown";
 
 /* THE INVARIANT: the element's text IS the block's source. Everything the editing surface does rests on it,
  * reading an edit back, turning a caret into an offset, saving the file, so it is asserted for every shape of

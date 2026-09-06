@@ -108,6 +108,13 @@ export {
     InfoTable,
     isRenderableImage,
     Markdown,
+    /* <MarkdownDocument> ships because an extension that lets somebody author a markdown file is not a rare
+     * case here — the acceptance panel writes user stories, the knowledge pane writes notes — and until this
+     * existed each of them reached a different answer about what writing markdown feels like: one decomposed
+     * the file into borderless prose fields with a hand-rolled keyboard layer, the other showed the source in
+     * a coloured block behind a pencil. Same divergence <SplitView> and <Row> were shipped to end, on the one
+     * surface where getting it wrong means somebody's document reads as a form. */
+    MarkdownDocument,
     MarkdownFigure,
     /* <Modal> ships for the reason <ConfirmDialog> and <InfoDialog> already do, and it is the one they were
      * both missing: an extension whose dialog is neither a confirm nor an explainer had nothing to reach for

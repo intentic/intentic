@@ -43,6 +43,7 @@ export const extensionUiNames = [
     "InfoTable",
     "isRenderableImage",
     "Markdown",
+    "MarkdownDocument",
     "MarkdownFigure",
     "Modal",
     "NavRail",

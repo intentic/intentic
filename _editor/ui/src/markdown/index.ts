@@ -7,6 +7,16 @@
 
 export { blockAtOffset, type MarkdownBlock, type MarkdownBlocks, offsetOfLine, splitMarkdownBlocks } from "./blocks.js";
 export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml } from "./code.js";
+/* THE WRITING HALF OF THE ENGINE, which used to live in the web app beside the one view that used it. It is
+ * here because it is not one view's: the same three modules now drive every surface in the product where
+ * somebody authors markdown (see MarkdownDocument.vue), and a kit that shipped the reader without the writer
+ * is what left five of those surfaces editing prose in a grey <textarea>.
+ *
+ * `edits.ts` and `history.ts` are pure functions over (text, selection) and need no DOM; `sourceDom.ts` builds
+ * elements and asks for one at call time, not at import, so this subpath stays importable from a node test. */
+export { continueList, indentLines, insertLink, type ListEnter, onListLine, outdentLines, type TextEdit, toggleWrap } from "./edits.js";
+export { createMarkdownHistory, type DocumentState, type EditKind, type MarkdownHistory } from "./history.js";
+export { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "./sourceDom.js";
 export {
     type BarsFigure,
     type BarsFigureItem,

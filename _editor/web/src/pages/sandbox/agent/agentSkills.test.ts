@@ -214,15 +214,22 @@ test(`a row opens itself and closes itself, with nothing to discover first`, asy
 });
 
 /* SOMEBODY ELSE'S SKILL IS A DOCUMENT, not a grey monospace block: a skill is markdown, and rendering it as
- * source said the opposite of what it is. The file itself stays one pill away. */
-test(`a skill the owner can't edit opens as its own prose, with the raw file one pill away`, async () => {
+ * source said the opposite of what it is.
+ *
+ * AND THERE IS NO LONGER A "SOURCE" PILL BESIDE IT, which is the point rather than a regression. That control
+ * existed because reading a skill and reading its markup were two different components here; both are now
+ * <MarkdownDocument>, where the markup is in the DOM the whole time and revealed only under a caret, so the
+ * pill would have shown the same characters in a worse typeface. Taking the file away with you — the thing
+ * anyone actually pressed it for — is Copy. */
+test(`a skill the owner can't edit opens as its own prose, with the file one Copy away and no source pill`, async () => {
     skills.value = [skill({ id: `scratch`, name: `scratch`, origin: `dropped`, switchable: false, editable: false })];
     const host = mount();
 
     rows(host)[0]?.click();
     await settle();
     expect(host.querySelector(`.md-prose`)?.innerHTML).toContain(`<h2`);
-    expect(button(host, `Source`)).not.toBeUndefined();
+    expect(button(host, `Source`)).toBeUndefined();
+    expect(button(host, `Copy`)).not.toBeUndefined();
 });
 
 /* THE LIST IS AS LONG AS THE CONNECTION LIST, AND THAT IS WHAT THE FOLD IS FOR. Forty-one rows of which twelve

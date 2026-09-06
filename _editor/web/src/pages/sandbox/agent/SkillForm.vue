@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft } from "@intentic-app/api-contract";
-import { Button, ui, CodeField, Markdown, ProseField, SegmentedControl } from "@intentic/ui";
+import { Button, MarkdownDocument, ProseField, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 
 /* WRITING ONE SKILL: three boxes, in the order the model reads them.
@@ -16,12 +16,14 @@ import { computed, ref } from "vue";
  * also the identity a save upserts on, which is why an existing skill's name box is frozen: typing over it would
  * read as a rename and would in fact write a second skill beside the first.
  *
- * THE BODY IS THE SKILL, so it gets the room, and it is MARKDOWN, which is what the third box is now written to
- * be. It was a prose field: the right surface for a sentence, and the wrong one for a file with headings, fenced
- * commands and lists in it, because it set all of that in one flat grey weight and left the author to keep the
- * structure in their head. So it is <CodeField lang="markdown">: a real caret over markdown's own colours, the
- * same surface the memory notes are corrected in: with a Preview pill that renders exactly what the agent will
- * read. Neither half is a fixed number of rows: the field grows with the file, so a skill is never written
+ * THE BODY IS THE SKILL, so it gets the room, and it is a DOCUMENT rather than a field. It has been three
+ * things: a prose field (right for a sentence, wrong for a file with headings, fenced commands and lists,
+ * which it set in one flat grey weight), then a coloured source field with a Preview pill beside it (honest
+ * about the markup, but it answered "what will the agent read" by taking the author out of their own document
+ * to look at a copy). It is now <MarkdownDocument>, where those are the same screen: the words are set as the
+ * document they will be read as, and the markup shows only on the block holding the caret. It is also the
+ * surface a skill is READ on one component over (SkillRow), so reading somebody's skill and writing your own
+ * are no longer two different pictures of the same file. It grows with the file: a skill is never written
  * through an eight-line window. */
 
 const { skill, disabled = false } = defineProps<{
@@ -35,9 +37,6 @@ const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
 const name = ref(skill?.name ?? ``);
 const description = ref(skill?.description ?? ``);
 const body = ref(skill?.body ?? ``);
-// Writing is where a form opens, always. Preview is a check on what was written, not a place to land.
-const view = ref<`write` | `preview`>(`write`);
-
 // The name is the directory the skill lives in, so the box refuses what the daemon would: anything a slug cannot
 // hold. Typed rather than validated on save, because a rejected save after writing three paragraphs is the worst
 // moment to learn the rule.
@@ -115,29 +114,23 @@ const save = (): void => {
         </div>
 
         <div class="flex flex-col gap-1.5">
-            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <span :class="ui.sectionLabel(`text-2xs`)">What it should do</span>
-                <!-- Offered only once there is something to render: an empty Preview is a blank panel where the
-                     placeholder that says what to write used to be. -->
-                <SegmentedControl
-                    v-if="body.trim() !== ``"
-                    v-model="view"
-                    size="xs"
-                    :options="[
-                        { label: `Write`, value: `write` },
-                        { label: `Preview`, value: `preview`, title: `How the agent will read it` },
-                    ]"
-                />
-            </div>
-            <div class="ui-field-shell p-2" :class="{ 'opacity-50': disabled }">
-                <Markdown v-if="view === `preview`" :source="body" class="min-h-32" style="--prose-measure: 76ch" />
-                <CodeField
-                    v-else
+            <span :class="ui.sectionLabel(`text-2xs`)">What it should do</span>
+            <!-- THE SKILL, ON THE APP'S ONE MARKDOWN SURFACE, and the Write/Preview pair that used to sit above
+                 this is gone. That pill existed to answer "what will the agent actually read", and it answered
+                 it by taking the author out of their own document to look at a copy. Here the two are the same
+                 thing: the words are set as the document they will be read as, and the markup for the block
+                 holding the caret is the only markup on screen. Nothing to switch, nothing to switch back.
+
+                 The form owns the save (Add skill / Save changes below), which is what `save="none"` says: no
+                 debounce, no button of its own, no status line contradicting the one the form is about to
+                 show. -->
+            <div class="ui-field-shell p-3" :class="{ 'opacity-50': disabled }" style="--prose-measure: 76ch">
+                <MarkdownDocument
                     v-model="body"
-                    lang="markdown"
+                    :editable="!disabled"
+                    save="none"
+                    label="What this skill should do"
                     placeholder="Markdown. Steps, commands, the format to follow, what to avoid."
-                    aria-label="What this skill should do"
-                    :readonly="disabled"
                     class="min-h-32"
                 />
             </div>

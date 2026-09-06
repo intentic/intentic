@@ -156,28 +156,16 @@ export const criteriaOf = (content: string | undefined): string[] => {
     });
 };
 
-// Everything that is neither the title line nor the criteria section, what the editor shows in its prose box.
-export const narrativeOf = (content: string | undefined): string => {
-    const lines = (content ?? ``).split(`\n`);
-    const start = headingIndex(lines);
-    const body = start === -1 ? lines : lines.slice(0, start);
-    // Drop a leading `# Title`: the editor owns that as its own field, and keeping it here would duplicate the
-    // heading on the next save.
-    const withoutHeading = body[0] !== undefined && /^#\s+/.test(body[0]) ? body.slice(1) : body;
-    return withoutHeading.join(`\n`).trim();
-};
-
-// The file the editor writes. Deliberately the plainest markdown that round-trips through the parsers above, so
-// a story hand-written in an editor and a story written here are the same artifact.
-export const storyMarkdown = (input: { readonly title: string; readonly narrative: string; readonly criteria: readonly string[] }): string => {
-    const narrative = input.narrative.trim();
-    const criteria = input.criteria.map((text) => text.trim()).filter((text) => text !== ``);
-    const sections = [`# ${input.title.trim()}`, ...(narrative === `` ? [] : [narrative])];
-    if (criteria.length > 0) {
-        sections.push([CRITERIA_HEADING, ``, ...criteria.map((text) => `- [ ] ${text}`)].join(`\n`));
-    }
-    return `${sections.join(`\n\n`)}\n`;
-};
+/* THE FILE A NEW STORY STARTS AS: the title somebody typed into the composer, and the section the run grades
+ * against, empty and waiting.
+ *
+ * IT USED TO ASSEMBLE THE WHOLE STORY from a title, a narrative and a list of criteria, because the panel used
+ * to take a story apart into those three and put it back together on every keystroke. That editor is gone (see
+ * StoryRow) — a story is now edited as the markdown file it is — so what is left of this is the one thing it
+ * was always also doing: minting a file. The heading is here because the composer asks for a title and it has
+ * to land somewhere; the criteria heading is here because a blank file gives an author nothing to aim at, and
+ * this is the one section the tooling reads by name. */
+export const newStoryMarkdown = (title: string): string => `# ${title.trim()}\n\n${CRITERIA_HEADING}\n\n- \n`;
 
 // Where a newly authored story lands. The slug is the filename, so the title someone typed is what they later
 // find in the tree; the group is the subdirectory it lands in, `""` for the top level.

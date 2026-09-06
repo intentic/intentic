@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Icon, Markdown, ResponsiveOverlay, useNarrow } from "@intentic/ui";
+import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, inject, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
@@ -8,7 +8,6 @@ import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef
 import { workspaceAgent } from "../../../composables/workspace/workspaceScope";
 import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
-import MarkdownDocumentSurface from "./MarkdownDocumentSurface.vue";
 import MarkdownOutline from "./MarkdownOutline.vue";
 import { toggleTaskCheckbox } from "./markdownTasks";
 import { useMarkdownOutline } from "./markdownOutline";
@@ -21,18 +20,20 @@ import { CHROME_SCOPE, viewerActionsTarget } from "../viewerChrome";
  * button every other file has) decides whether you can type into what you are reading. There is no third mode
  * and no control of its own: markdown behaves like the rest of the app, it just has a nicer thing to edit.
  *
- * THE TWO RENDERINGS ARE THE SAME PICTURE. Reading is <Markdown> (marked → sanitize → v-html, the engine every
- * prose surface in the app shares). Editing is MarkdownDocumentSurface, which builds the document out of its own
- * source so that the DOM's text IS the file, with the markup characters present but hidden. Both carry
- * `md-prose`, so both are styled by the one set of type rules, and switching between them moves nothing.
+ * BOTH STATES ARE <MarkdownDocument>, THE KIT'S, AND THAT IS THE POINT. What used to be here — render when
+ * reading, swap in an editing surface when the switch is on, hold the draft, emit the save — was the best
+ * markdown editor in the product and the only one that had it. Eight other places let somebody write a
+ * markdown document an agent then reads, and each had reached its own answer: a five-row monospace box, a
+ * coloured source field behind a Preview pill, a form of separate fields. The behaviour is now one component
+ * in the kit and this view is one of its callers.
  *
- * WHAT EDITING FEELS LIKE. Click a paragraph and the caret goes where you clicked. The block you are in reveals
- * its markdown, `##` and `-` hanging in the margin so the words do not shift; every other block stays clean.
- * Nothing is swapped for an editor widget, so there is nothing to flicker, resize or re-focus. That is VS Code's
- * hybrid markdown editor's model, and the reason it is theirs is that anything less exact reads as a jump.
+ * WHAT STAYS HERE IS WHAT IS GENUINELY THE WORKSPACE'S: the outline rail, the file-link decorator, ticking a
+ * checkbox while reading, the size at which prose stops being viable, and the source view.
  *
  * THE SOURCE VIEW STAYS, as an escape hatch and not as half of a toggle: it is where a construct the renderer
  * swallows can be fixed, and where a content-search hit lands, because a line number is a fact about source.
+ * It is Monaco rather than the kit's plain source field because a file here can be megabytes, and Monaco
+ * renders only the lines on screen.
  *
  * TICKING A BOX IS NOT EDITING, so checkboxes are live while merely reading: it is a fact about the work, every
  * other checklist in the app is clickable, and the plans agents write here are full of them. */
@@ -85,7 +86,7 @@ const decorate = computed<MarkdownDecorator>(() => {
 
 const scroller = ref<HTMLElement>();
 const outline = useMarkdownOutline(scroller);
-const surface = ref<InstanceType<typeof MarkdownDocumentSurface>>();
+const surface = ref<InstanceType<typeof MarkdownDocument>>();
 const sourceView = ref<InstanceType<typeof CodeView>>();
 
 const onChange = (value: string): void => {
@@ -267,17 +268,26 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                     <!-- The same document, twice over, in the same type. Reading is the app's one prose engine;
                          editing is that document rebuilt from its own source so the caret has something true to
                          stand in. Nothing about the switch between them is animated or measured, because with
-                         the same rules styling both there is nothing to move. -->
-                    <MarkdownDocumentSurface
-                        v-if="editing"
+                         the same rules styling both there is nothing to move.
+
+                         `save="none"`: the FILE VIEWER owns saving here, as it does for every other file in the
+                         workspace (its Edit switch, its Save button, its dirty tracking, its reload-from-disk),
+                         so this document reports its changes and lets that machinery decide. Re-keyed on the
+                         path because a tab reused for another file is a different document, and its undo stack
+                         should not reach back into the last one. -->
+                    <MarkdownDocument
                         ref="surface"
                         :key="path"
-                        :source="doc"
+                        v-model="doc"
+                        :editable="editing"
+                        save="none"
                         :caret-at="landing"
+                        :decorate="decorate"
+                        :label="path"
+                        class="mx-auto max-w-3xl"
                         @change="onChange"
-                        @save="(value) => emit(`save`, value)"
+                        @save="(value: string) => emit(`save`, value)"
                     />
-                    <Markdown v-else :source="doc" :decorate="decorate" class="mx-auto max-w-3xl" />
                 </div>
                 <!-- Parked in that padding rather than laid out beside it, and OUTSIDE the scroller rather than
                      stuck to the top of it: pinned to the pane, it neither scrolls away with the document nor

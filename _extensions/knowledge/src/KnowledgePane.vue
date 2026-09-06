@@ -21,24 +21,25 @@ import { useNote, useNoteMutations } from "./useKnowledge";
  *
  * The FRAME is <NoteEditor>'s: the action cluster, the delete confirmation, the error strip, and the one
  * surface the markdown is both read and written on. What is left here is what makes this a KNOWLEDGE note
- * rather than any other: the three views, the head's facts, and the connections.
+ * rather than any other: the map, the head's facts, and the connections.
  *
- * THREE VIEWS OF THE SAME THING, because a knowledge note genuinely has three: the prose you read, the map of
- * what it connects to, and the file underneath. They are one switch rather than three panels stacked down the
- * pane: this lives in a hub section, which is a band rather than a page, and a map worth reading needs most of
- * that band's height. Reading is the default; the other two are one click and they remember nothing, so nobody
- * lands somewhere they did not choose.
+ * TWO VIEWS, AND THERE USED TO BE THREE. The prose you read and the map of what it connects to are genuinely
+ * different pictures of a note. The third was "Source: the raw markdown", and it is gone with the divergence
+ * that made it necessary: the frame used to READ the note through a coloured source field, so seeing the file
+ * and seeing the note were two different components, and a reader who wanted the markup had to leave the
+ * document to get it. The frame now reads and writes on <MarkdownDocument>, where the markup is present the
+ * whole time and revealed on whichever block holds the caret, so "Source" would have shown the same characters
+ * in a worse typeface. Taking the file away with you is the Copy button beside it.
  *
- * THE SWITCH IS TWO WAYS OUT OF THE NOTE, NOT A THREE-WAY PICKER, which is the shape the workspace's markdown
- * viewer already settled on and the shape that fits on the header's row. A <SegmentedControl> spelling all
- * three is ~140px wide and could not share a line with the note's name and the Copy/Edit/Delete cluster, so it
- * had a row of its own under the header: ~34px of every screenful, permanently, for a control that is pressed
- * once a session. As two glyph toggles it is ~62px and rides beside the others.
+ * THE SWITCH IS ONE WAY OUT OF THE NOTE, which is the shape the workspace's markdown viewer settled on and the
+ * shape that fits on the header's row. A <SegmentedControl> spelling every view out is ~140px wide and could
+ * not share a line with the note's name and the Copy/Edit/Delete cluster, so it had a row of its own under the
+ * header: ~34px of every screenful, permanently, for a control pressed once a session.
  *
- * Reading is not one of the three buttons because reading is not a destination: it is where the note IS, and
- * both toggles return to it, which is why each one turns into an eye while it is the view on screen. Losing
- * the words costs discoverability, and that is bought back the way the viewer buys it, with a tooltip and an
- * accessible name that say what the press will DO rather than what the button is called.
+ * Reading is not one of the buttons because reading is not a destination: it is where the note IS, and the
+ * toggle returns to it, which is why it turns into an eye while the map is on screen. Losing the word costs
+ * discoverability, and that is bought back the way the viewer buys it, with a tooltip and an accessible name
+ * that say what the press will DO rather than what the button is called.
  *
  * ── THE CONNECTIONS SIT WHERE THE QUESTION THEY ANSWER IS ASKED ───────────────────────────────────────────
  *
@@ -68,7 +69,7 @@ const { note, error: noteError, isLoading } = useNote(toRef(() => path));
 const { save, remove } = useNoteMutations();
 
 const raw = computed(() => note.value?.content ?? ``);
-const view = ref<`read` | `map` | `source`>(`read`);
+const view = ref<`read` | `map`>(`read`);
 
 // Leaving the note puts the view back but never the draft: one is where you happened to be looking, the other
 // is the reader's unsaved words. The confirmation and the last error go with it, inside the composable.
@@ -93,11 +94,12 @@ const {
     onRemoved: () => emit(`forgotten`),
 });
 
-// Editing lands on the SOURCE, because the source is what is being edited, and it is where Cancel leaves you,
-// looking at the file you just decided not to change.
+// Editing lands on the note, because the note is what is being edited: the frame puts a caret in the document
+// already on screen rather than swapping in a different picture of it. The map steps aside for it, since a
+// draft the reader cannot see is a draft they will lose.
 const edit = (): void => {
     startEdit();
-    view.value = `source`;
+    view.value = `read`;
 };
 
 // The header's plain facts, as a label→value block. `InfoTable` rather than a hand-rolled grid because keeping
@@ -129,7 +131,6 @@ const onProseClick = (event: MouseEvent): void => {
         :title="note?.summary.title ?? `…`"
         :raw="raw"
         :editing="editing"
-        :show-source="view === `source`"
         :loading="isLoading"
         :saving="saving"
         :removing="removing"
@@ -166,12 +167,11 @@ const onProseClick = (event: MouseEvent): void => {
             </template>
         </template>
 
-        <!-- WHICH VIEW, on the header's own row and to the left of Copy/Edit/Delete: the caller's controls go
-                 first because they are about the note, where that cluster is about the FILE. Both are one press
-                 away from reading and neither remembers anything, so there is no state here to get lost in.
-                 <NoteEditor> drops this whole slot while a draft is open, which is right: an editor is already
-                 the source, so a button offering to show it would do nothing, and one offering the map would
-                 throw the draft off screen. -->
+        <!-- THE MAP, on the header's own row and to the left of Copy/Edit/Delete: the caller's control goes
+                 first because it is about the note, where that cluster is about the FILE. One press away from
+                 reading and it remembers nothing, so there is no state here to get lost in. <NoteEditor> drops
+                 this whole slot while a draft is open, which is right: a button that threw the draft off screen
+                 is not one to offer somebody mid-sentence. -->
         <template #actions>
             <button
                 type="button"
@@ -182,16 +182,6 @@ const onProseClick = (event: MouseEvent): void => {
                 @click="view = view === `map` ? `read` : `map`"
             >
                 <Icon :name="view === `map` ? `eye` : `sitemap`" />
-            </button>
-            <button
-                type="button"
-                :class="ui.iconButton(`h-7 w-7`)"
-                :aria-pressed="view === `source`"
-                :aria-label="view === `source` ? `Back to the note` : `Show the raw markdown`"
-                v-tooltip.top="view === `source` ? `Back to the note` : `Source: the raw markdown, header included`"
-                @click="view = view === `source` ? `read` : `source`"
-            >
-                <Icon :name="view === `source` ? `eye` : `code`" />
             </button>
         </template>
 

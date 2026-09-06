@@ -49,6 +49,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Listed before the barrel: a string alias also matches `<key>/…`, so the more specific subpath has to win
     // the lookup. It exists so plain .ts (and its unit tests) can reach the markdown engine without loading
     // the design system's component graph, see _editor/ui/src/markdown/index.ts.
+    // Ahead of `@intentic/ui/markdown` as well as of the barrel, because a string alias matches `<key>/…` and
+    // the two names share a prefix: listed after it, `…/markdown-document` resolves to a directory INSIDE the
+    // markdown engine and the import dies with ENOTDIR.
+    "@intentic/ui/markdown-document": fromRoot("_editor/ui/src/components/markdownDocument.ts"),
     "@intentic/ui/markdown": fromRoot("_editor/ui/src/markdown/index.ts"),
     // Same reason and the same ordering requirement: the DAG layout is plain TypeScript that DagGraph and its
     // unit tests both call, and a test for a pure function must not have to boot the component graph (and a DOM

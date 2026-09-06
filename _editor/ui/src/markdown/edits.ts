@@ -143,9 +143,82 @@ export const outdentLines = (text: string, start: number, end: number): TextEdit
         return line.slice(spaces.length);
     });
 
-/** Whether an offset sits on a line that is a list item, which is where Tab means indentation rather than focus. */
-export const onListLine = (text: string, offset: number): boolean => {
+/* WHAT OPENS A LIST ITEM: the indentation, the marker, an optional task box, and the space after them. Named
+ * groups because three different callers want three different pieces of it, and positional indices into a
+ * regex this shape are how the wrong piece gets used.
+ *
+ * `\d+[.)]` covers both ordered spellings CommonMark allows. The task box is part of the PREFIX rather than of
+ * the content, because continuing a checklist has to produce an unticked box rather than a copy of the ticked
+ * one above it. */
+const LIST_LINE = /^(?<indent>[ \t]*)(?<marker>[-*+]|\d+[.)])[ \t]+(?<task>\[[ xX]\][ \t]+)?(?<body>.*)$/u;
+
+/** The line `offset` sits on, as source offsets. */
+const lineAt = (text: string, offset: number): { start: number; end: number } => {
     const start = text.lastIndexOf(`\n`, Math.max(0, offset - 1)) + 1;
     const end = text.indexOf(`\n`, start);
-    return /^\s*(?:[-*+]|\d+[.)])[ \t]/u.test(text.slice(start, end === -1 ? text.length : end));
+    return { start, end: end === -1 ? text.length : end };
+};
+
+/** Whether an offset sits on a line that is a list item, which is where Tab means indentation rather than focus. */
+export const onListLine = (text: string, offset: number): boolean => {
+    const { start, end } = lineAt(text, offset);
+    return LIST_LINE.test(text.slice(start, end));
+};
+
+/* ENTER ON A LIST ITEM OPENS THE NEXT ONE, which is the affordance that lets a checklist be written without
+ * reaching for the mouse, and the reason a story's acceptance criteria can be a plain markdown list rather
+ * than a bespoke row editor with its own keyboard layer.
+ *
+ * ON AN EMPTY ITEM IT ENDS THE LIST INSTEAD. Pressing Enter twice is how every editor in the world says "I am
+ * done listing things", and without it the only way out of a list is to type a character and delete it. The
+ * empty marker is removed rather than left behind, so the file does not keep a bullet nobody wrote anything
+ * against.
+ *
+ * AN ORDERED LIST COUNTS UP, and only by one from the line above: renumbering the whole list from here would
+ * be an edit to lines the writer is not looking at, and CommonMark takes its numbering from the first item
+ * anyway. A list written `1. 1. 1.` on purpose is left alone by the same rule — the number that follows `1`
+ * under it is `2`, which is what the next press of Enter is asking for.
+ *
+ * Returns undefined when the caret is not on a list item, so the caller can let Enter mean what it usually
+ * means. A caret in the MIDDLE of an item is a split, not a continuation, and is also left alone: markdown
+ * has no way to say "half this item", and what the writer means there is a new paragraph. */
+const nextOpener = (groups: Record<string, string | undefined>): string => {
+    const indent = groups[`indent`] ?? ``;
+    const marker = groups[`marker`] ?? ``;
+    const counted = /^\d+$/u.exec(marker.slice(0, -1))?.[0];
+    const next = counted === undefined ? marker : `${Number(counted) + 1}${marker.slice(-1)}`;
+    // A ticked box is not carried down: the next thing on the list has not been done yet.
+    return `${indent}${next} ${groups[`task`] === undefined ? `` : `[ ] `}`;
+};
+
+export interface ListEnter {
+    readonly edit: TextEdit;
+    /**
+     * The item was empty, so the writer is leaving the list. The caller applies the edit and then opens a
+     * block, which is the only thing that can put the caret somewhere that is not a list item: the empty line
+     * a writer wants next does not exist in markdown until they type into it.
+     */
+    readonly ended: boolean;
+}
+
+export const continueList = (text: string, offset: number): ListEnter | undefined => {
+    const { start, end } = lineAt(text, offset);
+    // Only from the end of the line: mid-item, Enter is the ordinary "new block" it is everywhere else.
+    const groups = offset === end ? LIST_LINE.exec(text.slice(start, end))?.groups : undefined;
+    if (groups === undefined) {
+        return undefined;
+    }
+    /* AN ITEM WITH NOTHING IN IT: the writer is leaving the list, and the marker goes with them — together
+     * with THE NEWLINE THAT ENDS IT, which is the part that was wrong the first time. Removing the marker and
+     * leaving its newline behind puts a blank line INSIDE the list, and markdown reads that as a loose list
+     * rather than as the end of one: the block was still a list, the caret was still in it, and the next
+     * sentence typed became a continuation of the item above instead of a paragraph after it (seen in a
+     * browser, which is the only way that class of bug is ever seen). */
+    if ((groups[`body`] ?? ``) === ``) {
+        const cut = Math.min(end + 1, text.length);
+        return { edit: { text: `${text.slice(0, start)}${text.slice(cut)}`, start, end: start }, ended: true };
+    }
+    const opener = nextOpener(groups);
+    const caret = end + 1 + opener.length;
+    return { edit: { text: `${text.slice(0, end)}\n${opener}${text.slice(end)}`, start: caret, end: caret }, ended: false };
 };

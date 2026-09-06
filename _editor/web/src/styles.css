@@ -24,6 +24,13 @@
  * scale plus the class names its components pass between each other. Order matters — chat.css tunes
  * prose.css's tokens, so prose.css loads after the design system's own sheets rather than inside them. */
 @import "../../../_editor/ui/src/styles/opt-in/prose.css";
+/* The WRITING half of the same picture, and it loads on the same terms and for the same reason. `md-editing`
+ * adds nothing to prose.css's type rules — it only hides the markup characters that are in the DOM, hangs a
+ * block's opening markers in the gutter, and lights the block holding the caret — so an app that has one sheet
+ * and not the other shows a markdown editor with every `##` and `- ` on screen. Opt-in beside prose.css rather
+ * than imported by <MarkdownDocumentSurface> itself, so the two halves of one surface are turned on in one
+ * place instead of one of them arriving invisibly with a component. */
+@import "../../../_editor/ui/src/styles/opt-in/markdown-editing.css";
 @import "./chat/chat.css";
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one

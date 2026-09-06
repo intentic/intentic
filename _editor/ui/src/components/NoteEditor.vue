@@ -5,11 +5,16 @@
      the one surface the file is both READ and WRITTEN on. What it does not own is the note: the body, the
      badges, the meta line and any extra control are the caller's, because that is where two notes differ.
 
-     SOURCE AND EDIT ARE ONE SURFACE (<CodeField>, `readonly` or not), and that is the rule the panes that came
-     before got wrong. They were two: a coloured block to read the markdown in and a bare grey <textarea> to
-     change it in. So the file changed typeface, colour, leading and size at the moment you picked up the pen, and the
-     textarea's `h-full min-h-64` in a panel with no height to be full OF also shrank it to seven visible lines.
-     One surface cannot drift from itself. Hoisting it here is what keeps that true for the next pane as well.
+     READING AND WRITING ARE ONE SURFACE, and that is the rule every pane that came before got wrong. First
+     they were two: a coloured block to read the markdown in and a bare grey <textarea> to change it in, so the
+     file changed typeface, colour, leading and size at the moment you picked up the pen. Then they were one
+     <CodeField>, which fixed the drift but settled it on the wrong side — the note read as SOURCE whether or
+     not anybody was editing it, which is why the pane above this one had to grow a Read/Source pair to get the
+     document back.
+
+     Now it is <MarkdownDocument>: the note is the document in both states, and `editing` only decides whether
+     a caret goes in it. That is what lets `showSource` go — there is no second view left for it to select,
+     because the markup is in the surface the whole time and simply hidden until the caret enters a block.
 
      THE CONFIRMATION RIDES #strips rather than the body, so a long note cannot scroll the question away from the
      answer, and it is in place rather than in a <ConfirmDialog> because the sentence names the note you are
@@ -28,9 +33,9 @@
 <script setup lang="ts">
 import Button from "./Button.vue";
 import { ui } from "../lib/ui.js";
-import CodeField from "./CodeField.vue";
 import CopyButton from "./CopyButton.vue";
 import Icon from "./Icon.vue";
+import MarkdownDocument from "./MarkdownDocument.vue";
 import ScrollFrame from "./ScrollFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 
@@ -39,10 +44,8 @@ const { verb = `Delete`, paged = false } = defineProps<{
     title: string;
     /** The file as it stands on disk: what Copy copies, whatever is on screen. */
     raw: string;
-    /** Is a draft open. Swaps the action cluster, and forces the source surface whatever `showSource` says. */
+    /** Is a draft open. Swaps the action cluster, and puts a caret in the document. */
     editing: boolean;
-    /** The caller's view mode says "show me the file": the same surface, read-only. */
-    showSource?: boolean;
     /** Nothing has arrived yet. Suppressed while editing: a draft is already on screen. */
     loading?: boolean;
     saving?: boolean;
@@ -121,20 +124,27 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">Loading…</p>
         <template v-else>
-            <!-- The whole file, in markdown's own colours: read with `readonly`, written without it. Ctrl/Cmd-S
-                 and Escape are bound here because the caret is in this field, and a save shortcut that only works
-                 when the field has been left is not a save shortcut. -->
-            <CodeField
-                v-if="editing || showSource"
-                v-model="source"
-                lang="markdown"
-                :readonly="!editing"
-                aria-label="Note source"
+            <!-- THE NOTE, and while a draft is open it is the same note with a caret in it. `save="none"`
+                 because this frame's Cancel/Save pair above IS the save policy — a second one inside the
+                 document would put two Save buttons a centimetre apart. Ctrl/Cmd-S and Escape are bound here
+                 because the caret is in this surface, and a save shortcut that only works once you have left
+                 the thing you were typing in is not a save shortcut.
+
+                 The caller's own rendering (its `#default` slot: a note's header facts, its connections, its
+                 see-also) is what shows when nothing is being written, because a knowledge note is more than
+                 its prose. A caller with nothing to add leaves the slot out and gets the document. -->
+            <div
+                v-if="editing"
+                class="px-4 py-3"
                 @keydown.ctrl.s.prevent="emit(`save`)"
                 @keydown.meta.s.prevent="emit(`save`)"
                 @keydown.esc="emit(`cancel`)"
-            />
-            <slot v-else />
+            >
+                <MarkdownDocument v-model="source" editable save="none" label="Note" placeholder="Write the note." />
+            </div>
+            <slot v-else>
+                <MarkdownDocument :model-value="source" label="Note" class="px-4 py-3" />
+            </slot>
         </template>
     </ScrollFrame>
 </template>

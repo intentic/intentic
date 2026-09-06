@@ -21,11 +21,10 @@
      and markdownEdits.ts. -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { splitMarkdownBlocks } from "@intentic/ui/markdown";
-import { indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "./markdownEdits";
-import { createMarkdownHistory, type EditKind } from "./markdownHistory";
-import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "./markdownSourceDom";
-import "./markdownEditing.css";
+import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../markdown/edits.js";
+import { createMarkdownHistory, type EditKind } from "../markdown/history.js";
+import { splitMarkdownBlocks } from "../markdown/index.js";
+import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "../markdown/sourceDom.js";
 
 const { source, caretAt } = defineProps<{ source: string; caretAt?: number }>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
@@ -336,6 +335,31 @@ const insertAtCaret = (insert: string): void => {
  * Mid-block, none of this applies: splitting a paragraph in two produces two real blocks, so the source is
  * edited directly and the blocks fall out of the split.
  */
+/** The caret at the very start of an element, for a block that has no source offset to aim at yet. */
+const caretInto = (element: HTMLElement): void => {
+    const range = document.createRange();
+    range.setStart(element, 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+};
+
+/* WIDEN BLOCK `index`'s GAP TO A BLANK LINE, so whatever is inserted after it is a block of its own.
+ *
+ * `text()` joins each block to the next with the gap the block ABOVE it carries, and the last block in a file
+ * carries whatever that file ends with — usually a single `\n`. Put a transient paragraph after it and the
+ * source reads `- an item\nwhat you just typed`, which CommonMark calls a lazy continuation: the words join the
+ * item above instead of starting a paragraph under it. Seen in a browser, on the case that produces it most
+ * often — pressing Enter to leave a list at the end of a document — and true for any block at the end of any
+ * file, which is why this is here rather than in the list code that found it. */
+const separate = (index: number): void => {
+    const above = built[index];
+    if (above !== undefined && !above.gap.includes(`\n\n`)) {
+        built[index] = { ...above, gap: `\n\n` };
+    }
+};
+
 const startBlock = (): void => {
     const root = host.value;
     const index = activeIndex();
@@ -351,15 +375,11 @@ const startBlock = (): void => {
         return;
     }
     const at = offset === start ? index : index + 1;
+    separate(at - 1);
     const blank = document.createElement(`p`);
     root.insertBefore(blank, root.children[at] ?? null);
     built.splice(at, 0, { body: ``, gap: `\n\n`, element: blank });
-    const range = document.createRange();
-    range.setStart(blank, 0);
-    range.collapse(true);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    caretInto(blank);
     emit(`change`, text());
     markActive();
     remember(`structural`);
@@ -389,118 +409,176 @@ const format = (edit: (text: string, start: number, end: number) => TextEdit): b
     return true;
 };
 
-const onKeydown = (event: KeyboardEvent): void => {
-    const chord = event.ctrlKey || event.metaKey;
-    const key = event.key.toLowerCase();
-
-    // An IME is mid-word. Every chord below would act on text the user has not committed yet.
-    if (composing) {
-        return;
+/* THE FORMATTING KEYS, as the markdown they mean. There is no "bold" to switch on here, there are two
+ * asterisks to put around something, so Ctrl+B writes them and takes them away again. Doing it this way
+ * rather than letting the browser's own `formatBold` run is what keeps the file readable: `<b>` would say
+ * nothing markdown can express, and would vanish on the next rebuild anyway. */
+const onFormatKey = (event: KeyboardEvent, key: string): boolean => {
+    if (event.altKey || (key !== `b` && key !== `i` && key !== `k`)) {
+        return false;
     }
+    if (key === `k` ? format(insertLink) : format((body, start, end) => toggleWrap(body, start, end, key === `b` ? `**` : `*`))) {
+        event.preventDefault();
+    }
+    return true;
+};
 
-    if (chord && key === `s`) {
+/* THE CHORDS: save, undo, redo, and the three formatting keys. Split out of `onKeydown` because that handler
+ * answers three unrelated questions — what a modifier means, what a structural key means, and where a
+ * boundary delete lands — and reading any one of them meant reading all three. Each returns whether it took
+ * the key, so the dispatcher below stays a list of "did this claim it". */
+const onChordKey = (event: KeyboardEvent, key: string): boolean => {
+    if (key === `s`) {
         event.preventDefault();
         emit(`save`, text());
-        return;
+        return true;
     }
 
     /* UNDO AND REDO. Both spellings of redo, because both are in people's hands: Ctrl+Shift+Z everywhere, and
      * Ctrl+Y as well on Windows, where a generation of editors bound it. */
-    if (chord && key === `z` && !event.shiftKey) {
+    if (key === `z` && !event.shiftKey) {
         event.preventDefault();
         travel(history.undo());
-        return;
+        return true;
     }
-    if (chord && ((key === `z` && event.shiftKey) || key === `y`)) {
+    if ((key === `z` && event.shiftKey) || key === `y`) {
         event.preventDefault();
         travel(history.redo());
-        return;
+        return true;
     }
 
-    /* THE FORMATTING KEYS, as the markdown they mean. There is no "bold" to switch on here, there are two
-     * asterisks to put around something, so Ctrl+B writes them and takes them away again. Doing it this way
-     * rather than letting the browser's own `formatBold` run is what keeps the file readable: `<b>` would say
-     * nothing markdown can express, and would vanish on the next rebuild anyway. */
-    if (chord && !event.altKey && (key === `b` || key === `i` || key === `k`)) {
-        const done = key === `k` ? format(insertLink) : format((body, start, end) => toggleWrap(body, start, end, key === `b` ? `**` : `*`));
-        if (done) {
-            event.preventDefault();
-        }
-        return;
-    }
+    return onFormatKey(event, key);
+};
 
-    /* TAB INDENTS A LIST, and only a list. Everywhere else it stays the key that leaves the document, which is
-     * the only way out for someone navigating by keyboard: a text box that swallows Tab is a trap. */
-    if (event.key === `Tab` && !chord && !event.altKey) {
-        const at = selectionRange();
-        if (at !== undefined && onListLine(text(), at.start)) {
-            event.preventDefault();
-            apply((event.shiftKey ? outdentLines : indentLines)(text(), at.start, at.end));
-        }
-        return;
+/* SHIFT+ENTER IS A LINE BREAK INSIDE THE PARAGRAPH, which markdown spells as two trailing spaces before the
+ * newline. Left to the browser it inserted a `<br>` carrying no source at all, so the break was gone on the
+ * next rebuild: the key appeared to work and then undid itself.
+ *
+ * At the END of a block it starts a new one instead, because there markdown has nothing for it to mean: a
+ * hard break needs a line to break TO, so the two spaces and the newline are trailing whitespace, which the
+ * browser then collapses away exactly as it does everywhere else in this surface. Rather than write
+ * characters that will not survive, the key does the visible thing the user was reaching for. */
+const softBreak = (): void => {
+    const at = selectionRange();
+    const index = activeIndex();
+    const element = blockElements()[index];
+    const endOfBlock = at === undefined || element === undefined || at.end === (blockStarts()[index] ?? 0) + blockBody(element).length;
+    if (endOfBlock) {
+        startBlock();
+    } else {
+        insertAtCaret(`  \n`);
     }
+};
 
-    /* SHIFT+ENTER IS A LINE BREAK INSIDE THE PARAGRAPH, which markdown spells as two trailing spaces before the
-     * newline. Left to the browser it inserted a `<br>` carrying no source at all, so the break was gone on the
-     * next rebuild: the key appeared to work and then undid itself.
-     *
-     * At the END of a block it starts a new one instead, because there markdown has nothing for it to mean: a
-     * hard break needs a line to break TO, so the two spaces and the newline are trailing whitespace, which the
-     * browser then collapses away exactly as it does everywhere else in this surface. Rather than write
-     * characters that will not survive, the key does the visible thing the user was reaching for. */
-    if (event.key === `Enter` && event.shiftKey && !chord && !event.altKey) {
+/* ENTER, TAB, AND SHIFT+ENTER: the keys that mean structure rather than characters.
+ *
+ * ENTER STARTS A NEW BLOCK. In markdown a single newline inside a paragraph is a SPACE, so letting the browser
+ * insert one would answer the most confident keypress in text editing with nothing visible happening. What a
+ * writer means by Enter here is a new paragraph, which is a blank line, so that is what it types.
+ *
+ * ON A LIST IT OPENS THE NEXT ITEM instead (`continueList`), because a list is the one place where what a
+ * writer means by Enter is "another one of these". This is what lets a checklist be typed straight through,
+ * and it is the affordance the acceptance panel used to hand-roll a whole keyboard layer to provide. */
+/* TAB INDENTS A LIST, and only a list. Everywhere else it stays the key that leaves the document, which is
+ * the only way out for someone navigating by keyboard: a text box that swallows Tab is a trap. */
+const onTabKey = (event: KeyboardEvent): void => {
+    const at = selectionRange();
+    if (at !== undefined && onListLine(text(), at.start)) {
         event.preventDefault();
-        const at = selectionRange();
-        const index = activeIndex();
-        const element = blockElements()[index];
-        const endOfBlock = at === undefined || element === undefined || at.end === (blockStarts()[index] ?? 0) + blockBody(element).length;
-        if (endOfBlock) {
-            startBlock();
-        } else {
-            insertAtCaret(`  \n`);
-        }
+        apply((event.shiftKey ? outdentLines : indentLines)(text(), at.start, at.end));
+    }
+};
+
+const onEnterKey = (event: KeyboardEvent): void => {
+    event.preventDefault();
+    if (event.shiftKey) {
+        softBreak();
         return;
     }
-    /* ENTER STARTS A NEW BLOCK. In markdown a single newline inside a paragraph is a SPACE, so letting the
-     * browser insert one would answer the most confident keypress in text editing with nothing visible
-     * happening. What a writer means by Enter here is a new paragraph, which is a blank line, so that is what it
-     * types. Shift+Enter is left alone and inserts the single newline, which is the soft break it means. */
-    if (event.key === `Enter` && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault();
+    const at = selectionRange();
+    const continued = at?.start === at?.end && at !== undefined ? continueList(text(), at.start) : undefined;
+    if (continued === undefined) {
         startBlock();
         return;
     }
-
-    /* JOINING TWO BLOCKS, which the browser cannot do here because the thing between them is not in the DOM for
-     * it to delete (see `built`). Left to it, Backspace at the start of a paragraph would eat the last character
-     * of the paragraph above instead of the blank line between them, which is a silent, wrong edit. So the two
-     * boundary presses are taken and answered against the source: the gap goes, the blocks become one, and the
-     * caret sits at the seam. Every other Backspace and Delete is ordinary text editing and is left alone. */
-    const joining = event.key === `Backspace` || event.key === `Delete`;
-    if (!joining || event.ctrlKey || event.metaKey || event.altKey || window.getSelection()?.isCollapsed === false) {
-        return;
+    apply(continued.edit);
+    // Leaving a list: the marker is gone, and now the caret needs somewhere that is not a list item to stand.
+    // That is exactly what `startBlock` is for, and why the two halves are split this way — one is an edit to
+    // the source, the other is a line the document does not contain yet.
+    if (continued.ended) {
+        startBlock();
     }
+};
+
+const onStructureKey = (event: KeyboardEvent): boolean => {
+    if (event.altKey) {
+        return false;
+    }
+    if (event.key === `Tab`) {
+        onTabKey(event);
+        return true;
+    }
+    if (event.key === `Enter`) {
+        onEnterKey(event);
+        return true;
+    }
+    return false;
+};
+
+/* WHICH GAP A BOUNDARY DELETE CLOSES, as the index of the block ABOVE it, or nothing when the press is
+ * ordinary text editing. Backspace at the very start of a block closes the gap above it; Delete at the very
+ * end closes the one below. */
+const seamAt = (key: string): number | undefined => {
     const index = activeIndex();
     const element = blockElements()[index];
     if (element === undefined) {
-        return;
+        return undefined;
     }
     const starts = blockStarts();
-    const offset = caretOffset();
     const start = starts[index] ?? 0;
-    const length = blockBody(element).length;
-    const atStart = offset === start;
-    const atEnd = offset === start + length;
-    // Backspace at the very start joins with the block above; Delete at the very end joins with the one below.
-    const seam = event.key === `Backspace` ? (atStart && index > 0 ? index - 1 : undefined) : atEnd && index < starts.length - 1 ? index : undefined;
-    if (seam === undefined) {
+    const offset = caretOffset();
+    const seam = key === `Backspace` ? (offset === start ? index - 1 : -1) : offset === start + blockBody(element).length ? index : -1;
+    return seam >= 0 && seam < starts.length - 1 ? seam : undefined;
+};
+
+/** The document with the gap after block `seam` taken out, and the caret at the join. */
+const joinAt = (seam: number): TextEdit => {
+    const gap = (built[seam]?.gap ?? `\n\n`).length;
+    const element = blockElements()[seam];
+    const cut = (blockStarts()[seam] ?? 0) + (element === undefined ? 0 : blockBody(element).length);
+    const current = text();
+    return { text: current.slice(0, cut) + current.slice(cut + gap), start: cut, end: cut };
+};
+
+/* JOINING TWO BLOCKS, which the browser cannot do here because the thing between them is not in the DOM for
+ * it to delete (see `built`). Left to it, Backspace at the start of a paragraph would eat the last character
+ * of the paragraph above instead of the blank line between them, which is a silent, wrong edit. So the two
+ * boundary presses are taken and answered against the source: the gap goes, the blocks become one, and the
+ * caret sits at the seam. Every other Backspace and Delete is ordinary text editing and is left alone. */
+const onJoinKey = (event: KeyboardEvent): void => {
+    const deleting = event.key === `Backspace` || event.key === `Delete`;
+    if (!deleting || event.altKey || window.getSelection()?.isCollapsed === false) {
         return;
     }
-    event.preventDefault();
-    const current = text();
-    const gap = built[seam]?.gap ?? `\n\n`;
-    const cut = (starts[seam] ?? 0) + blockBody(blockElements()[seam] ?? document.createElement(`p`)).length;
-    apply({ text: current.slice(0, cut) + current.slice(cut + gap.length), start: cut, end: cut });
+    const seam = seamAt(event.key);
+    if (seam !== undefined) {
+        event.preventDefault();
+        apply(joinAt(seam));
+    }
+};
+
+const onKeydown = (event: KeyboardEvent): void => {
+    // An IME is mid-word. Every key below would act on text the user has not committed yet.
+    if (composing) {
+        return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+        onChordKey(event, event.key.toLowerCase());
+        return;
+    }
+    if (!onStructureKey(event)) {
+        onJoinKey(event);
+    }
 };
 
 // The selection moves for reasons that are not edits (a click, an arrow key), and the active block has to follow
@@ -585,9 +663,16 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
 </script>
 
 <template>
+    <!-- NO MEASURE AND NO CENTRING OF ITS OWN, which it used to have (`mx-auto max-w-3xl`, the workspace's
+         column, written into the only component that existed). A config document is a paragraph wide inside a
+         settings row, a story is 68ch inside a list, and a file in the workspace is a centred column: how much
+         room the words get is a fact about WHERE THE DOCUMENT IS, and the caller is the only one who knows it.
+         `md-prose` already reads `--prose-measure`, so a caller sets one number and both this surface and the
+         rendered half beside it obey it — which is the property that makes switching between them move
+         nothing. The caller's `class` lands here through ordinary fallthrough. -->
     <div
         ref="host"
-        class="md-prose md-editing mx-auto max-w-3xl"
+        class="md-prose md-editing"
         aria-label="Document"
         @input="onInput"
         @beforeinput="onBeforeInput"

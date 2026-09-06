@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
-import { Button, DisclosureRow, Icon, Notice, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
+import { DisclosureRow, Icon, MarkdownDocument, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./agent/SkillForm.vue";
@@ -58,17 +58,12 @@ const { kit, error: kitError, isLoading, savePrompt, saveSkill, removeSkill, rea
 
 // Seeded from what is stored and followed across other windows' saves, never over an edit here (useDraft).
 const prompt = useDraft(() => kit.value.prompt);
-const promptDirty = computed(() => prompt.value !== kit.value.prompt);
 const error = ref<string | undefined>(undefined);
 
-const commitPrompt = async (): Promise<void> => {
-    prompt.value = prompt.value.trim();
-    if (!promptDirty.value) {
-        return;
-    }
+const commitPrompt = async (text: string): Promise<void> => {
     error.value = undefined;
     try {
-        await savePrompt.mutateAsync(prompt.value);
+        await savePrompt.mutateAsync(text.trim());
     } catch (err) {
         error.value = noticeFrom(err, `Couldn't save this persona's prompt.`).detail;
     }
@@ -190,39 +185,33 @@ watch(
                 <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
             </label>
 
-            <template v-if="picked === `custom`">
-                <textarea
+            <!-- THE SAME SURFACE AS THE SANDBOX'S OWN PROMPT, which is the whole point: these two fields choose
+                 between the same three bases, are read by the same runtime and are the same kind of document,
+                 and they used to be two different five-row monospace boxes with two hand-rolled Save buttons
+                 that behaved slightly differently. `save="explicit"` is the same declaration the sandbox
+                 prompt and the safety policy make, for the same reason: every turn this card wears reads it. -->
+            <div v-if="picked === `custom`" class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
+                <MarkdownDocument
                     v-model="prompt"
-                    rows="5"
-                    :maxlength="PROMPT_MAX"
-                    :disabled="isLoading"
+                    :editable="!isLoading"
+                    :stored="isLoading ? undefined : kit.prompt"
+                    :saving="savePrompt.isPending.value"
+                    save="explicit"
+                    label="This persona's system prompt"
+                    :max-chars="PROMPT_MAX"
                     placeholder="Write what this persona is, who it is, what it does, how it answers."
-                    :class="ui.inputSm('w-full resize-y font-mono')"
-                    aria-label="This persona's system prompt"
-                    @change="commitPrompt"
-                ></textarea>
-                <div class="flex items-center justify-between gap-3">
+                    class="min-h-48"
+                    @save="commitPrompt"
+                >
                     <!-- What Custom costs, scoped to the turns this card governs: a replacement drops what this
-                         app tells the assistant about its own cards and panels, and a reader who only sees "your
-                         text" will not guess that. -->
-                    <span class="text-2xs text-subtle">
+                         app tells the assistant about its own cards and panels, and a reader who only sees
+                         "your text" will not guess that. -->
+                    <template #note>
                         Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its question cards,
                         checklist panel and browser tools. Leave it empty to fall back to the sandbox's.
-                    </span>
-                    <!-- Blur already saves; the button is for the reader who cannot tell that it did.
-                         `mousedown.prevent` keeps focus in the textarea so pressing it does not unmount the
-                         button out from under the click that was landing on it. -->
-                    <Button
-                        v-if="promptDirty"
-                        label="Save"
-                        size="small"
-                        class="shrink-0"
-                        :loading="savePrompt.isPending.value"
-                        @mousedown.prevent
-                        @click="commitPrompt"
-                    />
-                </div>
-            </template>
+                    </template>
+                </MarkdownDocument>
+            </div>
         </div>
 
         <!-- ITS OWN SKILLS, as the Skills page draws them. Shown whatever the prompt is set to: a persona on the

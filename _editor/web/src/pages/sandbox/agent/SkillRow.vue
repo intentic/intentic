@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { BrandMark, Button, CodeField, DisclosureRow, Icon, Markdown, SegmentedControl } from "@intentic/ui";
+import { BrandMark, Button, CopyButton, DisclosureRow, Icon, MarkdownDocument } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./SkillForm.vue";
@@ -35,11 +35,14 @@ import { provenanceOf } from "./skillWords";
  * whichever one the row opened in, the last thing under it is the destructive action, on its own side of a
  * rule.
  *
- * READING IS THE DEFAULT AND IT IS RENDERED. A skill is markdown: headings, numbered steps, fenced commands:
- * and it used to open as a grey monospace block, i.e. as the one thing a skill is not: source to be inspected.
- * So someone else's skill renders as the document it is, with its raw text one pill away for whoever wants to
- * see the file exactly as its author shipped it (the memory pane's Preview/Source pair, for the same reason).
- * The reader's OWN skill opens in the form instead: for them, reading and editing are the same errand. */
+ * READING IS THE DEFAULT AND IT IS THE DOCUMENT. A skill is markdown: headings, numbered steps, fenced
+ * commands: and it used to open as a grey monospace block, i.e. as the one thing a skill is not: source to be
+ * inspected. So someone else's skill renders as the document it is, on <MarkdownDocument> — the same surface
+ * the reader's own skill is WRITTEN on one branch below, which is what makes reading and editing one place
+ * rather than two that happen to show the same file. The Read/Source pill that used to sit above it is gone
+ * with the divergence it papered over: the markup is in that surface's DOM the whole time and simply hidden
+ * until a caret enters a block, so "Source" showed the same characters in a worse typeface. Taking the file
+ * away with you, which is what anyone actually reached for it for, is the Copy button. */
 
 const { skill, expanded, body, bodyError, sources, disabled } = defineProps<{
     skill: SkillSummary;
@@ -68,16 +71,12 @@ const editing = computed<SkillDraft | undefined>(() =>
     skill.editable && body !== undefined ? { name: skill.name, description: skill.description, body } : undefined,
 );
 
-const view = ref<`preview` | `source`>(`preview`);
 // Asked in place rather than in a dialog: a skill is a file, and the question costs less than a restore from
 // somebody's memory. Closing the row drops the question; it must never be waiting when the row is opened again.
 const confirmRemove = ref(false);
 watch(
     () => expanded,
-    () => {
-        confirmRemove.value = false;
-        view.value = `preview`;
-    },
+    () => (confirmRemove.value = false),
 );
 </script>
 
@@ -141,26 +140,20 @@ watch(
                         <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
                             {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
                         </p>
-                        <SegmentedControl
-                            v-model="view"
-                            size="xs"
-                            class="shrink-0"
-                            :options="[
-                                { label: `Read`, value: `preview` },
-                                { label: `Source`, value: `source`, title: `The file exactly as its author wrote it` },
-                            ]"
-                        />
+                        <CopyButton :text="body" label="Copy" v-tooltip.top="'The file exactly as its author wrote it'" />
                     </div>
-                    <Markdown v-if="view === `preview`" :source="body" style="--prose-measure: 76ch" />
-                    <!-- Markdown's own colours, read-only: this is somebody else's file, and editing it here would
-                         be undone the next time the thing that ships it reconciles. -->
-                    <CodeField
-                        v-else
+                    <!-- SOMEBODY ELSE'S SKILL, on the app's one markdown surface with nothing to type into. The
+                         Read/Source pair that used to sit above this is gone: it existed because a rendered
+                         document and its source were two different components here, and a reader who wanted to
+                         see the markup had to leave the document to get it. On this surface the markup is in
+                         the DOM the whole time — it is simply hidden until a caret enters a block, and there is
+                         no caret here — so "Source" would have shown the same characters in a worse typeface.
+                         What that toggle was actually for, taking the file away with you, is the Copy button. -->
+                    <MarkdownDocument
                         :model-value="body"
-                        lang="markdown"
-                        readonly
-                        :aria-label="`${skill.name} source`"
-                        class="max-h-96 overflow-auto rounded-md border border-line bg-canvas p-2.5"
+                        :label="`${skill.name} instructions`"
+                        class="max-h-96 overflow-auto"
+                        style="--prose-measure: 76ch"
                     />
                 </div>
 

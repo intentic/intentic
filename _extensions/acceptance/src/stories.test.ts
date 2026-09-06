@@ -1,6 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { criteriaOf, narrativeOf, slugOf, type Story, storiesOf, storyMarkdown, storyPath, targetKeyOf, titleOf, uniqueOf } from "./stories";
+import { criteriaOf, newStoryMarkdown, slugOf, type Story, storiesOf, storyPath, targetKeyOf, titleOf, uniqueOf } from "./stories";
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).pop() ?? path, path, type: `file` });
 const dir = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).pop() ?? path, path, type: `dir` });
@@ -125,33 +125,25 @@ describe(`criteriaOf`, () => {
     });
 });
 
-describe(`narrativeOf`, () => {
-    it(`drops the title line and the criteria section, which the editor owns as their own fields`, () => {
-        expect(narrativeOf(`# Sign in\n\nAs a user I can sign in.\n\n## Acceptance criteria\n\n- One\n`)).toBe(`As a user I can sign in.`);
-    });
+/* A story the composer mints has to be one the parsers read back: a story started here and a story hand-written
+ * in an editor are the same artifact, or the format has forked. */
+describe(`newStoryMarkdown`, () => {
+    const written = newStoryMarkdown(`  Sign in  `);
 
-    it(`keeps everything when there is no criteria section`, () => {
-        expect(narrativeOf(`# Sign in\n\nAs a user I can sign in.\n`)).toBe(`As a user I can sign in.`);
-    });
-});
-
-/* The editor's output has to be a story the parsers read back identically: a story written here and a story
- * hand-written in an editor are the same artifact, or the format has forked. */
-describe(`storyMarkdown`, () => {
-    const written = storyMarkdown({
-        title: `Sign in`,
-        narrative: `As a user I can sign in.`,
-        criteria: [`Shows an error`, ``, `  Keeps the email  `],
-    });
-
-    it(`round-trips through the parsers, dropping blank rows and trimming`, () => {
+    it(`is the title, trimmed, as the file's heading`, () => {
         expect(titleOf(`x.md`, written)).toBe(`Sign in`);
-        expect(narrativeOf(written)).toBe(`As a user I can sign in.`);
-        expect(criteriaOf(written)).toEqual([`Shows an error`, `Keeps the email`]);
     });
 
-    it(`writes no criteria section when there is nothing to put in it`, () => {
-        expect(storyMarkdown({ title: `Sign in`, narrative: ``, criteria: [] })).toBe(`# Sign in\n`);
+    it(`opens the section the run grades against, with nothing in it yet`, () => {
+        expect(written).toContain(`## Acceptance criteria`);
+        expect(criteriaOf(written)).toEqual([]);
+    });
+
+    /* The empty bullet is where the caret lands and where Enter then keeps going, so it has to be a LIST LINE
+     * the editor's continuation recognises rather than a bare dash. It must also not read as a criterion: a
+     * fresh story promises nothing, and the row's tally says "no criteria" until somebody types one. */
+    it(`leaves an empty bullet to type into that counts as no criterion`, () => {
+        expect(written.endsWith(`- \n`)).toBe(true);
     });
 });
 

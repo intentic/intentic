@@ -129,6 +129,12 @@ export {
     VERB_LABEL,
 } from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
+/* THE ONE SURFACE A MARKDOWN CONFIG IS WRITTEN ON: rendered prose you type straight into, with the app's only
+ * two save policies behind one status line. Exported and <MarkdownDocumentSurface> deliberately is NOT: the
+ * surface is the engine (a `contenteditable` that owns its own DOM and has no opinion about persistence), and
+ * shipping it alongside would offer a second, worse answer to the question this component exists to settle.
+ * A caller that wants a frame around one builds it, or reuses <NoteEditor>, which is exactly that. */
+export { default as MarkdownDocument } from "./components/MarkdownDocument.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
 // because a view holding a diagram outside prose (a stored architecture note, a generated report) should not

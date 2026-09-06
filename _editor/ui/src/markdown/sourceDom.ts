@@ -1,4 +1,4 @@
-import { lexBlocks, lexInline, type MarkdownToken } from "@intentic/ui/markdown";
+import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
 
 /* A MARKDOWN DOCUMENT AS EDITABLE DOM, where the document's own source text is the DOM's text.
  *
@@ -76,31 +76,37 @@ const innerSpan = (token: MarkdownToken): { readonly at: number; readonly text: 
 const inlineTag = (type: string): string | undefined =>
     ({ strong: `strong`, em: `em`, del: `del`, codespan: `code`, link: `a`, image: `span` })[type];
 
+/* A leaf with no markup of its own (plain text, an escape, a raw-HTML run): its source IS its text. Split from
+ * the walk below so each reads as one job — this one is "a token with no children", that one is "a token that
+ * wraps some". */
+const appendLeaf = (parent: Node, token: MarkdownToken, tag: string | undefined): void => {
+    if (tag === undefined) {
+        parent.appendChild(document.createTextNode(token.raw));
+        /* A HARD BREAK is the one place a newline in this document really does break the line, so it is the one
+         * place an element is added that carries no source of its own. The `<br>` contributes nothing to
+         * `textContent`, so the invariant holds; the two trailing spaces (or the backslash) that asked for it
+         * stay in the text, where they can be deleted to take the break away. */
+        if (token.type === `br`) {
+            parent.appendChild(document.createElement(`br`));
+        }
+        return;
+    }
+    /* A codespan has no child tokens (its body is not markdown) but does have delimiters, so its backticks are
+     * split off by length: the run of them that opens it is the run that closes it. */
+    const ticks = /^`+/u.exec(token.raw)?.[0] ?? ``;
+    const element = document.createElement(tag);
+    element.appendChild(span(ticks, MARKER));
+    element.appendChild(document.createTextNode(token.raw.slice(ticks.length, token.raw.length - ticks.length)));
+    element.appendChild(span(ticks, MARKER));
+    parent.appendChild(element);
+};
+
 const appendInline = (parent: Node, tokens: readonly MarkdownToken[]): void => {
     for (const token of tokens) {
         const inner = innerSpan(token);
         const tag = inlineTag(token.type);
-        // A leaf with no markup of its own (plain text, an escape, a raw-HTML run): its source IS its text.
         if (inner === undefined) {
-            if (tag === undefined) {
-                parent.appendChild(document.createTextNode(token.raw));
-                /* A HARD BREAK is the one place a newline in this document really does break the line, so it is
-                 * the one place an element is added that carries no source of its own. The `<br>` contributes
-                 * nothing to `textContent`, so the invariant holds; the two trailing spaces (or the backslash)
-                 * that asked for it stay in the text, where they can be deleted to take the break away. */
-                if (token.type === `br`) {
-                    parent.appendChild(document.createElement(`br`));
-                }
-                continue;
-            }
-            /* A codespan has no child tokens (its body is not markdown) but does have delimiters, so its
-             * backticks are split off by length: the run of them that opens it is the run that closes it. */
-            const ticks = /^`+/u.exec(token.raw)?.[0] ?? ``;
-            const element = document.createElement(tag);
-            element.appendChild(span(ticks, MARKER));
-            element.appendChild(document.createTextNode(token.raw.slice(ticks.length, token.raw.length - ticks.length)));
-            element.appendChild(span(ticks, MARKER));
-            parent.appendChild(element);
+            appendLeaf(parent, token, tag);
             continue;
         }
         const element = tag === undefined ? parent : document.createElement(tag);
@@ -174,6 +180,28 @@ const ROWS = `mdRows`;
 export const blockBody = (element: Element): string =>
     ROWS in (element as HTMLElement).dataset ? [...element.children].map((row) => row.textContent ?? ``).join(`\n`) : (element.textContent ?? ``);
 
+/** One row of a line-prefixed block: its opening marker into the gutter, the rest of the line as text. */
+const appendPrefixedRow = (row: HTMLElement, body: string, pattern: RegExp): void => {
+    const match = pattern.exec(body);
+    if (match === null) {
+        // A continuation line (the second line of a wrapped item, a loose item's own paragraph): no marker of
+        // its own, so its leading whitespace is the indent and hangs like one.
+        const indent = /^[ \t]*/u.exec(body)?.[0] ?? ``;
+        row.appendChild(span(indent, MARKER, GUTTER));
+        appendText(row, body.slice(indent.length));
+        return;
+    }
+    const lead = match[1] ?? ``;
+    const task = TASK_LEAD.exec(lead);
+    if (task !== null) {
+        // Read by the stylesheet, which draws the checkbox this markup stands for while the item is at rest.
+        // `1`/`0` rather than the character, so the CSS does not have to know markdown.
+        row.dataset[`task`] = (task[1] ?? ` `) === ` ` ? `0` : `1`;
+    }
+    row.appendChild(span(lead, MARKER, GUTTER));
+    appendText(row, match[2] ?? ``);
+};
+
 const linePrefixed = (source: string, tag: string, lineTag: string, pattern: RegExp, className?: string): HTMLElement => {
     const element = document.createElement(tag);
     element.dataset[ROWS] = ``;
@@ -182,27 +210,8 @@ const linePrefixed = (source: string, tag: string, lineTag: string, pattern: Reg
     }
     for (const line of sourceLines(source)) {
         const row = document.createElement(lineTag);
-        const body = line.endsWith(`\n`) ? line.slice(0, -1) : line;
-        const match = pattern.exec(body);
-        if (match === null) {
-            // A continuation line (the second line of a wrapped item, a loose item's own paragraph): no marker
-            // of its own, so its leading whitespace is the indent and hangs like one.
-            const indent = /^[ \t]*/u.exec(body)?.[0] ?? ``;
-            element.appendChild(row);
-            row.appendChild(span(indent, MARKER, GUTTER));
-            appendText(row, body.slice(indent.length));
-        } else {
-            const lead = match[1] ?? ``;
-            const task = TASK_LEAD.exec(lead);
-            element.appendChild(row);
-            if (task !== null) {
-                // Read by the stylesheet, which draws the checkbox this markup stands for while the item is at
-                // rest. `1`/`0` rather than the character, so the CSS does not have to know markdown.
-                row.dataset[`task`] = (task[1] ?? ` `) === ` ` ? `0` : `1`;
-            }
-            row.appendChild(span(lead, MARKER, GUTTER));
-            appendText(row, match[2] ?? ``);
-        }
+        element.appendChild(row);
+        appendPrefixedRow(row, line.endsWith(`\n`) ? line.slice(0, -1) : line, pattern);
     }
     return element;
 };

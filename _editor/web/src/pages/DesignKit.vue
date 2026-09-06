@@ -42,6 +42,7 @@ import {
     mirroringOff,
     type DevicePortRow,
     type DeviceSandboxRow,
+    MarkdownDocument,
     Modal,
     Notice,
     Page,
@@ -191,6 +192,15 @@ const query = ref(``);
 const filter = ref(``);
 const prose = ref(`A paragraph typed into the writing field.`);
 const source = ref(`export const greet = (who: string): string => \`hello \${who}\`;\n`);
+/* The two markdown documents below, each with the "disk" it is measured against. Held as a pair rather than
+ * one ref because `stored` is what makes the status line say anything at all, and a demo that never told the
+ * component what was saved would show the one state the real surfaces never sit in. */
+const NOTE = `## A note\n\nClick a line and type. The block you are in shows its markup; the rest stay clean.\n\n- Enter opens the next item\n- Enter on an empty one ends the list\n- [ ] and a task box is a task box\n`;
+const note = ref(NOTE);
+const noteOnDisk = ref(NOTE);
+const POLICY = `# Safety policy\n\nAsk before anything that **deletes**, and before pushing to \`main\`.\n`;
+const policy = ref(POLICY);
+const policyOnDisk = ref(POLICY);
 
 /* THE BUTTON'S WHOLE VOCABULARY, as data, so the gallery below is a MATRIX rather than a row of examples that
  * happens to be missing the state somebody is about to get wrong. The order is the ranking: read it top to
@@ -779,6 +789,37 @@ const pickedTier = ref(`collaborator`);
                 <div class="max-w-read-lg">
                     <span class="ui-field-label">Code</span>
                     <Code :code="source" lang="typescript" />
+                </div>
+                <!-- THE MARKDOWN SURFACE, and the reason the two fields above are not it: a markdown document
+                     is not source and it is not a paragraph, and every screen in this app that treated it as
+                     one of those had to add a Preview pill to admit it. Click the words and the caret lands
+                     where you clicked; the block you are in shows its own markup and nothing moves. Both save
+                     policies are here side by side because the difference between them is the only choice a
+                     caller makes. -->
+                <div class="grid max-w-read-lg gap-6 md:grid-cols-2">
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">MarkdownDocument · save="auto"</span>
+                        <div class="ui-field-shell p-3">
+                            <MarkdownDocument v-model="note" editable :stored="noteOnDisk" save="auto" label="A note" @save="noteOnDisk = $event">
+                                <template #note>Written as you type, like the file it is.</template>
+                            </MarkdownDocument>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">MarkdownDocument · save="explicit"</span>
+                        <div class="ui-field-shell p-3">
+                            <MarkdownDocument
+                                v-model="policy"
+                                editable
+                                :stored="policyOnDisk"
+                                save="explicit"
+                                label="A policy"
+                                @save="policyOnDisk = $event"
+                            >
+                                <template #note>Every turn reads this, so it waits to be told.</template>
+                            </MarkdownDocument>
+                        </div>
+                    </div>
                 </div>
             </section>
 

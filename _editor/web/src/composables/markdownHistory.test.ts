@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { createMarkdownHistory, type DocumentState } from "./markdownHistory";
+import { createMarkdownHistory, type DocumentState } from "@intentic/ui/markdown";
 
-/* The undo stack behind the markdown editing surface. No DOM: this is about what one press of Ctrl+Z should
- * take back, which is a question about the source and the clock, and both are passed in. */
+/* The undo stack behind the markdown editing surface, which lives in the design system now
+ * (`@intentic/ui/markdown`) and is tested from here, beside the block splitter's suite. No DOM: this is about
+ * what one press of Ctrl+Z should take back, which is a question about the source and the clock, and both are
+ * passed in. */
 
 const at = (text: string, caret = text.length): DocumentState => ({ text, caret });
 

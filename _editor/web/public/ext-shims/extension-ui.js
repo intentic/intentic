@@ -27,6 +27,7 @@ export const InfoDialog = m["InfoDialog"];
 export const InfoHint = m["InfoHint"];
 export const InfoTable = m["InfoTable"];
 export const Markdown = m["Markdown"];
+export const MarkdownDocument = m["MarkdownDocument"];
 export const MarkdownFigure = m["MarkdownFigure"];
 export const Modal = m["Modal"];
 export const NavRail = m["NavRail"];
