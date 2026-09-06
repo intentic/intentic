@@ -7,6 +7,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { judgeCommand } from "../agent/command-judge.js";
 import { raiseCard } from "../agent/offer-card.js";
+import { RoleModelUnsetError } from "../agent/role-model-unset.js";
 import { turnRunOf } from "../agent/turn-runs.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
@@ -123,10 +124,14 @@ const hostVerdict = async (
         AbortSignal.timeout(DEADLINE_MS),
     ).catch(
         // A judge that cannot run leaves the hard rule standing and lets everything else through to the machine,
-        // where the scopes decide. Same posture and reasoning as the sandbox gate's fallback.
-        (): SafetyVerdict => ({
+        // where the scopes decide. Same posture and reasoning as the sandbox gate's fallback — including its
+        // separate sentence for a judge nobody has set a model for, which is a choice rather than a fault.
+        (error: unknown): SafetyVerdict => ({
             decision: "allow",
-            sentence: `The safety judge could not be reached, so this was decided by the standing rule alone.`,
+            sentence:
+                error instanceof RoleModelUnsetError
+                    ? `No model is set for the safety judge, so this was decided by the standing rule alone.`
+                    : `The safety judge could not be reached, so this was decided by the standing rule alone.`,
         }),
     );
     return { verdict, judging };

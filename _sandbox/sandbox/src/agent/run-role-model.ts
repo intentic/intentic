@@ -1,4 +1,4 @@
-import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain, resolveRoleModels } from "@intentic/sandbox-contract";
+import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { harnessReadyProviders } from "./harness-credentials.js";
 import { spentRung } from "./role-model-quota.js";
@@ -59,13 +59,14 @@ export const runRoleModel = async (services: Services, role: ModelRole): Promise
     if (pinned.length === 0) {
         return undefined;
     }
-    return headOf(services, resolveRoleModels(await readinessSources(services), pinned, role));
+    return headOf(services, readyChain(await readinessSources(services), pinned));
 };
 
 /* THE PIN A TURN WEARING THIS PERSONA SHOULD OPEN ON, from the card's own ladder (contract schemas/personas.ts
  * `models`), or undefined for a card with none, a card that is not there, or a ladder whose every provider is
- * disconnected. The same walk as the role's, minus the floor: a card that says nothing about models has left
- * the question to the role, and the caller asks the role next (turn-resume.ts withRoleModel). Consulted BEFORE
+ * disconnected. Literally the same walk as the role's above — there is no floor under either any more, so the
+ * two differ only in which list they read: a card that says nothing about models has left the question to the
+ * role, and the caller asks the role next (turn-resume.ts withRoleModel). Consulted BEFORE
  * the role because the card is the more specific answer: the role says what kind of job this is, the card
  * says who is doing it, and an owner who pinned a model on a persona meant it for every turn wearing that
  * persona, whatever started them. */

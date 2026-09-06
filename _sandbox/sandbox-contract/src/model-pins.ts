@@ -1,7 +1,4 @@
-import { accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js";
-import { ACCESS_COST } from "./provider-specs.js";
-import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
-import { type ModelRole, modelRole } from "./model-roles.js";
+import { modelsFor } from "./agent-catalog.js";
 import type { AgentProvider, ModelPin } from "./schemas/agent.js";
 
 /* WHICH MODELS A ROLE MAY RUN, IN THE ORDER TO TRY THEM. One resolver over every list in
@@ -15,30 +12,41 @@ import type { AgentProvider, ModelPin } from "./schemas/agent.js";
  * this side says what the running order is.
  *
  * THE RULE LIVES IN THE CONTRACT because both sides need the same answer for different jobs: the daemon runs
- * the model, and the browser has to NAME it, in the settings row's "Auto: …" line, before anything has run. Two
+ * the model, and the browser has to NAME it, in that job's settings row, before anything has run. Two
  * implementations would drift precisely where it matters most, since a row promising Haiku while the daemon
  * bills Opus is worse than no row at all.
  *
- * WHAT AN EMPTY LIST MEANS IS THE ROLE'S OWN ANSWER (model-roles.ts): a `helper` role derives the Auto ladder
- * from whatever is connected, a `run` role resolves to nothing and lets the caller's floor answer. That fork
- * used to be two near-identical files; it is one line here because it was always one difference. */
+ * AN EMPTY LIST RESOLVES TO NOTHING, FOR EVERY ROLE, and this file no longer derives a floor for any of them.
+ * It used to: a `helper` role with no list got an "Auto ladder" worked out from whatever was connected —
+ * every provider's cheapest row, best-first — so an owner who had never opened the settings page still got
+ * commit messages, session titles and safety verdicts from a model this file picked. That was the wrong
+ * default, and the settings row saying "Auto: Gemini 3 Flash Lite, then Claude Haiku 4.5, then …" was the
+ * tell: a recommendation nobody asked for, over accounts they had connected for something else, changing
+ * under them whenever an account was added. NOT SET NOW MEANS NOT SET. Nothing is auto-selected and nothing
+ * is recommended: the owner names the models for a job or the job does not run, which is a state they can
+ * read off the row and a bill they cannot be surprised by.
+ *
+ * The two kinds of role (model-roles.ts) still differ in what the CALLER does with an empty answer — a
+ * `helper` is simply off, a `run` falls to the model the owner picked for their own chat — but that is the
+ * caller's business, and nothing here has to know which kind it is holding. */
 
 /* One provider's standing in the decision: whether a turn on it can be sent at all, and what its catalog holds.
  *
  * ACP agents are deliberately not expressible here — an ACP row's model id is empty because the agent owns its
  * own model, so there is no rung to point it at. `endpoint/<id>` providers ARE, and have to be: their models
  * appear in the same picker the settings rows build their options from, so a pin naming one has to hold rather
- * than fall silently back to Auto and spend an account the user was deliberately steering away from. */
+ * than drop out and leave the job running on an account the user was deliberately steering away from. */
 export interface ModelSource {
-    // AgentProvider, not NativeProvider: an endpoint's id is user-created and cannot be in a fixed union. Auto's
-    // ranking degrades gracefully for one, costOf falls to the metered rung and an id with no tier word is
-    // UNRANKED, which is genuine last place, so an endpoint effectively only wins Auto when nothing else is
-    // connected, while a PIN on one holds. Both are the right answers: what a turn on someone's own model server
-    // costs is not a fact this repo can know, so it is not one Auto should be asserting.
+    // AgentProvider, not NativeProvider: an endpoint's id is user-created and cannot be in a fixed union, and
+    // what a turn on somebody's own model server costs is not a fact this repo can know — which is fine here,
+    // because nothing on this side ranks anything. A pin either names a provider that can run it or it does not.
     readonly provider: AgentProvider;
     // The same connection predicate every other surface gates on (access.ts web-side, the daemon's own account
     // stores daemon-side). A catalog is never empty by construction, so "has rows" says nothing about "can send".
     readonly ready: boolean;
+    // What the provider publishes. NOTHING IN THIS FILE READS IT any more: it was the input to the derived Auto
+    // ladder, and a pin is taken verbatim. Kept because it is what a source IS, and the daemon's helper walk
+    // still gathers it (role-model.ts); a caller with no catalog to hand passes an empty list and loses nothing.
     readonly models: readonly string[];
 }
 
@@ -72,102 +80,35 @@ export const parsePinned = (pinned: string): ModelChoice | undefined => {
 export const pinnedModelLabel = (choice: ModelChoice): string =>
     modelsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
 
-// The cheapest row a provider publishes, its whole catalog read from the cheap end. Undefined for a catalog
-// that hasn't loaded yet, which is a real state: every provider serves a floor, but only once something has
-// asked it.
-const cheapestOf = (source: ModelSource): string | undefined => source.models.toSorted(compareCheapestFirst)[0];
-
-// Where a provider's cheapest row sits on the shared tier scale, and therefore how well it answers the question
-// Auto asks. UNRANKED (-1) is a genuine last place: it means the id carries no tier word we know, so the row is
-// the provider's base line rather than its budget one.
-const tierOf = (model: string): number => tierRankOf(familyOf(model));
-
-// PROVIDERS order, as the final tiebreak. Arbitrary, but the SAME arbitrary answer on every read, the property
-// compareUnrankedModelIds exists to guarantee, and the one a default actually needs. An endpoint is in no fixed
-// list, so it reads -1 and leads the tiebreak; unreachable in practice, since it can never tie on cost.
-const providerOrder = (provider: AgentProvider): number => PROVIDERS.findIndex((entry) => entry.value === provider);
-
-/* WHAT AN ENDPOINT COSTS, one rung past every provider's, and the reason it is a number here rather than a
- * member of AccessKind. That axis describes the providers this repo ships, and every one of them is unlocked by
- * signing in to something the user already holds, so none of them is metered per call. An endpoint is the
- * opposite: whatever gateway somebody pointed us at, whose bill this repo cannot see. Reading it as dearer than
- * anything on the table is the conservative answer, and it is what keeps Auto from reaching for a paid gateway
- * on its own initiative. */
-const METERED_COST = Math.max(...Object.values(ACCESS_COST)) + 1;
-
-// How much a call on this provider costs at the margin. Every native provider declares an access kind; an
-// endpoint declares none, and takes the metered rung above.
-const costOf = (provider: AgentProvider): number => {
-    const access = accessFor(provider);
-    return access === undefined ? METERED_COST : ACCESS_COST[access.kind];
-};
-
-/* AUTO, every connected provider's cheapest row, best-first, as a ladder rather than a winner. The floor under
- * every `helper` role, and under nothing else.
- *
- * Ranked on TIER FIRST, then cost. That order is the point: a helper's Auto exists to not be the frontier
- * model, so a free flagship is still the wrong tool, while a free Haiku-class row and a subscription
- * Haiku-class row differ only in whose quota they spend. Cost then breaks that tie towards the channel the user
- * is not paying per token for, and against the one they are.
- *
- * NOTE WHAT AUTO IS AND IS NOT AN ARGUMENT FOR. It is the answer for an owner who has said nothing, not a claim
- * that cheap is right: an owner who pins Opus to commit messages is not being talked out of it, which is the
- * whole reason these lists are per role. Auto is what a row says while it is empty.
- *
- * The whole ladder, not just its head, because the same ranking that picks the best answer also states the best
- * SECOND answer, and a sandbox with three accounts connected should not lose its commit messages for six hours
- * because one of them is spent. */
-export const autoLadder = (sources: readonly ModelSource[]): readonly ModelPin[] =>
-    sources
-        .filter((source) => source.ready)
-        .flatMap((source) => {
-            const model = cheapestOf(source);
-            return model === undefined ? [] : [{ provider: source.provider, model }];
-        })
-        .toSorted(
-            (left, right) =>
-                tierOf(right.model) - tierOf(left.model) ||
-                costOf(left.provider) - costOf(right.provider) ||
-                providerOrder(left.provider) - providerOrder(right.provider),
-        );
-
 /* WHICH MODELS THIS ROLE MAY RUN, IN THE ORDER TO TRY THEM, given what this sandbox has connected.
- * `pinned` is the stored setting: settings.modelRoles[role], an ordered list of pins, empty for the role's own
- * floor.
+ * `pinned` is the stored setting: settings.modelRoles[role], an ordered list of pins.
  *
  * A pin only holds while its provider is READY: an account the user disconnected would otherwise sit at the
- * head of the chain failing on a credential error, when the sandbox can plainly still answer. Dropping it is
- * the same move the composer already makes when a live catalog stops offering the selected model. It stays on
- * SCREEN, greyed — the settings row renders the stored list, not this one — because a setting that vanished
- * from view would look like the app had eaten it.
+ * head of the chain failing on a credential error while the sandbox can plainly still answer from the rung
+ * below. It stays on SCREEN, greyed — the settings row renders the stored list, not this one — because a
+ * setting that vanished from view would look like the app had eaten it.
  *
- * THE PINNED LIST IS THE WHOLE ANSWER whenever any of it survives that filter. The floor is NOT appended
- * underneath, and that is deliberate: a user who writes down three models has said which accounts this job may
- * spend, and quietly reaching for a fourth when all three are out is exactly the "spend an account they were
- * steering away from" failure a pin exists to prevent. When NONE of the pins is connected any more the list has
- * stopped saying anything about this sandbox, so the floor takes over rather than leaving a dead button.
+ * THE PINNED LIST IS THE WHOLE ANSWER, and there is nothing underneath it. A user who writes down three models
+ * has said which accounts this job may spend, and reaching for a fourth when all three are out is exactly the
+ * "spend an account they were steering away from" failure a pin exists to prevent. A user who writes down none
+ * has said the job picks no model at all.
  *
  * THE WHOLE PIN SURVIVES, not the pair inside it: an entry's effort, thinking, speed and harness are what the
  * work is composed from, so a resolver handing back a bare (provider, model) would silently run the head of the
  * list at the provider's defaults. Nothing here reads or judges those fields, which is the point of carrying
  * them whole.
  *
- * Empty out means the role has nothing it can reach. For a `helper` that is a sandbox with nothing connected at
- * all, and the caller renders a control that says so rather than a live button that fails on click; for a `run`
- * it is the ordinary state of an unpinned role, and the caller's own floor answers. */
-export const resolveRoleModels = (sources: readonly ModelSource[], pinned: readonly ModelPin[], role: ModelRole): readonly ModelPin[] => {
-    const chain = readyChain(sources, pinned);
-    if (chain.length > 0) {
-        return chain;
-    }
-    // The floor, which the role declares. An id outside the table has no floor to fall to, and answering with
-    // the cheapest connected model for it would be this file inventing a job.
-    return modelRole(role)?.kind === `helper` ? autoLadder(sources) : [];
-};
-
-/* THE PINS THIS SANDBOX CAN REACH, IN THE ORDER THEY WERE WRITTEN, the walk under every ladder here: a role's
- * list (resolveRoleModels, which adds the role's floor beneath it) and a persona card's (schemas/personas.ts
- * personaModels, which adds nothing, a card has no floor). Empty when nothing on the list is connected. */
+ * EMPTY OUT MEANS THE LIST HAS NOTHING IT MAY REACH, from two different causes the caller can tell apart by
+ * looking at `pinned`: an empty list is an owner who set no model, and a full list that survives none of the
+ * readiness filter is an owner whose accounts have gone. The first is the job being switched off, the second
+ * is worth a sentence about the accounts.
+ *
+ * ONE FUNCTION FOR BOTH KINDS OF LADDER, and it is `resolveRoleModels` that stopped existing rather than this
+ * one arriving to replace it. A role's list used to add the role's own floor beneath the ready chain, which is
+ * the only thing it did that a persona card's list (schemas/personas.ts `personaModels`) did not — so the walk
+ * was split out to be shared. With the floor gone there is no difference left to share around: a role's list
+ * and a card's list are the same question over the same sources, and two names for it would be two places to
+ * read before believing they agree. */
 export const readyChain = (sources: readonly ModelSource[], pinned: readonly ModelPin[]): readonly ModelPin[] => {
     const ready = new Set(sources.filter((source) => source.ready).map((source) => source.provider));
     // Taken verbatim, unvalidated against the catalog on purpose: the picker offers a custom-id escape hatch for
@@ -175,7 +116,7 @@ export const readyChain = (sources: readonly ModelSource[], pinned: readonly Mod
     // different model than the settings row names.
     const requested = pinned.filter((pin) => ready.has(pin.provider));
     /* The same model twice would spend two attempts proving one account is out — a real state, since the list is
-     * hand-edited and Auto's ladder can rank a provider the user has also pinned.
+     * hand-edited and the bulk editor writes one pin across many jobs.
      *
      * THE FIRST OF A PAIR WINS, WHOLE. Two entries can name one model and differ in their knobs (the same Sonnet
      * at Max and again at Low, written while reordering the list), and the one the user reads first is the one

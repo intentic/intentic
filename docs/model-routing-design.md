@@ -26,10 +26,14 @@ harness) beside which model it is. All of them resolve through one `resolveRoleM
 to be. They are gone: an intensity is a guess about work its owner knows better, and it made the useful thing
 unsayable — pinning a stronger model for commit subjects also moved every session title and loop verdict.)*
 
-The two KINDS of role differ on exactly one thing: what an empty list means. A `helper` role — a one-shot such
-as a commit message or a safety verdict — derives an Auto ladder from whatever is connected; a `run` role
-resolves to nothing and defers to the user's own chat pick, because *"nothing here can judge whether a job is
-worth the frontier tier."*
+An empty list resolves to **nothing**, for every role, and nothing is derived to fill it. *(A `helper` role —
+a one-shot such as a commit message or a safety verdict — used to fall to an "Auto ladder" worked out from
+whatever was connected. It is gone: a sandbox nobody had configured still spent an account on every landing,
+on a ranking this repo invented and re-ranked whenever an account was added. Not set now means not set.)*
+
+The two KINDS of role differ in what the **caller** does with that empty answer: a `helper` does not run at
+all, and a `run` defers to the user's own chat pick, because *"nothing here can judge whether a job is worth
+the frontier tier."*
 
 That last sentence is the thing this design changes. A router **is** the something that judges it.
 
@@ -284,9 +288,10 @@ that it only routes down. Swapping it for something merely known to be cheap is 
 | The one dial | `FAST_CEILINGS` + `ComplexityInput.eagerness` (`settings.autoTierEagerness`) |
 
 The judge lives in the contract for the reason `model-pins.ts` does: a settings row has to be able to say what
-a turn will run on before it runs. Configuration mirrors a helper role's — one ordered list, empty means derive
-from what is connected — and `model-order.ts` already answers "which row is the cheap rung", so Auto's
-derivation is a function that already existed.
+a turn will run on before it runs. Configuration mirrors a role's — one ordered list — except that this one
+DOES derive when it is empty, and legitimately: the substitution is scoped to the provider the user is already
+on, so "the cheap rung of the model in front of you" is a fact about their own pick rather than a choice made
+on their behalf, and `model-order.ts` already answers which row that is.
 
 `autoFastModels` is deliberately NOT a role. It names a substitution this feature makes on a turn the user
 started themselves, so it belongs to the feature rather than being a job of its own, and it stores bare

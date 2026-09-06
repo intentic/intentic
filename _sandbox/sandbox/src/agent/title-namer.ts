@@ -1,7 +1,7 @@
 import type { Services } from "../composition.js";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "./failure-sentences.js";
 import { sentenceAnswer } from "./role-answer.js";
-import { askRoleModel } from "./role-model.js";
+import { askRoleModel, roleModelIsSet } from "./role-model.js";
 
 /* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn, the second half of the
  * naming rule that starts in the contract's title.ts.
@@ -119,16 +119,18 @@ const TITLE_MAX_WORDS = 12;
 const titleAnswer = sentenceAnswer(`a session title`, cleanSessionTitle, TITLE_MAX_WORDS);
 
 /* Name a conversation from the prompt that just opened its turn, replacing the derivation's cut sentence.
- * Resolves without effect whenever there is nothing to do.
+ * Resolves without effect whenever there is nothing to do — including when the owner has set no model for
+ * session titles, which is the job switched off: the derived title stands, and asking would only put a refusal
+ * they chose into the log on every first turn.
  *
- * Throws only what askRoleModel throws: nothing connected, a credential that fails resolution, or a chain that
- * was asked to the bottom without one rung writing a usable name (the reply guards this pass used to make itself
- * now live at that seam, where a bad reply costs one rung instead of the whole pass). The call site treats every
- * one of those as a log line, not a failure: nothing is written, the derived title stands, and the next turn,
- * which has more to go on, tries again. */
+ * Throws only what askRoleModel throws: a credential that fails resolution, or a chain that was asked to the
+ * bottom without one rung writing a usable name (the reply guards this pass used to make itself now live at
+ * that seam, where a bad reply costs one rung instead of the whole pass). The call site treats every one of
+ * those as a log line, not a failure: nothing is written, the derived title stands, and the next turn, which
+ * has more to go on, tries again. */
 export const nameAgentTitle = async (services: Services, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
-    if (entry === undefined) {
+    if (entry === undefined || !(await roleModelIsSet(services, `session-title`))) {
         return;
     }
     /* A STORED TITLE THAT IS ITSELF ONE OF THE REPLIES THIS PASS NOW REFUSES was stolen by an earlier pass that

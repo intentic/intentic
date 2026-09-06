@@ -23,19 +23,26 @@ import { z } from "zod";
  * went on the chat this morning, and one spent provider takes the role down for hours while three others sit
  * idle. Written in order, the next entry catches it.
  *
- * TWO KINDS, and the only thing that separates them is what an EMPTY list means. That is a real fork rather
- * than a leftover of the old grouping, and it is declared per role because it is a property of the job:
+ * AN EMPTY LIST IS THE JOB SWITCHED OFF, and NOTHING IS DERIVED FOR IT. A helper role used to fall to an
+ * "Auto ladder" worked out from whatever was connected — every provider's cheapest row, best-first — so a
+ * sandbox that had never been configured still spent somebody's account on commit messages and safety
+ * verdicts, on a recommendation this table invented, which re-ranked itself the day another account was
+ * connected. Not set now means not set: no auto-selection, no recommendation, and the owner names the models
+ * for a job or the job does not happen.
  *
- *   helper — a one-shot. One prompt, no tools, one string back, and it is over. An empty list resolves to the
- *            AUTO LADDER: every connected provider's cheapest row, best-first (model-pins.ts). Deriving is the
- *            right default here because the job is small and repeatable, so the cost of a wrong guess is one
- *            cheap call, and because a derived answer improves by itself when an account is connected tomorrow.
+ * TWO KINDS, and what separates them is what the CALLER does with that empty answer. It is declared per role
+ * because it is a property of the job:
+ *
+ *   helper — a one-shot. One prompt, no tools, one string back, and it is over. With no list the job does not
+ *            run at all: no commit subject is drafted, no session is renamed, no command is judged. Every one
+ *            of them already had a road for "the model could not answer" (the derived title stands, the
+ *            commit box stays empty, the gate falls to its standing rule), so an owner who wants none of them
+ *            leaves the row empty and pays nothing.
  *
  *   run    — a whole session with tools and a worktree, started by a surface rather than by a person at a
- *            composer. An empty list resolves to NOTHING, and the caller's own floor answers: the model the
- *            owner picked for their chat. Nothing here can judge whether a job is worth the frontier tier, and
- *            a wrong guess is billed in whole sessions rather than in tokens, so the honest fallback is a
- *            choice they made rather than one this table invented.
+ *            composer. With no list the caller's own floor answers: the model the owner picked for their chat.
+ *            That is not this table recommending anything — it is a choice they already made, in front of
+ *            them, on the composer they work in.
  *
  * EVERY ENTRY IS A FULL PIN (ModelPinSchema): which model, and how it runs — effort, thinking, speed, harness.
  * The helper roles carry them too, which they did not use to: a one-shot ran with reasoning forcibly off, so
@@ -225,11 +232,6 @@ export const MODEL_ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly Mod
  * names nothing, and a settings file or a turn carrying one is a typo worth a clean error rather than a list
  * silently ignored. */
 export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole[]]);
-
-const BY_ID = new Map<string, ModelRoleSpec>(MODEL_ROLES.map((role) => [role.id, role]));
-
-/** What this role is, or undefined for an id no build of this table declares. */
-export const modelRole = (id: string): ModelRoleSpec | undefined => BY_ID.get(id);
 
 /** The roles of one kind, in table order: the two blocks the settings page draws. */
 export const modelRolesOfKind = (kind: ModelRoleKind): readonly ModelRoleSpec[] => MODEL_ROLES.filter((role) => role.kind === kind);

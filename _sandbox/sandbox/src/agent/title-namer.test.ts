@@ -4,7 +4,10 @@ import { unstubbed } from "@intentic/testing";
 import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
 
 const ask = vi.fn<() => Promise<{ value: string }>>();
-vi.mock("./role-model.js", () => ({ askRoleModel: () => ask() }));
+// Whether the owner has set a model for session titles. Nothing is derived for an empty list, so this pass has
+// to ask before it spends anything — see the test at the foot of this file.
+const modelSet = vi.fn<() => boolean>(() => true);
+vi.mock("./role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
 
 /* The session-title role's name for a session, unwrapped from the packaging models reach for even when told not to.
  * Same instinct as cleanCommitSubject: the name is right and only its wrapper is wrong, and a pass that
@@ -79,6 +82,21 @@ const servicesWith = (
 
 beforeEach(() => {
     ask.mockReset();
+    modelSet.mockReturnValue(true);
+});
+
+/* NO MODEL SET FOR SESSION TITLES ⇒ THE JOB DOES NOT RUN, silently. Nothing is derived for an empty list any
+ * more, so this is the state of every sandbox that has not been to Sandbox ▸ Agent ▸ Models; asking anyway
+ * would throw on the FIRST turn of every conversation, and the call site logs a warning per throw. The derived
+ * title stands, which is exactly what this pass leaves behind whenever it cannot better it. */
+test("asks nothing when no model is set for session titles", async () => {
+    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    modelSet.mockReturnValue(false);
+
+    await nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests");
+
+    expect(ask).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
 });
 
 test("names a still-derived conversation from the prompt that just opened its turn", async () => {

@@ -14,10 +14,16 @@ import ModelPinPickerBody from "./ModelPinPickerBody.vue";
  * fresh search box and freshly refreshed catalogs each time. */
 
 const emit = defineEmits<{ "update:open": [boolean]; pick: [ModelPin]; configure: [ModelPin] }>();
-const { open, anchor, pin, knobs, taken } = defineProps<{
+const { open, anchor, header, pin, knobs, taken } = defineProps<{
     open: boolean;
     // The trigger the panel hangs off: the row being edited, or the list's own Add button.
     anchor?: HTMLElement | undefined;
+    /* WHOSE MODEL THIS PANEL IS ABOUT, and the caller has to be able to say it because one of them is not a
+     * row: the settings page can open this over a SELECTION of jobs, where a pick spends across all of them.
+     * That panel is pixel-identical to the one a single row opens, so the header is the only thing standing
+     * between "change this job's model" and "change nine jobs' models", and it may not be inferred from `pin`.
+     * Absent falls back to the row wording, which is what every other caller wants. */
+    header?: string | undefined;
     // The entry being re-pointed, or undefined while ADDING one.
     pin?: ModelPin | undefined;
     // Whether this list's entries carry their own run settings. See ModelPinPickerBody.
@@ -37,7 +43,7 @@ const { open, anchor, pin, knobs, taken } = defineProps<{
     <ResponsiveOverlay
         :model-value="open"
         :anchor="anchor"
-        :header="pin === undefined ? `Add a model` : `Model`"
+        :header="header ?? (pin === undefined ? `Add a model` : `Model`)"
         panel-class="w-[26rem]"
         side="bottom"
         @update:model-value="emit(`update:open`, $event)"

@@ -482,12 +482,13 @@ export const SandboxSettingsSchema = z.object({
      * that is connected and will not answer today: the account's allowance went on the chat, and one spent
      * provider takes that job down for hours while the others sit idle.
      *
-     * AN ABSENT OR EMPTY LIST IS THE INTERESTING CASE and means the role's declared floor (resolveRoleModels): a
-     * one-shot helper derives an Auto ladder from whatever is connected right now — so it can never name a
-     * provider this sandbox has no credential for, and it improves by itself as accounts are added — while a
-     * whole session falls to the model the owner picked for their own chat, because nothing here can judge what
-     * a session is worth and a wrong guess is billed whole. Storing resolved ids instead would go stale exactly
-     * as a pinned model does. */
+     * AN ABSENT OR EMPTY LIST IS THE JOB SWITCHED OFF, and nothing is derived to fill it. A one-shot helper
+     * used to fall to an "Auto ladder" worked out from whatever was connected, which meant a sandbox nobody
+     * had configured still spent an account on every commit subject, every session title and every safety
+     * verdict, on a ranking this repo invented and re-ranked whenever an account was added. Not set now means
+     * not set: no auto-selection and no recommendation. A one-shot with no list does not run; a whole session
+     * with no list opens on the model the owner picked for their own chat, which is a choice they made rather
+     * than one this schema guessed. */
     // `partialRecord`, not `record`: an exhaustive one would make every role a required key, so a settings file
     // that has never been touched would have to spell out seventeen empty arrays to be valid, and adding a role
     // would invalidate every settings file in existence. An absent key IS the answer "this role has no list".
@@ -495,7 +496,7 @@ export const SandboxSettingsSchema = z.object({
         .partialRecord(ModelRoleSchema, z.array(ModelPinSchema).max(10))
         .default({})
         .describe(
-            "Which models do which job, one ordered list per job: commit messages, session titles, the safety judge, pipeline fixes, and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. A job with no list falls back to its own default: cheapest connected for the one-shot helpers, your own chat model for whole sessions.",
+            "Which models do which job, one ordered list per job: commit messages, session titles, the safety judge, pipeline fixes, and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: a one-shot job with no list does not run, and a whole session with no list opens on whatever your own chat is set to.",
         ),
     /* WHICH REPOS KEEP A CHANGELOG, the repos whose commits carry a `Release-Note:` trailer, written by the
      * same quick model that drafts the subject (git/commit-message.ts) and harvested at release time.

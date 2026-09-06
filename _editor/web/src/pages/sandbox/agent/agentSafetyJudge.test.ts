@@ -110,17 +110,24 @@ test("the states that stop holding commands say what still asks", async () => {
 });
 
 /* WHICH MODEL IS APPLYING THE POLICY, which is the question this group answers about the model and the only one.
- * Named in full rather than as "Auto" or "your quick model" on its own: a verdict is billed to one of these
- * accounts, and reading a policy without knowing what reads it back is the state this row exists to prevent. */
+ * Named in full: a verdict is billed to one of these accounts, and reading a policy without knowing what reads
+ * it back is the state this row exists to prevent. */
 
-test("names the derived chain in order while no judge model is pinned", () => {
+/* SWITCHED ON AND STILL INERT is a real state, and it is the state of every sandbox that has not been to the
+ * Models tab: nothing is derived for a job with no models, so the judge runs on nothing and the standing rule
+ * alone decides. A page about a safety policy owes that sentence more than any other on it, and the failure it
+ * guards against is silent — the group would look configured while nothing read the document below. */
+test("says the judge has no model rather than naming one nobody chose", () => {
     const host = mount();
-    // The `safety-judge` role ships with no list, so what answers is its own Auto ladder: the cheapest connected
-    // rung of every provider, best first. Read off the schema rather than transcribed.
+    // Read off the schema rather than transcribed: the role ships with no list.
     expect(SandboxSettingsSchema.parse({}).modelRoles[`safety-judge`]).toBeUndefined();
-    expect(host.textContent).toContain(`Judged by`);
-    expect(host.textContent).toContain(`Claude Haiku 4.5`);
-    expect(host.textContent).toContain(`GPT 5.6 Luna`);
+    expect(host.textContent).toContain(`No model is set for the judge`);
+    expect(host.textContent).toContain(`standing rule alone`);
+    // Two accounts are connected, and neither may be named: the row's job is what the owner set, not what this
+    // app would have reached for.
+    expect(host.textContent).not.toContain(`Judged by`);
+    expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
+    expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
 });
 
 test("a model pinned on the Models tab is the one this row names", async () => {
@@ -144,9 +151,10 @@ test("reads the safety-judge list rather than another job's", async () => {
     const host = mount();
     await nextTick();
 
-    // Commit messages are pinned to Codex; the judge is not pinned at all, so it names its own derived ladder,
-    // which leads with the cheapest connected rung rather than with the other job's pin.
-    expect(host.textContent).toContain(`CLAUDE · Claude Haiku 4.5`);
+    // Commit messages are set to Codex; the judge has nothing, and a row reading the wrong key would name the
+    // other job's model here.
+    expect(host.textContent).toContain(`No model is set for the judge`);
+    expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
 });
 
 // Nothing to point a model at: the row says the model is not in use rather than naming one that never runs.

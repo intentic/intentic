@@ -648,7 +648,13 @@ reports the profile.
   WHICH LOOP RUNS A RUNG is the adapter's, not the walk's: each runtime's one-liner is its adapter's `oneShot`
   ([src/agent/adapter.ts](src/agent/adapter.ts); `claude/claude-one-shot.ts` on the harness's own credentials,
   `cursor/cursor-one-shot.ts`, `gemini/gemini-one-shot.ts`), so the walk asks the adapter the contract names for
-  the provider exactly as a turn does, and a runtime with no helper is a refusal it steps over.
+  the provider exactly as a turn does, and a runtime with no helper is a refusal it steps over. AN UNSET JOB IS
+  REFUSED BEFORE ANYTHING IS READ ([src/agent/role-model-unset.ts](src/agent/role-model-unset.ts)): a helper
+  role whose list is empty used to derive a ladder from whatever was connected, so a sandbox nobody had
+  configured spent an account on every landing, on a ranking this repo invented. Not set means not set, and
+  because that is the owner's answer rather than a fault it is its own error class — the two callers that must
+  stay silent ask `roleModelIsSet` and never start (a landing would otherwise open a "writing…" chip and end it
+  red), and the safety gates catch it and say the judge has no model rather than that it could not be reached.
 - [src/agent/command-judge.ts](src/agent/command-judge.ts): whether a flagged command should run, asked of a
   model that has read the owner's written policy. The layer that replaced a table of per-class regex verdicts,
   and the reason it had to: the classifier's match used to BE the card, so `echo "rm -rf /"` written into a

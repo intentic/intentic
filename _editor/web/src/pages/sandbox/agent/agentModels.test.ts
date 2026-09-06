@@ -28,10 +28,10 @@ import { createMemoryHistory, createRouter } from "vue-router";
 // Same import-time browser globals the sibling suite stands in for (@intentic/ui's useDevice reads
 // window.matchMedia; environment.ts reads window.env).
 
-/* THE THREE ROLES THESE TESTS DRIVE, one per property being pinned: a one-shot with an Auto floor
- * (`commit-message`), the one-shot with a switch of its own somewhere else (`safety-judge`), and a whole
- * session whose floor is the composer (`pipeline-fix`). Every other row on the page is one of these three
- * shapes, drawn from the same catalog by the same code. */
+/* THE THREE ROLES THESE TESTS DRIVE, one per property being pinned: an ordinary one-shot (`commit-message`),
+ * the one-shot with a switch of its own somewhere else (`safety-judge`), and a whole session whose floor is
+ * the composer (`pipeline-fix`). Every other row on the page is one of these three shapes, drawn from the same
+ * catalog by the same code. */
 const COMMIT = `commit-message` as const;
 const JUDGE = `safety-judge` as const;
 const RUN = `pipeline-fix` as const;
@@ -214,15 +214,18 @@ test("reads in order of reach: one-shots, then whole sessions, then the row that
     expect([...helpers, ...runs]).toEqual([...helpers, ...runs].toSorted((left, right) => left - right));
 });
 
-test("draws nothing but Auto's own ladder until a model is written down", async () => {
+/* A ONE-SHOT ROW WITH NOTHING IN IT NAMES NO MODEL, and this is the test that would catch the derived ladder
+ * coming back. It used to draw "Auto: Gemini 3 Flash Lite, then Claude Haiku 4.5, …" — a ranking this app
+ * invented over accounts connected for something else, re-ranking itself whenever one was added. Both
+ * connected fixtures are named here rather than just one, because a resolver that started deriving again
+ * would put whichever it preferred on screen and half an assertion would still pass. */
+test("names no model at all for a one-shot job nobody has set one for", async () => {
     const host = mount();
     await Promise.resolve();
 
-    // Auto is a chain too, so the row names every rung rather than the word "Auto" on its own: this is the
-    // whole discoverability story for a setting nobody has opened.
-    expect(host.textContent).toContain(`Auto`);
-    expect(host.textContent).toContain(`Claude Haiku 4.5`);
-    expect(host.textContent).toContain(`GPT 5.6 Luna`);
+    expect(host.textContent).toContain(`Not set`);
+    expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
+    expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
     expect(orderOnScreen(host)).toEqual([]);
 });
 
@@ -246,7 +249,7 @@ test("moving one earlier writes the whole new order back", async () => {
     expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [entry(`claude`, `claude-haiku-4-5`), entry(`codex`, `gpt-5.6`)] } });
 });
 
-test("removing the last one hands the choice back to Auto rather than leaving an empty control", async () => {
+test("removing the last one empties the list, which is how a job gets switched off", async () => {
     settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
     const host = mount();
     await Promise.resolve();
@@ -274,7 +277,7 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
  * that it behaves like its neighbours and writes its OWN list: a judge row that wrote the commit-message list
  * would silently re-point every commit message in the sandbox. */
 
-test("the judge row writes its own setting, never the quick list it falls back to", async () => {
+test("the judge row writes its own setting, never another job's", async () => {
     const host = mount();
     await Promise.resolve();
 
@@ -288,7 +291,7 @@ test("the judge row writes its own setting, never the quick list it falls back t
     expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[COMMIT]).toBeUndefined();
 });
 
-test("a pinned judge model is drawn as written, and removing it hands the job back to its own floor", async () => {
+test("a pinned judge model is drawn as written, and removing it empties its own list", async () => {
     settings.value = { ...settings.value, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
     const host = mount();
     await Promise.resolve();
@@ -298,17 +301,6 @@ test("a pinned judge model is drawn as written, and removing it hands the job ba
 
     rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
     expect(patch).toHaveBeenCalledWith({ modelRoles: { [JUDGE]: [] } });
-});
-
-// Every one-shot row names its own floor in full rather than as the word "Auto" alone: a verdict is billed to
-// one of these accounts, and which one is the fact the row exists to make readable.
-test("names its derived ladder as the judge's floor while nothing is pinned", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(settings.value.modelRoles[JUDGE]).toBeUndefined();
-    expect(host.textContent).toContain(`Auto`);
-    expect(host.textContent).toContain(`Claude Haiku 4.5`);
 });
 
 /* THE ONE ROW WHOSE FEATURE HAS AN OFF SWITCH SOMEWHERE ELSE. A control that goes dead with no explanation is
@@ -516,6 +508,149 @@ test("adding appends to the end of the order, and leaves every other job's list 
             [COMMIT]: [entry(`codex`, `gpt-5.6`)],
         },
     });
+});
+
+/* ═══ SETTING SEVERAL JOBS AT ONCE ═══
+ *
+ * THE COST OF ONE LIST PER JOB, PAID BACK. Seventeen true per-job settings are the right model and they made
+ * the commonest sentence anybody wants to say — "all of these, on this, at this tier" — seventeen trips
+ * through the same panel. What these tests pin is that the saving is real and that it is EXACT: one patch, the
+ * ticked jobs and no others, the model AND the tier, and the untouched jobs still standing afterwards. A bulk
+ * writer that quietly caught a neighbouring role would be invisible on screen and would re-point a job the
+ * owner never selected. */
+
+// A job's tick, by the row it belongs to. PrimeVue draws the box as a wrapper around a real checkbox input,
+// and the aria-label rides that input, which is also the thing a click has to land on.
+const tickBox = (host: HTMLElement, label: string): HTMLInputElement =>
+    [...host.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)].find((box) => box.getAttribute(`aria-label`) === label)!;
+
+const tick = (host: HTMLElement, label: string): void => {
+    const box = tickBox(host, label);
+    box.checked = true;
+    box.dispatchEvent(new Event(`change`, { bubbles: true }));
+};
+
+// The bar that appears over the page once anything is ticked, by the words on its buttons.
+const barButton = (host: HTMLElement, label: string): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>(`[aria-label="Selected jobs"] button`)].find((button) =>
+        button.textContent?.includes(label),
+    )!;
+
+test("no bar until something is ticked: a settings page has no standing toolbar", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.querySelector(`[aria-label="Selected jobs"]`)).toBeNull();
+
+    tick(host, `Select commit messages`);
+    await nextTick();
+
+    expect(host.querySelector(`[aria-label="Selected jobs"]`)).not.toBeNull();
+});
+
+test("one pick lands on every ticked job, in one patch, and leaves the rest alone", async () => {
+    // One job starts with a list of its own, so the write is visibly an ADD to what is there rather than a
+    // replacement: a bulk editor that flattened existing orders would silently drop the fallbacks somebody
+    // wrote by hand.
+    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select commit messages`);
+    tick(host, `Select pipeline fixes`);
+    await nextTick();
+    barButton(host, `Set a model for all`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith({
+        modelRoles: {
+            [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)],
+            [RUN]: [entry(`claude`, `claude-haiku-4-5`)],
+        },
+    });
+    // The job that was not ticked is not in the record at all, so nothing was written for it.
+    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[JUDGE]).toBeUndefined();
+});
+
+/* THE TIER IS THE OTHER HALF OF THE GESTURE, and it is why the bulk panel does not close on its pick the way
+ * every row's does. The picker only draws its knobs over an entry that exists (ModelPinPickerBody), so the
+ * model lands first and the panel stays up on it; the effort chosen next has to reach the SAME entry in every
+ * ticked job rather than joining it as a second one. */
+test("the tier chosen after the model reaches the same entry in every ticked job", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select commit messages`);
+    tick(host, `Select session titles`);
+    await nextTick();
+    barButton(host, `Set a model for all`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+    await flush();
+
+    // Still open, and now over the pin it just wrote, which is what puts the knobs on screen.
+    expect(host.querySelector(`.pin-picker`)).not.toBeNull();
+    expect(opened?.pin).toEqual(entry(`claude`, `claude-haiku-4-5`));
+
+    answer?.configure({ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` });
+
+    expect(patch).toHaveBeenLastCalledWith({
+        modelRoles: {
+            [COMMIT]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` }],
+            [`session-title`]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` }],
+        },
+    });
+});
+
+// A second model pick from the still-open panel is a RE-POINT of the entry it just wrote, not a second entry:
+// the user is correcting themselves, and leaving the abandoned model behind in every ticked job is the one
+// mistake this panel staying open makes possible.
+test("picking again supersedes the model the same panel just wrote", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select commit messages`);
+    await nextTick();
+    barButton(host, `Set a model for all`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+    answer?.pick({ provider: `codex`, model: `gpt-5.6` });
+
+    expect(patch).toHaveBeenLastCalledWith({ modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } });
+});
+
+test("clearing the ticked jobs empties their lists, which is how several jobs are switched off at once", async () => {
+    settings.value = {
+        ...settings.value,
+        modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] },
+    };
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select commit messages`);
+    await nextTick();
+    barButton(host, `Clear models`).click();
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] } });
+});
+
+test("the master box ticks every job on the page, and only the jobs", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    tick(host, `Select every job`);
+    await nextTick();
+    barButton(host, `Set a model for all`).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
+    expect(Object.keys(written).toSorted()).toEqual(MODEL_ROLES.map((role) => role.id).toSorted());
+    // Automatic tier is a setting rather than a job, so the master box may not reach it: it is not a role, and
+    // its list stores keys without knobs, which a pin written here would not be.
+    expect(patch.mock.calls.at(-1)?.[0]?.autoFastModels).toBeUndefined();
 });
 
 /* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second

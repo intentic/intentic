@@ -16,6 +16,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import type { JudgeFacts } from "../agent/command-judge.js";
+import { RoleModelUnsetError } from "../agent/role-model-unset.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";
@@ -400,6 +401,13 @@ const JUDGE_UNAVAILABLE = `The safety judge could not be reached, so this was de
  * what this does is worth more on the card than a line about the setting. */
 const JUDGE_OFF = `The safety judge is turned off, so this was decided by the standing rule alone.`;
 
+/* AND THE THIRD WAY TO END UP HERE WITHOUT A VERDICT: the judge is switched on, but no model is set for it
+ * (settings.modelRoles["safety-judge"] is empty). Nothing is derived for an empty list any more, so this is
+ * the state a sandbox is in until somebody names a model on Sandbox ▸ Agent ▸ Models — a choice, like `off`,
+ * rather than a fault, and it earns its own sentence for the same reason `off` does: sending a reader to look
+ * for a broken account when the row is simply empty costs them an afternoon. */
+const JUDGE_UNSET = `No model is set for the safety judge, so this was decided by the standing rule alone.`;
+
 export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     /* WHAT AN ANSWERED CARD REMEMBERS FOR THE REST OF THIS TURN, keyed by the program text itself.
      *
@@ -488,7 +496,12 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
             const verdict: SafetyVerdict =
                 options.judging === "off"
                     ? { decision: "allow", sentence: JUDGE_OFF }
-                    : await askJudge(program, facts).catch((): SafetyVerdict => ({ decision: "allow", sentence: JUDGE_UNAVAILABLE }));
+                    : await askJudge(program, facts).catch(
+                          (error: unknown): SafetyVerdict => ({
+                              decision: "allow",
+                              sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
+                          }),
+                      );
             /* WHAT IS ENFORCED, as opposed to what was said, and the two are the same thing at exactly one
              * setting. At `on` the verdict decides. At `off` and `watch` NOTHING the judge said decides: its
              * words are evidence for the log and never an instruction, or a mode called "watch" would be one

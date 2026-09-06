@@ -225,10 +225,11 @@ export const PersonaSchema = z.object({
 });
 export type Persona = z.infer<typeof PersonaSchema>;
 /* WHICH OF A CARD'S MODELS THIS SANDBOX CAN RUN, IN ORDER: the ladder filtered to connected providers and
- * deduplicated, the same walk a role list gets (model-pins.ts readyChain) minus the role's floor, because a
- * card has none. An absent ladder, or one whose every provider is disconnected, is empty here, and empty means
- * the caller's own answer rather than Auto: a card that says nothing about models has not asked for the cheap
- * one, it has left the question to whoever opened the chat. */
+ * deduplicated — exactly the walk a role list gets, and now the SAME CALL rather than a sibling of one
+ * (model-pins.ts readyChain). It used to be "that walk minus the role's floor"; there is no floor any more, so
+ * the two lists ask one question. An absent ladder, or one whose every provider is disconnected, is empty
+ * here, and empty means the caller's own answer: a card that says nothing about models has not asked for a
+ * cheap one, it has left the question to whoever opened the chat. */
 export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] => readyChain(sources, card.models ?? []);
 /* WHAT A NEW CHAT IS ROUTED ON, and what comes back. The composer asks once per settled draft on a chat that
  * has no turns and no persona pinned by hand (its personaRoute composable), and the sandbox answers with the

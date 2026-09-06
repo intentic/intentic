@@ -41,7 +41,7 @@ export interface FastTierInput {
 
 /* THE CHEAPER MODEL TO RUN THIS TURN ON, or undefined for "there isn't one, use their pick".
  *
- * A PIN IS TAKEN VERBATIM against the catalog, the same call resolveRoleModels makes and for the same reason:
+ * A PIN IS TAKEN VERBATIM against the catalog, the same call readyChain makes and for the same reason:
  * the model picker offers a custom-id escape hatch for a model the static catalog has not caught up with, and
  * second-guessing the id here would run a different model than the settings row names. It is still checked for
  * being CHEAPER, because that is not a fact about the catalog, it is a fact about the id, and a pin that is not

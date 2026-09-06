@@ -227,7 +227,8 @@ export const judgeCommand = async (
         /* `pins` is the owner's own list for the `safety-judge` role, read when the turn was PLANNED rather than
          * here, so the whole judgment — the policy and the model that reads it — is one snapshot: a turn cannot
          * end up judged by two different models because somebody was editing the row while it ran. An empty
-         * snapshot means the role is unpinned and the walk falls to its Auto ladder, exactly as a fresh read
+         * snapshot means no model is set for the judge, and the walk refuses on the spot (RoleModelUnsetError)
+         * rather than choosing one: the gates read that as the judge not running, exactly as a fresh read
          * would. */
         { pins: input.pins },
     );

@@ -61,7 +61,7 @@ test("a pin on this provider wins over the catalog's own cheap end", () => {
 });
 
 test("takes a pinned id verbatim, so a model the static catalog has not caught up with is still pinnable", () => {
-    // The same call resolveRoleModels makes, and for the same reason: the picker offers a custom-id escape
+    // The same call readyChain makes, and for the same reason: the picker offers a custom-id escape
     // hatch, and second-guessing the id here would run a different model than the settings row names.
     expect(fastFor(`claude-opus-5`, { pinned: [`claude:claude-haiku-9`] })).toBe(`claude-haiku-9`);
 });

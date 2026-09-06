@@ -31,6 +31,7 @@ vi.mock("./adapter-registry.js", async () => {
 });
 
 const { askRoleModel, REFUSED_FOR_MS } = await import("./role-model.js");
+const { RoleModelUnsetError } = await import("./role-model-unset.js");
 const { sentenceAnswer } = await import("./role-answer.js");
 
 /* WHAT THESE TESTS ASK FOR. Every ask carries the contract its reply is read against (role-answer.ts, which has
@@ -185,16 +186,17 @@ test("stops the moment the user cancels rather than spending the rest of the cha
     expect(oneShot).toHaveBeenCalledTimes(1);
 });
 
-test("falls through Auto's own ladder when nothing is pinned", async () => {
-    // Auto is an order too, so a sandbox with three accounts keeps its commit messages when the cheapest one is
-    // out: without anybody having opened the settings row. Auto's head on these catalogs is the Gemini row (the
-    // cheapest tier of the cheapest channel), which is why the refusal is armed on that road.
-    geminiOneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+/* NOTHING SET ⇒ NOTHING ASKED, and this is the claim the whole change rests on. An unset job used to fall
+ * through an Auto ladder derived from the connected accounts, so a sandbox nobody had configured spent one on
+ * every landing; the failure mode of putting that back is invisible from the settings page, because the row
+ * would look the same and the daemon would simply start billing again. So: no catalog read, no adapter asked,
+ * and an error a caller can recognise as the owner's own choice rather than a fault. */
+test("asks nothing at all when no model is set for the job", async () => {
+    await expect(askRoleModel(fakeServices([]), ROLE, DRAFT, signal())).rejects.toBeInstanceOf(RoleModelUnsetError);
 
-    const answer = await askRoleModel(fakeServices([]), ROLE, DRAFT, signal());
-
-    expect(answer.skipped).toHaveLength(1);
-    expect(answer.choice.provider).not.toBe(answer.skipped[0]?.choice.provider);
+    expect(oneShot).not.toHaveBeenCalled();
+    expect(geminiOneShot).not.toHaveBeenCalled();
+    expect(cursorOneShot).not.toHaveBeenCalled();
 });
 
 /* A ROLE'S OWN LIST IS THE WHOLE ANSWER, and the two tests that used to sit here pinned the opposite: an ASK
@@ -228,24 +230,31 @@ test("walks the pins a caller snapshotted instead of re-reading the role's list"
     expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
-/* AN EMPTY SNAPSHOT IS THE ROLE'S FLOOR, not "no models" and not a reason to go back to the settings file, and
- * the difference is visible exactly when the file has moved since the snapshot was taken — which is what this
- * sets up: `codex:gpt-5.6` is in settings for this role, and the walk still answers with the Auto ladder's
- * cheapest rung.
+/* AN EMPTY SNAPSHOT IS "NOTHING WAS SET WHEN THIS TURN WAS PLANNED", and it is NOT a reason to go back to the
+ * settings file — which is visible exactly when the file has moved since the snapshot was taken, as it has
+ * here: `codex:gpt-5.6` is in settings for this role, and the walk still refuses.
  *
  * That is the point of snapshotting rather than a wrinkle in it. A safety judge bound when the turn was planned
- * must stay bound: an owner pinning a model an hour into a long turn should see it on the NEXT turn, not have
- * the running one change judges underneath a policy it has already been applying. */
-test("falls back to the role's own Auto ladder when the snapshot handed in is empty", async () => {
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal(), { pins: [] });
+ * must stay bound: an owner setting a model an hour into a long turn should see it on the NEXT turn, not have
+ * the running one acquire a judge underneath a policy it has already been applying without one. */
+test("refuses on the snapshot it was handed rather than re-reading the role's list", async () => {
+    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal(), { pins: [] })).rejects.toBeInstanceOf(RoleModelUnsetError);
 
-    expect(answer.choice).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
+    expect(oneShot).not.toHaveBeenCalled();
 });
 
-test("says the sandbox has no account rather than failing on a model call", async () => {
+/* THE OTHER WAY TO AN EMPTY CHAIN, and the reason it is worth telling from the one above: here the owner DID
+ * set models and the accounts behind them have gone, which is a fault to report rather than a job they
+ * switched off. Same outcome for the walk, different sentence, and every caller that stays quiet about an
+ * unset job still reports this one. */
+test("says the job's accounts have gone rather than failing on a model call", async () => {
     ready.mockResolvedValue({ claude: false, gemini: false, codex: false });
 
-    await expect(askRoleModel(fakeServices([`claude:claude-haiku-4-5`]), ROLE, DRAFT, signal())).rejects.toThrow(/No AI account is connected/);
+    const thrown = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`]), ROLE, DRAFT, signal()).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).not.toBeInstanceOf(RoleModelUnsetError);
+    expect((thrown as Error).message).toMatch(/no longer has/);
     expect(oneShot).not.toHaveBeenCalled();
 });
 

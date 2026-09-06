@@ -5,7 +5,10 @@ import type { Services } from "../composition.js";
 import { describeLanding } from "./landed-subject.js";
 
 const ask = vi.fn<() => Promise<{ value: { subject: string; note: string; breaking: string } }>>();
-vi.mock("../agent/role-model.js", () => ({ askRoleModel: () => ask() }));
+// Whether the owner has set a model for commit messages. The walk itself refuses an unset job, but this
+// function has to know BEFORE it opens a report — see the test at the foot of this file.
+const modelSet = vi.fn<() => boolean>(() => true);
+vi.mock("../agent/role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
 vi.mock("../git/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
 
 /* WHAT A USER IS TOLD WHILE THE SENTENCE IS BEING WRITTEN, AND IN WHAT ORDER: the only part of a landing
@@ -54,7 +57,21 @@ const servicesWith = (): Services =>
 
 beforeEach(() => {
     ask.mockReset();
+    modelSet.mockReturnValue(true);
     steps.length = 0;
+});
+
+/* NO MODEL SET FOR COMMIT MESSAGES ⇒ NO REPORT AT ALL, which is a stronger claim than "no sentence" and the
+ * reason the check is made before the report opens rather than caught after it. An empty list is the owner
+ * switching this off; a landing that opened a "writing…" chip and ended it `failed` would put a red line on
+ * every land they made, about a decision they took on purpose. Nothing is published and nothing is asked. */
+test("writes nothing and opens no report when no model is set for commit messages", async () => {
+    modelSet.mockReturnValue(false);
+
+    await describeLanding(servicesWith(), "c1");
+
+    expect(steps).toEqual([]);
+    expect(ask).not.toHaveBeenCalled();
 });
 
 test("opens the report at the land, writes the sentence, and only then says the draft ended", async () => {
@@ -66,12 +83,14 @@ test("opens the report at the land, writes the sentence, and only then says the 
 /* EVERY OTHER ROAD OUT OF THE MODEL CALL ENDS THE REPORT TOO, or a chip keeps saying "writing…" about a call that
  * ended minutes ago, and it ends `failed` with nothing written, which is the honest answer.
  *
- * All of them arrive as a throw now: nothing connected, a chain spent to the bottom, and a chain that answered
- * but never with a subject (a tool-call stand-in, a question back, its provider's own refusal as prose). That
- * last one used to be checked here, after the walk was over, which meant one misbehaving rung ended the landing
- * while working accounts below it went unasked. The ask decides it now (role-answer.ts). */
+ * All of them arrive as a throw: every account the job named being gone, a chain spent to the bottom, and a
+ * chain that answered but never with a subject (a tool-call stand-in, a question back, its provider's own
+ * refusal as prose). That last one used to be checked here, after the walk was over, which meant one
+ * misbehaving rung ended the landing while working accounts below it went unasked. The ask decides it now
+ * (role-answer.ts). The one road that does NOT come through here is the job being unset, which never opens a
+ * report at all — see above. */
 test.each([
-    ["nothing connected", "no helper model connected"],
+    ["every account the job named being gone", "every model set for this job names an account this sandbox no longer has"],
     ["a rung that wrote a tool call", "gemini-3.5-flash: wrote a tool call instead of a commit subject"],
 ])("%s ends the report as failed, with nothing written", async (_case, message) => {
     ask.mockRejectedValue(new Error(message));

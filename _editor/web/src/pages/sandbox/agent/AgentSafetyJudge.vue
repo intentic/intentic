@@ -42,12 +42,15 @@ const MODES = [
 const mode = computed(() => settings.value?.commandJudge ?? `on`);
 
 /* WHAT WILL ACTUALLY READ THE POLICY, in the order it will be walked: the RESOLVED chain for the `safety-judge`
- * role, which is the owner's own list where they have written one and the derived cheapest-connected ladder
- * where they have not. One line either way, so the row reads the same whether or not they have been to Models.
+ * role, which is the owner's own list minus any entry whose account has gone.
  *
- * The resolved chain rather than the stored setting, and named in full rather than as "Auto", because the
- * distinction a reader needs here is not "pinned versus derived" — it is which model is about to read their
- * policy and whose account pays for the verdict. */
+ * The resolved chain rather than the stored setting, because the distinction a reader needs here is not what is
+ * written down — it is which model is about to read their policy and whose account pays for the verdict.
+ *
+ * EMPTY IS A REAL AND COMMON STATE now that nothing is derived for an unset job: the judge can be switched on
+ * and still have no model, in which case it does not run and the standing rule alone decides. That is the one
+ * thing a reader of this policy most needs to be told, so the row says it rather than describing a ladder this
+ * app picked. */
 const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(modelChoiceLabel));
 </script>
 
@@ -114,8 +117,13 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     <p v-else-if="judgeChain.length > 0" class="text-2xs text-muted">
                         <span class="text-content">Judged by</span>: {{ judgeChain.join(`, then `) }}.
                     </p>
-                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                        No AI account is connected, so nothing can judge a command. Every flagged one falls back to the standing rule alone.
+                    <!-- SWITCHED ON WITH NOTHING TO RUN, which is what the row says instead of naming a model
+                         this app chose. Nothing is derived for an empty list any more, so the judge is on and
+                         inert until somebody sets one — a state that has to be readable from here, since this
+                         is the page where the policy it would read is being written. -->
+                    <p v-else-if="settings !== undefined" class="text-2xs text-warning">
+                        <span class="font-medium">No model is set for the judge</span>, so nothing reads your policy and every flagged command falls back
+                        to the standing rule alone. Set one in Models.
                     </p>
 
                     <!-- The one thing worth saying about the choice, said where the choice is being weighed

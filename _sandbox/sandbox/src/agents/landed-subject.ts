@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract";
 import { type RoleAnswer, sentenceReason } from "../agent/role-answer.js";
-import { askRoleModel, type RoleModelAttempt } from "../agent/role-model.js";
+import { askRoleModel, type RoleModelAttempt, roleModelIsSet } from "../agent/role-model.js";
 import type { Services } from "../composition.js";
 import {
     cleanBreakingNote,
@@ -98,6 +98,18 @@ const messageAnswer = (wantsNote: boolean): RoleAnswer<DraftedMessage> => ({
     unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, SUBJECT_MAX_WORDS),
 });
 
+/* WHICH BREAKING SENTENCE THIS COMMIT CARRIES, if any.
+ *
+ * It rides the changelog gate ONLY while nothing was detected: a detected shrink keeps its sentence on every
+ * repo, changelog or not, because the declaration is what the push gate reads from the range
+ * (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none. */
+const breakingNote = (removed: readonly string[], written: string, wantsNote: boolean): string => {
+    if (removed.length > 0) {
+        return written === `` ? fallbackBreakingNote(removed) : written;
+    }
+    return wantsNote ? written : ``;
+};
+
 // One rung of the walk, restated as the report's own step, the same fact, in the contract's shape.
 const step = (attempt: RoleModelAttempt): LandedMessageStep => ({
     provider: attempt.choice.provider,
@@ -117,6 +129,14 @@ const step = (attempt: RoleModelAttempt): LandedMessageStep => ({
 export const describeLanding = async (services: Services, id: string): Promise<void> => {
     const entry = services.agents.entry(id);
     if (entry === undefined) {
+        return;
+    }
+    /* NO MODEL SET FOR COMMIT MESSAGES ⇒ NO REPORT AT ALL, and this is why it is asked here rather than caught
+     * below. The walk refuses an unset job (RoleModelUnsetError), but by then this function has already put a
+     * "writing…" chip on the card, so catching it would end that chip with a failure the owner chose — a red
+     * line on every landing for a feature they switched off by leaving the row empty. Asked first, nothing is
+     * published and a landing simply carries no drafted subject. */
+    if (!(await roleModelIsSet(services, `commit-message`))) {
         return;
     }
     /* THE REPORT OPENS WITH THE WORK, not with the model call, "the draft has started" is the first fact the
@@ -184,13 +204,8 @@ export const describeLanding = async (services: Services, id: string): Promise<v
          * prose, or a question back, or a tool-call stand-in, ended the landing with an empty box while three
          * working accounts sat below it unasked. The ask carries that judgment now (see messageAnswer), so
          * reaching this line means some model wrote a usable subject, and a chain where none did arrives at the
-         * catch below with each model's own words in the reason.
-         *
-         * The breaking sentence rides the note's gate ONLY while nothing was detected: a detected shrink keeps
-         * its sentence on every repo, changelog or not, because the declaration is what the push gate reads from
-         * the range (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none. */
-        const breaking =
-            removed.length > 0 ? (value.breaking === `` ? fallbackBreakingNote(removed) : value.breaking) : wantsNote ? value.breaking : ``;
+         * catch below with each model's own words in the reason. */
+        const breaking = breakingNote(removed, value.breaking, wantsNote);
         // Broadcasts as it writes, which is what puts the sentence in the commit box of a panel that is already
         // open with this agent's chip lit, no request, no rescan, no second thing that has to go right.
         await services.agents.setLandedSubject(id, {

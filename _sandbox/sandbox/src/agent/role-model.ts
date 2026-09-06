@@ -8,7 +8,7 @@ import {
     type ModelSource,
     NATIVE_PROVIDERS,
     type NativeProvider,
-    resolveRoleModels,
+    readyChain,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { endpointConfigOf } from "../endpoints/local-model.js";
@@ -17,6 +17,7 @@ import { adapterFor } from "./adapter-registry.js";
 import { harnessReadyProviders } from "./harness-credentials.js";
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "./role-answer.js";
 import { rungLimit, spentRung } from "./role-model-quota.js";
+import { RoleModelUnsetError } from "./role-model-unset.js";
 
 /* WHAT A ONE-SHOT HELPER ROLE ACTUALLY RUNS ON, resolved against what this sandbox has connected, the daemon
  * half of the rule in the contract's model-pins.ts. The contract owns the ORDER (which of the available models
@@ -81,6 +82,17 @@ const modelSources = async (services: Services): Promise<ModelSource[]> => {
     ]);
     return [...native, ...endpoints];
 };
+
+/* Whether this job has anything to run at all, for a caller that must not so much as start. The two that must
+ * stay quiet ask this first and never begin the walk (a landing that would publish a "writing…" chip, a title
+ * pass whose every throw is a warning in the log). The safety gates ask anyway and catch the refusal, because
+ * an unjudged command is the same outcome whichever way the judge came to be unavailable.
+ *
+ * It reads the
+ * STORED list rather than the resolved chain, deliberately: a list whose accounts have gone is a job the owner
+ * did configure, and it earns the walk, the refusal and the sentence that names what happened. */
+export const roleModelIsSet = async (services: Services, role: ModelRole): Promise<boolean> =>
+    ((await services.sandboxSettings.get()).modelRoles[role] ?? []).length > 0;
 
 // A model that was asked and did not answer, with the sentence it refused in. Carried out of here rather than
 // logged and dropped: a helper that quietly ran on the user's second-choice account owes them the reason, and
@@ -274,14 +286,18 @@ export const askRoleModel = async <T>(
      * once at module scope by most callers because it holds no state. The role is WHOSE budget answers it, which
      * is the caller's own identity and is read from settings per call.
      *
-     * An empty or absent list is the role's floor rather than "no models", because that is the shape a list
-     * ships in and the row that edits one has to be emptiable back to it. resolveRoleModels applies the floor a
-     * `helper` role declares (the Auto ladder), so a pinned provider that has been disconnected degrades to Auto
-     * exactly as it does everywhere else instead of failing on a dead credential. */
+     * AN EMPTY LIST IS THE JOB SWITCHED OFF, refused before a single catalog is read. It used to be the shape
+     * that fell to a derived Auto ladder, so a sandbox nobody had configured spent an account on every commit
+     * subject and every session title by default; now the owner names the models or the job does not run. The
+     * refusal is its own error class because that is not a failure to report — every caller has a road for it
+     * (`roleModelIsSet` below is how the two that must stay silent avoid asking at all). */
     const pinned = options.pins ?? (await services.sandboxSettings.get()).modelRoles[role] ?? [];
-    const chain = resolveRoleModels(await modelSources(services), pinned, role);
+    if (pinned.length === 0) {
+        throw new RoleModelUnsetError(role);
+    }
+    const chain = readyChain(await modelSources(services), pinned);
     if (chain.length === 0) {
-        throw new Error(`No AI account is connected to this sandbox: connect one in Sandbox ▸ Agent first.`);
+        throw new Error(`Every model set for this job names an account this sandbox no longer has: set one in Sandbox ▸ Agent ▸ Models.`);
     }
     /* The walk as it stands, re-told whole after every beat. Wrapped so a listener that throws is the
      * listener's problem: this function's job is the answer, and the report may never cost the user the
