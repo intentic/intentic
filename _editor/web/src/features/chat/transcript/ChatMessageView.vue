@@ -12,7 +12,6 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../drafts/questionDraft";
 import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../agents/fleet/agentStatus";
-import { formatCredits } from "../../settings/membership/creditMeter";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { type ChatMessage, foldsIntoTurn } from "./transcript";
@@ -63,7 +62,6 @@ const {
     answerQuestion,
     cancelQuestion,
     decidePermission,
-    decideServiceOffer,
     decideCapabilityOffer,
     decidePaymentOffer,
     decideCredentialOffer,
@@ -276,22 +274,6 @@ const permissionTitle = computed(() => {
  * why it existed, asserting something the judge never said. What triage matched is still marked inside the
  * command itself, where it reads as "these are the fragments a pattern noticed" rather than as a cause. */
 const commandOpen = ref(false);
-
-// The approved run's latest status line off the provider's stream: what the card shows living while the
-// receipt is still pending. Newest wins: a status line is a spinner label, not a log.
-const serviceStatus = computed(() => {
-    const offer = props.message.serviceOffer;
-    if (offer === undefined || offer.receipt !== undefined) {
-        return undefined;
-    }
-    for (let i = (offer.events?.length ?? 0) - 1; i >= 0; i -= 1) {
-        const event = offer.events?.[i];
-        if (event?.event === `status`) {
-            return event.text;
-        }
-    }
-    return undefined;
-});
 
 // Keep the status line visible for the whole live turn, not just before the first token. The model streams a
 // preamble sentence and then goes quiet while it runs tools and thinks: text is present but the turn isn't
@@ -1392,71 +1374,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)"
                         >Can't help now</ChatDecisionButton
-                    >
-                </template>
-            </ChatCard>
-
-            <!-- A priced service run asking for the owner's click: the product's spend gate. Every number on
-                 it is the platform's (relayed through the daemon's offer card, never typed by the model); the
-                 agent's own words are the one `why` line. The click here is the ONLY way the run can happen:
-                 the agent's command sits parked on the daemon until this card settles it. -->
-            <ChatCard
-                v-if="message.serviceOffer"
-                icon="star"
-                :title="`Run ${message.serviceOffer.offer.name}?`"
-                :status="offerStatus(message.serviceOffer)"
-            >
-                <div class="chat-card-body flex flex-col gap-1">
-                    <span class="text-xs text-content/85">{{ message.serviceOffer.offer.description }}</span>
-                    <span class="font-mono text-2xs text-subtle"
-                        >{{ message.serviceOffer.offer.slug }} · by {{ message.serviceOffer.offer.publisher }}</span
-                    >
-                    <span v-if="message.serviceOffer.offer.why" class="text-2xs text-subtle"
-                        >The agent's case: {{ message.serviceOffer.offer.why }}</span
-                    >
-                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.serviceOffer.offer.request"
-                        >Request: {{ message.serviceOffer.offer.request }}</span
-                    >
-                    <span class="pt-1 font-mono text-xs text-content">
-                        {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits per run<template
-                            v-if="message.serviceOffer.offer.credits"
-                        >
-                            · {{ formatCredits(message.serviceOffer.offer.credits.remaining) }} of
-                            {{ formatCredits(message.serviceOffer.offer.credits.allowance) }} left today</template
-                        >
-                    </span>
-                </div>
-
-                <!-- The run living: the provider's own status line, streamed through the platform while the
-                     answer is composed: the paid seconds visible instead of a spinner of unknowable length. -->
-                <div v-if="serviceStatus" class="chat-card-row flex items-center gap-2">
-                    <Icon name="spinner" class="text-2xs text-link" spin />
-                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ serviceStatus }}</span>
-                </div>
-
-                <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the
-                     two ways it ended free: a refunded no-answer, a refusal that raced the allowance. -->
-                <div v-if="message.serviceOffer.receipt" class="chat-card-row">
-                    <span v-if="message.serviceOffer.receipt.outcome === 'ok'" class="font-mono text-2xs text-muted"
-                        >Served · {{ formatCredits(message.serviceOffer.receipt.credits) }} credits<template
-                            v-if="message.serviceOffer.receipt.remaining !== undefined"
-                        >
-                            · {{ formatCredits(message.serviceOffer.receipt.remaining) }} left today</template
-                        ></span
-                    >
-                    <span v-else-if="message.serviceOffer.receipt.outcome === 'refunded'" class="text-2xs text-muted"
-                        >The service didn't answer: refunded, nothing charged.</span
-                    >
-                    <span v-else class="text-2xs text-muted">The platform refused the run after all: nothing charged.</span>
-                </div>
-
-                <template v-if="message.serviceOffer.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decideServiceOffer(message, true)"
-                        >Run: {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
-                    >
-                    <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideServiceOffer(message, false)"
-                        >Skip: free</ChatDecisionButton
                     >
                 </template>
             </ChatCard>

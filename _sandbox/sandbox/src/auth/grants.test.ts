@@ -24,16 +24,6 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await verdict(agent, "agent", "GET", "/vpn")).toBe("ok");
     expect(await verdict(agent, "agent", "POST", "/vpn/office/connect")).toBe("ok");
     expect(await verdict(agent, "agent", "GET", "/capabilities/npm/otp")).toBe("ok");
-    // The services CLI's three routes: the priced catalog, one metered run (spend bounded platform-side),
-    // and a note onto the wanted list (no spend at all).
-    expect(await verdict(agent, "agent", "GET", "/pool/services")).toBe("ok");
-    expect(await verdict(agent, "agent", "POST", "/pool/services/demo-research/run")).toBe("ok");
-    expect(await verdict(agent, "agent", "POST", "/pool/wanted")).toBe("ok");
-    // But never the daemon's other pool surfaces, and never a shape the run glob doesn't spell.
-    expect(await verdict(agent, "agent", "POST", "/pool/services")).toBe("out-of-scope");
-    expect(await verdict(agent, "agent", "GET", "/pool/wanted")).toBe("out-of-scope");
-    expect(await verdict(agent, "agent", "GET", "/pool/services/demo-research/run")).toBe("out-of-scope");
-    expect(await verdict(agent, "agent", "POST", "/pool/services/a/b/run")).toBe("out-of-scope");
     // The routes a code-minting token must never buy: the manifest, a capability's config, the secrets page.
     expect(await verdict(agent, "agent", "GET", "/capabilities")).toBe("out-of-scope");
     expect(await verdict(agent, "agent", "GET", "/capabilities/npm/status")).toBe("out-of-scope");

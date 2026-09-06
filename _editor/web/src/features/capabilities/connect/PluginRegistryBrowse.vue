@@ -16,23 +16,10 @@ import { BrandMark, Button, type NoticeModel, RowGroup, RowNote, ui } from "@int
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "./useCapabilities";
-import { formatCredits } from "../../settings/membership/creditMeter";
-import { useMembership } from "../../settings/membership/useMembership";
 import { checksOk, checksProblem } from "../../sandbox/extensions/discoverListing";
 
 /** What this card installs: the rows of any other kind are not its to offer. */
 const props = defineProps<{ kind: CapabilityKind }>();
-
-/* A premium row's price, from the platform rather than from a sentence typed here: the same figure the
- * extension catalogue quotes, since it is the same donation. This card only PRE-FILLS the install form, so the
- * spend is still a step away; naming the number here is what stops it being a surprise at the end of it. */
-const { donationCredits } = useMembership();
-
-const premiumHint = computed(() =>
-    donationCredits.value > 0
-        ? `Premium: installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month`
-        : `Premium, needs an intentic membership; installing donates credits to its creator`,
-);
 
 const emit = defineEmits<{
     /** A row's install coordinates, ready for the form. */
@@ -125,14 +112,6 @@ const pick = (entry: RegistryEntry): void => {
                          too would dress the honest default up as a review. -->
                         <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
                         <span class="font-medium text-content">{{ entry.name }}</span>
-                        <!-- The price, before the click: a premium row needs a membership to install, and its
-                         retained use is what pays its creator from the pool. -->
-                        <span
-                            v-if="entry.tier === 'premium'"
-                            class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                            v-tooltip.top="premiumHint"
-                            >Premium</span
-                        >
                         <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
                         <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned commit and found
                          (or didn't) a thing that loads. Silent when there are no checks at all: absence of

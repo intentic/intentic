@@ -36,7 +36,7 @@ const config = (over?: Record<string, unknown>): Config =>
             idleWarnDays: 14,
             poolSize: 1,
         },
-        pool: { compEmails: `` },
+        hostedPlan: { compEmails: `` },
         ...over,
     }) as unknown as Config;
 
@@ -46,7 +46,7 @@ const config = (over?: Record<string, unknown>): Config =>
  * omitted them would fail those tests for a reason none of them are about. */
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({
-        membership: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
         // The claim's transactional hand-off: the stub just settles what the model calls already returned.
         $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
@@ -704,7 +704,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
         const member = fakePrisma({
             hostedMachine: { count: vi.fn().mockResolvedValue(0) },
-            membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,
@@ -745,7 +745,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                     .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
             },
             hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
-            membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
         });
         expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spentMember }) })).toEqual({ ok: true });
     });

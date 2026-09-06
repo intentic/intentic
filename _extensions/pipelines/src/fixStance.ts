@@ -74,11 +74,10 @@ const needsYou = (label: string, hint: string): FixStance => ({
     hint,
 });
 
-// Parked on a person, in the order the fleet ranks the same flags: money and setup outrank a plain question,
-// because those are the ones where waiting costs the agent its call or blocks it outright.
+// Parked on a person, in the order the fleet ranks the same flags: setup outranks a plain question, because
+// it is the one where waiting blocks the agent outright.
 const ATTENTION: readonly { readonly flag: keyof AgentSummary["attention"]; readonly label: string; readonly why: string }[] = [
     { flag: `plan`, label: `Approval needed`, why: `it has proposed a plan and is waiting for a yes` },
-    { flag: `service`, label: `Spend approval`, why: `it wants to spend on a paid service` },
     { flag: `capability`, label: `Setup needed`, why: `it needs something connected that is not connected yet` },
     { flag: `question`, label: `Question for you`, why: `it has asked you something` },
     { flag: `permission`, label: `Permission needed`, why: `it wants to use a tool it needs permission for` },

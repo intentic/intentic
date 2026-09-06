@@ -63,7 +63,7 @@ import { resetAgents, useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { setAgents } from "../fleet/useAgents-registry";
 
-const none = { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false };
+const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 const agent = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
     id,
     status: `idle`,

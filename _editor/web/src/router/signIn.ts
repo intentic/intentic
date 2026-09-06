@@ -11,7 +11,7 @@ import type { RouteLocationRaw } from "vue-router";
  * the state and challenge tying it to a desktop app waiting on a deep link. Losing them leaves the browser in
  * a signed-in workspace and the app still sitting on its own sign-in screen, with nothing to tell it
  * otherwise. (That page resolves its own session now and never comes through here, but the class of bug is
- * the same one the MCP flow already routes around with its own /connect page.) */
+ * the same one.) */
 export const signInAt = (fullPath: string): RouteLocationRaw =>
     fullPath === `/` || fullPath.startsWith(`/login`) ? `/login` : { path: `/login`, query: { returnTo: fullPath } };
 

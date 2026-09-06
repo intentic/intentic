@@ -8,7 +8,7 @@ description: What Intentic is and how this sandbox works. Load it BEFORE answeri
 Intentic is a per-workspace AI-agent development environment. This container is its **sandbox**: a daemon
 (`@intentic/sandbox`, image `ghcr.io/intentic/sandbox`, installed under `/opt/sandbox`) that serves one
 workspace, `/work`, on the owner's own host or a machine they chose. The owner drives it from a browser
-**editor**; a hosted **platform** handles sign-in, capabilities and paid services. You are one **agent turn**
+**editor**; a hosted **platform** handles sign-in, capabilities and the hosted plan. You are one **agent turn**
 the daemon is running.
 
 What the daemon does around you:
@@ -63,8 +63,7 @@ description of the product, and it may describe a project that has nothing to do
 | a service, account, device, database or Docker this sandbox is not connected to | `capabilities` skill: `capabilities list`, then `capabilities request <card> --why …` |
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: propose overlay Dockerfile steps the owner approves |
 | a repo they can open, run and preview from the sidebar | `panels` skill: give the repo an `operator/` web app |
-| a heavy or premium capability (research, data, compute) | `services` skill: the `services` CLI; the owner approves the spend on a card |
-| to pay an x402 endpoint, or to sell their own API as a paid service | `wallet` skill, `provide` skill |
+| to pay an x402 endpoint | `wallet` skill: the `wallet` CLI; the owner approves each payment outside their auto-approve band |
 | a post on X, Reddit, Discord, YouTube… prepared rather than sent | `drafts` skill (present when the drafts extension is on) |
 | to act as one of the sandbox's signed-in accounts on a site | `mcp__accounts__roster`, then `ToolSearch` `+mcp__browser__`; the account's own skill holds the site's cheatsheet |
 | to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn |

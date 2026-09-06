@@ -11,7 +11,6 @@ const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
     kind: `extension`,
     trust: `listed`,
     admitted: true,
-    tier: `free`,
     install: { url: `https://github.com/radarsu/intentic-paperwork.git`, ref: SHA },
     ...over,
 });

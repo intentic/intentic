@@ -5,7 +5,7 @@ import { RateLimitInfoSchema } from "../schemas/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/fast-mode.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
-import { AgentCommandSchema, browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionCardSchema, PlanCardSchema, QuestionCardSchema, serviceOfferCard, ServiceReceiptSchema, ServiceStreamEventSchema, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
+import { AgentCommandSchema, browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionCardSchema, PlanCardSchema, QuestionCardSchema, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 
 /* EVERY FRAME AN AGENT TURN STREAMS, as one `kind`-discriminated union, plus the two views of it the readers
@@ -335,27 +335,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The agent's TERMINAL needs a person (see terminalHelpCard). Not journalled for restore, and for the
     // browser card's reason one door along: the pane holding the prompt belongs to a process the restart kills.
     z.object({ kind: z.literal("terminal_help"), ...terminalHelpCard }),
-    /* A premium service run awaiting the owner's click. Raised OUTSIDE the turn generator, the daemon's
-     * services route parks the agent's own `services run` call and pushes this frame into the live run
-     * (platform/service-offer.ts), so unlike the four cards above it is not journalled for restore: its
-     * waiter is the CLI's held connection, which dies with the daemon, and a restored card would offer
-     * buttons nothing is waiting behind. Settles through the same `POST /agent/reply` as every other card. */
-    z.object({ kind: z.literal("service_offer"), ...serviceOfferCard }),
-    /* One event off an approved run's stream, pushed as the provider emits it so the settled card shows the
-     * run living rather than a spinner of unknowable length. Today that is `status` lines; `result` stays off
-     * the transcript on purpose (it is the agent's answer to act on, not the card's to duplicate), the frame
-     * carries the whole union so richer event kinds land here without a contract break. */
-    z.object({ kind: z.literal("service_event"), requestId: z.string(), event: ServiceStreamEventSchema }),
-    /* How an approved run ended, pushed after the platform answered so the card can settle as a receipt
-     * rather than a promise: `ok` served and charged, `refunded` failed to answer and charged nothing,
-     * `refused` the platform said no after the click (a raced-out allowance). `remaining` is the meter after,
-     * when the platform stated one. Skip needs no receipt, nothing happened, and `resolved` already says so. */
-    ServiceReceiptSchema.extend({ kind: z.literal("service_receipt"), requestId: z.string() }),
     /* A missing capability asking for the owner's setup, the agent hit something this sandbox is not
      * connected to and raised the card instead of describing manual steps. Raised OUTSIDE the turn generator
-     * exactly like the service offer above (the daemon's ask route parks the agent's `capabilities request`
-     * call and pushes this frame into the live run; capabilities/capability-offer.ts), so it is not
-     * journalled for restore either: its waiter is the CLI's held connection, which dies with the daemon.
+     * (the daemon's ask route parks the agent's `capabilities request` call and pushes this frame into the
+     * live run; capabilities/capability-offer.ts), so unlike the cards above it is not journalled for
+     * restore: its waiter is the CLI's held connection, which dies with the daemon, and a restored card would
+     * offer buttons nothing is waiting behind.
      * Settles through the same `POST /agent/reply` as every other card. */
     z.object({ kind: z.literal("capability_offer"), ...capabilityOfferCard }),
     /* How an accepted ask ended, pushed once the daemon stops watching for the connection: `connected`, the

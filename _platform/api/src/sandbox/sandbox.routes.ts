@@ -124,7 +124,7 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
     const budget = await hostedBudgetOf(context.prisma, context.config, userId);
     if (budget.metered && budget.remainingMinutes === 0) {
         throw new ORPCError(`PAYMENT_REQUIRED`, {
-            message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, a membership lifts the limit, or run it on a machine of your own and it never applies`,
+            message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, the hosted plan lifts the limit, or run it on a machine of your own and it never applies`,
         });
     }
 };
@@ -300,7 +300,7 @@ export const sandboxRoutes = {
         }
         const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
         // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it, and
-        // is omitted entirely for the unmetered (members, ceiling-less platforms), a limit that does not
+        // is omitted entirely for the unmetered (the hosted plan, ceiling-less platforms), a limit that does not
         // apply to you should not appear on your screen at all.
         const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
         return {
@@ -510,7 +510,7 @@ export const sandboxRoutes = {
      * token: an agent can draft and wait for the owner, and that is all. The content arrives with the hash the
      * owner approved and is re-hashed there; every refusal is answered before anything is spent, in the code
      * the card can act on: a limit is TOO_MANY_REQUESTS, spent hours PAYMENT_REQUIRED (the same word the wake
-     * gate uses, so the editor offers the membership the same way), a changed overlay CONFLICT (re-read and
+     * gate uses, so the editor offers the hosted plan the same way), a changed overlay CONFLICT (re-read and
      * approve again, exactly as `ic` says on a docker host). */
     hostedRebuild: os.sandbox.hostedRebuild.handler(async ({ context, input }) => {
         const user = requireUser(context);
@@ -573,7 +573,7 @@ export const sandboxRoutes = {
         if (budget.metered && budget.remainingMinutes === 0) {
             // Addressed to the person reading it, which on a shared sandbox may not be the account that spent
             // the hours, hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
-            // the membership without string-matching a message.
+            // the hosted plan without string-matching a message.
             throw new ORPCError(`PAYMENT_REQUIRED`, {
                 message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
             });

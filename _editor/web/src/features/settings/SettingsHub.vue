@@ -3,15 +3,13 @@ import type { NavGroup } from "@intentic/ui";
 import HubLayout from "../../shell/hub/HubLayout.vue";
 import type { HubTab } from "../../shell/hub/hubNav";
 import { computed } from "vue";
-import { useMembership } from "./membership/useMembership";
+import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import SettingsAppearance from "./SettingsAppearance.vue";
 import SettingsData from "./SettingsData.vue";
 import SettingsKeybindings from "./SettingsKeybindings.vue";
-import SettingsMembership from "./SettingsMembership.vue";
+import SettingsHosted from "./SettingsHosted.vue";
 import SettingsNotifications from "./SettingsNotifications.vue";
-import SettingsPayouts from "./SettingsPayouts.vue";
 import SettingsProfile from "./SettingsProfile.vue";
-import SettingsServices from "./SettingsServices.vue";
 
 /* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Built on the
  * same <HubLayout> as the sandbox hub: the symmetry was the point when both were tab strips, and it is more of
@@ -25,30 +23,17 @@ import SettingsServices from "./SettingsServices.vue";
  *
  * Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
 
-/* Membership only exists on a platform that sells one (the pool is off by default, and self-hosted platforms
- * keep it off), and the tab appears when the answer is yes. Until the answer lands the tab is simply absent,
- * which is also the right rendering for a platform where it will never land: a failed read costs nothing but
- * the row.
- *
- * Payouts ride the SAME answer rather than a second probe: both sides of the pool are switched on by the same
- * platform configuration, so a second round-trip could only ever agree with this one.
- *
- * Read through the app's shared membership entry, so opening Settings from the account menu, which is already
- * showing this account's credit balance from that same entry: costs no further round-trip. */
-const { offered: membershipOffered } = useMembership();
+/* The hosted plan only exists on a platform that sells one (off by default, and self-hosted platforms keep it
+ * off), and the tab appears when the answer is yes. Until the answer lands the tab is simply absent, which is
+ * also the right rendering for a platform where it will never land: a failed read costs nothing but the row. */
+const { offered: planOffered } = useHostedPlan();
 
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
     {
         key: `settings`,
         items: [
             { slug: `profile`, label: `Profile`, icon: `user` },
-            ...(membershipOffered.value
-                ? ([
-                      { slug: `membership`, label: `Membership`, icon: `star` },
-                      { slug: `payouts`, label: `Getting paid`, icon: `credit-card` },
-                      { slug: `services`, label: `Offer a service`, icon: `bolt` },
-                  ] as const)
-                : []),
+            ...(planOffered.value ? ([{ slug: `hosted`, label: `Hosted`, icon: `star` }] as const) : []),
             { slug: `appearance`, label: `Appearance`, icon: `palette` },
             { slug: `notifications`, label: `Notifications`, icon: `volume-up` },
             { slug: `keybindings`, label: `Keybindings`, icon: `bolt` },
@@ -68,9 +53,7 @@ const DEFAULT = `profile`;
     >
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
-            <SettingsMembership v-else-if="slug === `membership`" />
-            <SettingsPayouts v-else-if="slug === `payouts`" />
-            <SettingsServices v-else-if="slug === `services`" />
+            <SettingsHosted v-else-if="slug === `hosted`" />
             <SettingsAppearance v-else-if="slug === `appearance`" />
             <SettingsNotifications v-else-if="slug === `notifications`" />
             <SettingsKeybindings v-else-if="slug === `keybindings`" />

@@ -1,5 +1,5 @@
 import { comparePages, compareHref } from "./compare";
-import { developersDestinations, developersServicesDestination } from "./developers";
+import { developersDestinations } from "./developers";
 import { docsDestinations, docsHref } from "./docs";
 import { guidePages, guidesHref } from "./guides";
 import type { ShotImage } from "./landing";
@@ -161,19 +161,18 @@ export const navEntries: NavEntry[] = [
         ],
         action: { label: "The blog by RSS", href: "/blog/rss.xml", external: true },
     },
-    /* Developers: everything for somebody building ON intentic. It was four bar labels (Developers, API,
-     * Extensions, Earn); all four readers have already decided to build and will open a menu. The API, the
-     * gallery and the economy are one row each pointing at an index: the /api/ shelf tree is the rail on the
-     * /api/ pages themselves. */
+    /* Developers: everything for somebody building ON intentic. It was three bar labels (Developers, API,
+     * Extensions); all three readers have already decided to build and will open a menu. The API and the
+     * gallery are one row each pointing at an index: the /api/ shelf tree is the rail on the /api/ pages
+     * themselves. */
     {
         type: "menu",
         label: "Developers",
-        prefixes: ["/developers", "/api", "/extensions", "/earn"],
+        prefixes: ["/developers", "/api", "/extensions"],
         sections: [
             {
                 items: [
                     ...developersDestinations,
-                    developersServicesDestination,
                     {
                         label: "Sandbox API",
                         href: referenceHref(""),
@@ -186,13 +185,6 @@ export const navEntries: NavEntry[] = [
                         href: "/extensions/",
                         description: "What people have published",
                         icon: "blocks",
-                    },
-                    {
-                        label: "Earn & the creator pool",
-                        href: "/earn/",
-                        description: "What a spent credit pays out",
-                        icon: "coins",
-                        covers: ["/earn/", "/earn/ledger/", "/earn/catalog/", "/earn/fine-print/"],
                     },
                 ],
             },

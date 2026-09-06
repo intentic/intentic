@@ -35,7 +35,7 @@ export const sendAdminDigest = async (
     if (latch.count === 0) {
         return;
     }
-    const attention = await adminAttention(prisma, config, now);
+    const attention = await adminAttention(prisma, now);
     if (attention.items.length === 0) {
         return;
     }

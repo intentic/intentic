@@ -100,17 +100,9 @@ describe(`resolveRegistry`, () => {
         expect(entries.find((entry) => entry.name === `linear`)?.admitted).toBe(true);
     });
 
-    it(`defaults an unstated trust to listed, an unstated kind to plugin, and an unstated tier to free`, () => {
+    it(`defaults an unstated trust to listed and an unstated kind to plugin`, () => {
         const entries = resolveRegistry(RegistryFileSchema.parse({ name: `x`, plugins: [{ name: `a`, source: `./a` }] }), undefined, REGISTRY);
-        expect(entries[0]).toMatchObject({ trust: `listed`, kind: `plugin`, tier: `free` });
-    });
-
-    it(`carries a premium tier through the resolve`, () => {
-        const premium = RegistryFileSchema.parse({
-            name: `x`,
-            plugins: [{ name: `acme.research`, kind: `extension`, tier: `premium`, source: { source: `github`, repo: `acme/research`, sha: SHA } }],
-        });
-        expect(resolveRegistry(premium, undefined, REGISTRY)[0]?.tier).toBe(`premium`);
+        expect(entries[0]).toMatchObject({ trust: `listed`, kind: `plugin` });
     });
 
     // Blocked rows must survive the resolve: deleting them is what hides a warning from the people who

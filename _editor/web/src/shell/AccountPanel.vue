@@ -2,19 +2,12 @@
 import { AnchoredOverlay, Avatar, browserOwnsClick, vAction } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { creditSummary } from "../features/settings/membership/creditMeter";
-import { useMembership } from "../features/settings/membership/useMembership";
 import { useAuth } from "../features/auth/useAuth";
 import { environment } from "../app/environments/environment";
-import AccountCredits from "./AccountCredits.vue";
 
-/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name), the
- * day's credit balance, and the account actions (Settings, Sign out). The sandbox and its status live in the
- * rail's top switcher; personal preferences (theme) live on the /settings page.
- *
- * CREDITS BELONG TO THE PERSON, WHICH IS WHY THEY ARE HERE: see AccountCredits for the whole argument. What
- * this file adds on top of that row is the only part of it that reaches the app frame: the tooltip, and a dot
- * when the allowance is gone. */
+/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name) and
+ * the account actions (Settings, Sign out). The sandbox and its status live in the rail's top switcher;
+ * personal preferences (theme) live on the /settings page. */
 
 const { user, signOut } = useAuth();
 const route = useRoute();
@@ -26,18 +19,7 @@ const route = useRoute();
  * rather than a plate, so the accent lands on its ring and its glyph. */
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
-/* THE BALANCE, WITHOUT OPENING ANYTHING. Two escalating steps, and deliberately no third:
- *
- *  - The tooltip already existed and said "Account", which is what the avatar plainly is. Given a meter it says
- *    the balance instead, so a member can learn what is left by resting a pointer, and nothing is added to the
- *    rail to make that true.
- *  - A dot, and ONLY when the allowance is actually spent. That is the one credit state where something a person
- *    tries will be refused, so it is the one worth a mark on the frame. Not for "low": running out later today
- *    is not news that has to interrupt anybody, and a permanent gauge on the rail would read as the metering
- *    this product promises it does not do. */
-const { meter } = useMembership();
-
-const accountHint = computed(() => (meter.value === undefined ? `Account` : creditSummary(meter.value)));
+const accountHint = `Account`;
 
 /* Anchored rather than PrimeVue's Popover: this rail sits beside panels that can be popped out, and the app
  * has one overlay that measures its room against the window its ANCHOR is in. Using two was the divergence. */
@@ -105,13 +87,6 @@ const logout = async (): Promise<void> => {
             />
             <Icon name="user" v-else class="text-base" />
         </button>
-        <!-- Ringed in the rail's own background so it reads as a marker ON the avatar rather than a stray pixel
-             beside it. aria-hidden: the button's label already says the balance in words. -->
-        <span
-            v-if="meter?.spent"
-            class="pointer-events-none absolute -right-px -top-px size-2 rounded-full bg-warning ring-2 ring-canvas"
-            aria-hidden="true"
-        />
     </div>
 
     <!-- Same inset as the sandbox switcher above it in the rail: the theme's popover padding is a content
@@ -128,13 +103,6 @@ const logout = async (): Promise<void> => {
             </div>
 
             <div class="my-1 border-t border-line"></div>
-
-            <!-- The day's allowance, between who you are and what you can do: it is a fact about the account,
-                 and it is the reason somebody opens this menu without wanting either Settings or Sign out.
-                 Dismisses the menu on its way to the membership page like every other row here. -->
-            <AccountCredits @click="dismiss" />
-
-            <div v-if="meter" class="my-1 border-t border-line"></div>
 
             <RouterLink
                 to="/settings"

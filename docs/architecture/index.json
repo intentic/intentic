@@ -5233,7 +5233,7 @@
         },
         {
           "path": "_site/site/src/pages/pricing.astro",
-          "what": ": free beside the optional membership, words from"
+          "what": ": your machine beside ours, words from"
         },
         {
           "path": "_site/site/src/pages/docs",
@@ -5309,7 +5309,7 @@
         },
         {
           "path": "_site/site-content/src/pricing.ts",
-          "what": ": the pricing page's copy; figures from src/pool.ts, the"
+          "what": ": the pricing page's copy; figures from src/hosted.ts, the"
         },
         {
           "path": "_site/site-content/src/nav.ts",

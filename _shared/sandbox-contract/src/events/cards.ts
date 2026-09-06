@@ -103,68 +103,6 @@ export const PermissionAskSchema = z.object({
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
-/* ONE PRICED SERVICE RUN, OFFERED, the card the daemon raises when the agent asks to run a premium service
- * (platform/service-offer.ts). Everything with a number on it is the PLATFORM's answer, relayed verbatim from
- * the catalog it serves the daemon: the model that asked contributes `request` (the JSON it wants sent) and
- * `why` (its one line of rationale), and nothing else, which is what makes the price on the card impossible
- * to misquote, and the click on it the only way the run can happen. */
-export const ServiceOfferSchema = z.object({
-    // The service, as the platform lists it: `<slug>` is what the run names, the rest is the catalog row.
-    slug: z.string().describe("Which service."),
-    name: z.string().describe("What it is called."),
-    publisher: z.string().describe("Who runs it."),
-    description: z.string().describe("What it does."),
-    creditsPerRun: z
-        .number()
-        .describe(
-            "What one run costs. Stated by the platform rather than by the agent asking, which is what makes the price impossible to misquote.",
-        ),
-    /* Whether the platform still has this listing on probation, a new provider that passed admission's
-     * mechanical gates but has not yet served enough runs cleanly to graduate. It rides the card because
-     * probation is the honest form of "listed automatically, not vouched for": the member approving the
-     * spend is the person who should know that, and the platform is the only party that can say it. */
-    probation: z
-        .boolean()
-        .optional()
-        .describe(
-            "The listing is new and has not yet served enough runs cleanly to be trusted. The honest form of listed automatically but not vouched for, and the person approving the spend is who should know it.",
-        ),
-    // The owner's meter as the platform stated it with the catalog, what "N left today" renders from. Absent
-    // when the platform sent none (it answers a meter only to a member, and membership was already checked
-    // before this card went up, so in practice it is present; the field stays honest about the wire).
-    credits: z
-        .object({
-            allowance: z.number().describe("How many credits the period gives."),
-            remaining: z.number().describe("How many are left."),
-            resetsAt: z.string().describe("When they refill."),
-        })
-        .optional()
-        .describe("Your own meter, as the platform stated it."),
-    // The request body the agent wants forwarded, verbatim, shown so the owner can see what leaves.
-    request: z.string().describe("Exactly what would be sent, so you can see what leaves before agreeing to it."),
-    // The agent's one-line case for spending, the only prose on the card that is the model's.
-    why: z.string().optional().describe("The agent's case for spending, and the only words on this card that are the agent's."),
-});
-export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
-
-/* WHAT A SERVICE STREAMS, the provider's event vocabulary, stated once here and imported by everyone who
- * touches it: the platform validates each line of a provider's NDJSON against this before relaying it, the
- * daemon turns `status` events into transcript frames, and the editor renders them under the offer card.
- * A run is `status` lines (each replaces the last, a spinner label, not a log) ending in exactly one
- * `result`, whose `data` is the answer the agent acts on. The union is where future event kinds land when
- * services start streaming richer transcript elements; today's two are the smallest honest set. */
-export const ServiceStreamEventSchema = z.discriminatedUnion(`event`, [
-    z.object({
-        event: z.literal(`status`).describe("Progress. Each one replaces the last: a label, not a log."),
-        text: z.string().describe("What it is doing."),
-    }),
-    z.object({
-        event: z.literal(`result`).describe("The answer. Exactly one of these ends a run."),
-        data: z.unknown().describe("The answer itself, in whatever shape that service returns."),
-    }),
-]);
-export type ServiceStreamEvent = z.infer<typeof ServiceStreamEventSchema>;
-
 /* ONE MISSING CAPABILITY, ASKED FOR, the card the daemon raises when the agent hits something this sandbox
  * is not connected to (capabilities/capability-offer.ts). `card` names the catalog card and `name` is that
  * card's own title, both resolved by the daemon from the catalog it validates the ask against, the model
@@ -178,19 +116,6 @@ export const CapabilityOfferSchema = z.object({
     why: z.string().optional().describe("The agent's case for connecting it, and the only words on this card that are the agent's."),
 });
 export type CapabilityOffer = z.infer<typeof CapabilityOfferSchema>;
-
-/* The trailer the PLATFORM appends to every relayed run stream, never provider-authored: it is the ledger
- * speaking after the stream settled. `ok` means the run served and was charged (`remaining` is the meter
- * after); `refunded` means the provider's stream died before its `result` and the charge was reversed. */
-export const ServiceRunReceiptSchema = z.object({
-    event: z
-        .literal(`receipt`)
-        .describe("The last line of a run, added by the platform rather than by the service. The ledger speaking after the fact."),
-    outcome: z.enum([`ok`, `refunded`]).describe("Whether it served and was charged, or died before answering and the charge was reversed."),
-    credits: z.number().describe("What it cost."),
-    remaining: z.number().optional().describe("What is left afterwards."),
-});
-export type ServiceRunReceipt = z.infer<typeof ServiceRunReceiptSchema>;
 
 /* ONE OUTBOUND USDC PAYMENT, OFFERED, the card the daemon raises when the agent asks to pay an x402
  * endpoint out of the sandbox wallet (wallet/payment-offer.ts). Every number on it is the daemon's own
@@ -399,20 +324,13 @@ export const terminalHelpCard = {
     session: z.string(),
     message: z.string(),
 };
-export const serviceOfferCard = { requestId: z.string(), offer: ServiceOfferSchema };
 export const capabilityOfferCard = { requestId: z.string(), offer: CapabilityOfferSchema };
 export const paymentOfferCard = { requestId: z.string(), offer: PaymentOfferSchema };
 export const credentialOfferCard = { requestId: z.string(), offer: CredentialOfferSchema };
 
 /* HOW AN OFFER'S ACCEPTED HALF ENDED, the follow-up that lands on the card after the click. Each is the body of
- * the frame that reports it (`service_receipt`, `capability_outcome`, `payment_receipt`) and the field the
- * record keeps it in, one shape for both, so a receipt reopened tomorrow says exactly what the live card said. */
-export const ServiceReceiptSchema = z.object({
-    outcome: z.enum(["ok", "refunded", "refused"]),
-    credits: z.number(),
-    remaining: z.number().optional(),
-});
-export type ServiceReceipt = z.infer<typeof ServiceReceiptSchema>;
+ * the frame that reports it (`capability_outcome`, `payment_receipt`) and the field the record keeps it in,
+ * one shape for both, so a receipt reopened tomorrow says exactly what the live card said. */
 export const CapabilityOutcomeSchema = z.object({
     outcome: z.enum(["connected", "unfinished"]),
     id: z.string().optional(),

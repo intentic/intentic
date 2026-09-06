@@ -78,11 +78,6 @@ export const AgentAttentionSchema = z.object({
     plan: z.boolean().describe("It has proposed a plan and is waiting for a yes."),
     question: z.boolean().describe("It has asked you something."),
     permission: z.boolean().describe("It wants to use a tool it needs permission for."),
-    // A priced service run parked on the owner's click (platform/service-offer.ts), the one card where
-    // waiting costs the agent its whole call, so the lane says "spend approval" rather than a generic pause.
-    service: z
-        .boolean()
-        .describe("It wants to spend money on a paid service and is waiting for approval. The one pause where waiting costs it the whole call."),
     // A missing capability parked on the owner's setup (capabilities/capability-offer.ts), the agent is
     // waiting for something to be connected, so the lane can say "setup needed" rather than a generic pause.
     capability: z.boolean().describe("It needs something connected that is not connected yet."),

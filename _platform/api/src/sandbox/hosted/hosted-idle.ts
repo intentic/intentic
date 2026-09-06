@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
-import { premiumOf } from "../../pool/pool-membership.js";
+import { onHostedPlan } from "./hosted-plan.js";
 import { getMachine, isFlyGone } from "./fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
 
@@ -11,7 +11,7 @@ import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
  * A hosted disk bills every day it exists, awake or asleep, and until this the only thing that ever removed
  * one was a user deleting their sandbox. So a machine someone tried once in spring was still costing money in
  * autumn, and the bill grew with signups forever rather than with use. This sweep is the answer: a machine
- * whose owner has no membership and which nobody has opened for `hosted.idleDays` is destroyed, disk and all,
+ * whose owner is not on the hosted plan and which nobody has opened for `hosted.idleDays` is destroyed, disk and all,
  * one warning email earlier at `hosted.idleWarnDays`.
  *
  * WHAT IS DELETED IS THE MACHINE, NOT THE SANDBOX. The row, the name, the address and the sharing all survive,
@@ -21,7 +21,7 @@ import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
  * before anybody chooses it).
  *
  * THREE THINGS IT REFUSES TO TAKE, each because taking it would be a bug rather than a saving:
- *   - a member's machine, ever. Membership is the thing being sold; it is not an alarm clock.
+ *   - a machine on the hosted plan, ever. The plan is the thing being sold; it is not an alarm clock.
  *   - a machine that is RUNNING right now. `lastSeenAt` is stamped by the daemon's boot announce, so a box
  *     that has been up for a month, a long-lived dev server, a job nobody restarted, reads as untouched
  *     while being exactly the opposite. Fly is asked before anything is destroyed, and a live machine is left
@@ -66,7 +66,7 @@ interface IdleCandidate {
 }
 
 // One candidate, decided. Split out of the sweep below so the sweep stays a loop with a tally and this stays
-// the whole policy: member, gone, alive, past the axe, or owed its one warning.
+// the whole policy: on the plan, gone, alive, past the axe, or owed its one warning.
 const decideIdleMachine = async (
     prisma: PrismaClient,
     config: Config,
@@ -74,7 +74,7 @@ const decideIdleMachine = async (
     machine: IdleCandidate,
     idleDaysSoFar: number,
 ): Promise<IdleVerdict> => {
-    if (await premiumOf(prisma, config, machine.sandbox.ownerId)) {
+    if (await onHostedPlan(prisma, config, machine.sandbox.ownerId)) {
         return `kept`;
     }
     /* A machine Fly no longer has is not a candidate for collection, it is a row describing something that

@@ -17,10 +17,6 @@ export const JOB_RETENTION = 1;
 // would overshoot it every tick. Key 2 belonged to the retired Cloudflare sandbox pool, whose job this is
 // the spiritual successor of.
 export const JOB_HOSTED_POOL = 2;
-// The monthly money cycle, close, then pay. Exclusive for a stronger reason than the others: two replicas
-// closing the same month would each write a set of statements, and two payout runs would race for the same
-// ones. Money counted twice is not a duplicate log line.
-export const JOB_POOL_CYCLE = 3;
 // The hosted lane's health watch (hosted-health.ts). Read-only, so the lock is about not paying for the same
 // Fly round-trips on every replica, and about one alert rather than one per replica.
 export const JOB_HOSTED_HEALTH = 4;

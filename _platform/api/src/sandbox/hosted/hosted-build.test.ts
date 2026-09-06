@@ -59,7 +59,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
             buildMinutesPerDay: 600,
             ...over,
         },
-        pool: { compEmails: `` },
+        hostedPlan: { compEmails: `` },
     }) as unknown as Config;
 
 const OVERLAY = `# Composed by the intentic sandbox daemon: do not edit by hand.\n\nFROM ${BASE}\n\n# ---- custom (owner-approved) ----\nRUN apt-get install -y gnucobol\n`;
@@ -126,7 +126,7 @@ const request = (over: Partial<Parameters<typeof requestHostedBuild>[3]> = {}) =
  * build anywhere and an owner with a full month, so each case overrides only the fact it is about. */
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
     ({
-        membership: { findUnique: vi.fn().mockResolvedValue(null), ...overrides[`membership`] },
+        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), ...overrides[`hostedUsage`] },
         hostedMachine: {
             findUnique: vi.fn().mockResolvedValue(machineRow()),

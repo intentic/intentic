@@ -39,8 +39,8 @@ import { installedExtensions } from "./installed-extensions.js";
  *   preview , stage the offered sha in a throwaway clone and answer with the version story + the mechanical
  *              powers diff (extension-manifest's diffPowers): what a click would actually approve.
  *   apply   , the transaction: re-clone → validate → quiesce → swap (keeping the outgoing checkout one back)
- *              → restart → health-watch. Runs on the EXISTING capability config so a private-source token and
- *              the premium tier survive; the capability handler owns the staging/validation half.
+ *              → restart → health-watch. Runs on the EXISTING capability config so a private-source token
+ *              survives; the capability handler owns the staging/validation half.
  *   revert  , swap the kept-previous checkout back and repoint the capability's ref at what it holds. The
  *              swap is symmetric, so reverting a revert is redo.
  *   watch   , for a minute after a swap, check that what the new version declared actually came up. Written

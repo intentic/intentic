@@ -5,9 +5,9 @@ import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
 /* THE STEP THAT REPEATS. Everything else on this shelf happens once per extension; this page is what happens
- * once per release, and it existed only as fragments before: updates inside the publishing guide, the
- * donation cadence inside the money page, going bad inside trust. The reader it serves has already shipped:
- * their question is not "how do I list" but "what does release two cost me, and what does it earn". */
+ * once per release, and it existed only as fragments before: updates inside the publishing guide, going bad
+ * inside trust. The reader it serves has already shipped: their question is not "how do I list" but "what
+ * does release two cost me". */
 
 const update = `# The whole release process:
 # 1. push the new code
@@ -21,7 +21,7 @@ git push
     book={developersBook}
     pageId="maintain"
     heading="Maintain & grow"
-    lead="A listing starts a cycle. Ship a release, get checked again, keep your rank and, for premium extensions, earn again. This page covers release two and every one after it."
+    lead="A listing starts a cycle. Ship a release, get checked again, keep your rank. This page covers release two and every one after it."
 >
     <h2>Shipping an update</h2>
     <p>
@@ -72,20 +72,10 @@ git push
         <li><strong>Don't go quiet on a problem.</strong> A listing that goes bad is blocked and its installers advisories-notified; the trust page covers how that unwinds and how a fixed sha returns.</li>
     </ul>
 
-    <h2>Updates are the revenue cadence</h2>
-    <p>
-        For a premium listing, maintenance and revenue are the same motion. An install donates once; <strong>an update can donate again, at
-        most once a month per install</strong>. So a maintained extension can earn up to twelve donations a year from every install it keeps,
-        and an abandoned one earns exactly once. The cap is also the guard: shipping meaningless updates to farm the cadence is{" "}
-        <strong>delisting grounds</strong>, stated on the row like every other trust decision. <a href="/earn/">Earn</a>{" "} explains the credits,
-        split and public ledger.
-    </p>
-
     <DocsRelated
         links={[
             { href: "/developers/publish/", title: "Publish & registries", why: "the first listing this page assumes you already have." },
             { href: "/developers/verify/", title: "Verification & trust", why: "the rank input that is a decision, and what blocked means." },
-            { href: "/earn/", title: "Earn", why: "the pool, the split, and the ledger your donations land on." },
         ]}
     />
 </DocsLayout>

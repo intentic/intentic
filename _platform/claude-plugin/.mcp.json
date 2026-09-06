@@ -1,8 +1,0 @@
-{
-    "mcpServers": {
-        "intentic": {
-            "type": "http",
-            "url": "https://api.intentic.dev/mcp"
-        }
-    }
-}

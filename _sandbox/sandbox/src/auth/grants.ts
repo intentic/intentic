@@ -75,22 +75,14 @@ const agentReach = (method: string, path: string): boolean =>
     // The capability setup gate the `capabilities` CLI drives: discovery (card ids and names, whether each is
     // connected, never a config or a secret), and the ask, which parks on an owner-decided card in chat
     // before anything is watched for (capabilities/capability-offer.ts). Consent enforced at the route, like
-    // the services gate below.
+    // the wallet gate below.
     (method === "GET" && path === "/capabilities/connectable") ||
     (method === "POST" && path === "/capabilities/ask") ||
-    // The premium-services surface the `services` CLI drives: the priced catalog, one metered run, and a
-    // note onto the platform's wanted list when the catalog had nothing that answered. The spend is bounded
-    // by the owner's daily allowance platform-side, and the run itself parks on an owner-approval card
-    // before anything is forwarded (platform/service-offer.ts), the consent is enforced at the route, not
-    // asked of the model; nothing here reads a secret, and a want spends nothing (the platform caps it).
-    (method === "GET" && path === "/pool/services") ||
-    (method === "POST" && path === "/pool/wanted") ||
-    (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path)) ||
     // The wallet surface the `wallet` CLI drives: what the wallet holds and has left today, one paid fetch,
     // and the payment history. The spend is bounded by the owner's policy caps twice over (the daemon's
     // check at the route, the platform signer's re-check where the key lives), and every payment outside the
     // owner's standing auto-approve band parks on an owner-approval card before anything is signed
-    // (wallet/payment-offer.ts), consent enforced at the route, like the services gate above. Nothing here
+    // (wallet/payment-offer.ts), consent enforced at the route, like the capability gate above. Nothing here
     // reads a key: the container never holds one.
     (method === "GET" && path === "/wallet/status") ||
     (method === "POST" && path === "/wallet/fetch") ||

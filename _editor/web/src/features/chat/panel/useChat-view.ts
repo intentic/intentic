@@ -263,8 +263,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     cancelQuestion: (message: ChatMessage): Promise<void> => conversation.value.cancelQuestion(message),
     decidePermission: (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
         conversation.value.decidePermission(message, decision, feedback),
-    // The spend click for a priced service run, the only thing that releases it (or skips it, free).
-    decideServiceOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decideServiceOffer(message, approve),
     // The setup click for a missing-capability ask, connect (and go set it up) or continue without it.
     decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
     // The pay click for a USDC payment, the only thing that releases it (or skips it, spending nothing).

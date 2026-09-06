@@ -8,40 +8,28 @@ import {
     AdminAttentionSchema,
     AdminCostsSchema,
     AdminFunnelSchema,
-    AdminMarketSchema,
     AdminOverviewSchema,
     AdminTrendsSchema,
     AdminUserDetailSchema,
     AdminUserListSchema,
-    ClaimableNamesSchema,
-    ClaimChallengeSchema,
-    CreatorStateSchema,
     CfTokenSchema,
     CfZonesSchema,
     DaemonUrlSchema,
     HostedBuildStateSchema,
     HostedBuildStatusSchema,
     HostedOfferSchema,
+    HostedPlanStateSchema,
     HostedRebuildInputSchema,
     HostedStatusSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
     InviteSentSchema,
-    MembershipStateSchema,
-    ProviderServiceSchema,
-    ProviderServicesStateSchema,
-    PublisherClaimSchema,
-    PublisherSlugSchema,
     PushDeviceGrantSchema,
     PushDeviceInputSchema,
     PushSendSchema,
     PushSentSchema,
     SandboxSummarySchema,
-    ServiceListingInputSchema,
-    ServiceOfferCardSchema,
-    ServiceOfferSettledSchema,
-    ServiceProbeResultSchema,
     SetupCodeSchema,
     UserSchema,
 } from "./schemas.js";
@@ -66,7 +54,7 @@ export const meContract = {
 // the address of a session-gated page. `attach` is the mirror image of the daemon's
 // announce for a sandbox the user already runs behind a domain of their own: the OWNER asserts where it lives,
 // after their BROWSER verified it answers (the platform never calls into a sandbox). `leave` drops the
-// caller's own membership. Inviting/managing teammates lives in inviteContract below. Every sandbox-scoped route
+// caller's own access. Inviting/managing teammates lives in inviteContract below. Every sandbox-scoped route
 // takes a `sandboxId`; owner-only ones reject non-owners.
 const sandboxIdInput = z.object({ sandboxId: z.string() });
 export const sandboxContract = {
@@ -224,110 +212,14 @@ export const desktopContract = {
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),
 };
 
-// The creator-pool membership, browser side: where the settings card reads its state and where its two
-// buttons go. `checkout` and `portal` both answer a Stripe-hosted URL for the browser to navigate to, the
-// platform hosts no payment UI of its own. Both refuse (NOT_FOUND) on a platform whose pool is off; the
-// daemon-facing and public pool routes (ledger report, premium probe, webhook, transparency) are plain HTTP
-// under /pool, not part of this contract, because no browser session could authenticate them.
-export const poolContract = {
-    membership: oc.route({ method: "GET", path: "/pool/membership" }).output(MembershipStateSchema),
-    /* `returnTo` names WHICH buying surface asked, because there are two now and they are not the same journey.
-     * `settings` is somebody already inside the product; `join` is somebody who arrived from a terminal with no
-     * sandbox and must not be dropped into a workspace shell that would bounce them to setup.
-     *
-     * An enum rather than a URL, deliberately: a caller-supplied return address on a payment redirect is an
-     * open redirect waiting to be found, and there are exactly two lanes to name. */
-    checkout: oc
-        .route({ method: "POST", path: "/pool/checkout" })
-        .input(z.object({ returnTo: z.enum([`settings`, `join`]).optional() }))
-        .output(z.object({ url: z.url() })),
-    portal: oc.route({ method: "POST", path: "/pool/portal" }).output(z.object({ url: z.url() })),
-
-    /* THE SPEND GATE'S BROWSER HALF, the two calls behind the approval page an agent outside a sandbox sends
-     * its owner to (api mcp/mcp-offer.ts). In a sandbox this pair is a card frame and a click inside the
-     * conversation; here it has to be a page, because a Claude Code session has no conversation of ours to
-     * draw in and no held connection to wait on.
-     *
-     * These are the ONLY door from `pending` to `approved`, and they live on the browser contract rather than
-     * beside the MCP routes for exactly that reason: a session cookie is the one credential the calling agent
-     * cannot obtain, hold, or forge. The agent's own claim that its user consented is never read anywhere. */
-    offer: oc
-        .route({ method: "GET", path: "/pool/offers/{id}" })
-        .input(z.object({ id: z.string() }))
-        .output(ServiceOfferCardSchema),
-    settleOffer: oc
-        .route({ method: "POST", path: "/pool/offers/{id}/settle" })
-        .input(z.object({ id: z.string(), approve: z.boolean() }))
-        .output(ServiceOfferSettledSchema),
-};
-
-/* THE CREATOR'S SIDE of the same pool: proving a publisher name is yours, and connecting somewhere to be paid.
- * The membership routes above are how money comes IN; these are the two things that had to exist before any of
- * it could go OUT, because earnings accrue against a name from a manifest and a name cannot hold a bank
- * account.
- *
- * `challenge` is a READ, it computes what this account would have to publish to prove one name, and changes
- * nothing; `claim` is the verification, and refuses unless the proof is actually readable in a repository the
- * registry lists under that name. `connectPayouts` answers a Stripe-hosted URL like checkout and portal do,
- * for the same reason: the platform hosts no payment UI and collects no bank or tax detail of its own.
- * All four refuse (NOT_FOUND) on a platform whose pool is off. */
-/* OPEN ADMISSION, the provider's side: how a third-party business lists a metered service without an
- * operator. The gates it is judged by are published as data on `list` rather than described in prose, so a
- * provider reads the same numbers the algorithm applies (docs/services-admission-design.md).
- *
- * `probe` is its own call rather than a step inside `publish` because it reaches out and hits the provider's
- * endpoint three times: whose endpoint gets called and when is theirs to choose. `publish` only checks that a
- * passing probe is recent, which is what makes the gate honest, a probe's whole claim is about right now.
- *
- * `draft` and `rotateSecret` are the only two places a signing secret is ever readable, and each answers it
- * exactly once; nothing reads one back, so a stolen session cannot harvest what it did not watch being made. */
-export const serviceContract = {
-    list: oc.route({ method: "GET", path: "/creator/services" }).output(ProviderServicesStateSchema),
-    draft: oc
-        .route({ method: "POST", path: "/creator/services" })
-        .input(ServiceListingInputSchema)
-        .output(z.object({ service: ProviderServiceSchema, secret: z.string() })),
-    update: oc
-        .route({ method: "POST", path: "/creator/services/{slug}" })
-        .input(ServiceListingInputSchema.omit({ slug: true, publisher: true }).partial().extend({ slug: z.string() }))
-        .output(ProviderServiceSchema),
-    probe: oc
-        .route({ method: "POST", path: "/creator/services/{slug}/probe" })
-        .input(z.object({ slug: z.string() }))
-        .output(ServiceProbeResultSchema),
-    publish: oc
-        .route({ method: "POST", path: "/creator/services/{slug}/publish" })
-        .input(z.object({ slug: z.string() }))
-        .output(ProviderServiceSchema),
-    withdraw: oc
-        .route({ method: "POST", path: "/creator/services/{slug}/withdraw" })
-        .input(z.object({ slug: z.string() }))
-        .output(ProviderServiceSchema),
-    rotateSecret: oc
-        .route({ method: "POST", path: "/creator/services/{slug}/secret" })
-        .input(z.object({ slug: z.string() }))
-        .output(z.object({ secret: z.string() })),
-};
-
-export const creatorContract = {
-    status: oc.route({ method: "GET", path: "/creator/status" }).output(CreatorStateSchema),
-    /* Publisher names the caller's own repositories back, what the claim screen offers instead of an empty box.
-     * `projects` are `owner/name` slugs the caller says they have; nothing is trusted about them beyond being a
-     * filter, because the proof is still a file only somebody with push access can put there. */
-    claimable: oc
-        .route({ method: "POST", path: "/creator/claim/claimable" })
-        .input(z.object({ projects: z.array(z.string().min(1)).max(200) }))
-        .output(ClaimableNamesSchema),
-    challenge: oc
-        .route({ method: "POST", path: "/creator/claim/challenge" })
-        .input(z.object({ publisher: PublisherSlugSchema }))
-        .output(ClaimChallengeSchema),
-    claim: oc
-        .route({ method: "POST", path: "/creator/claim" })
-        .input(z.object({ publisher: PublisherSlugSchema }))
-        .output(PublisherClaimSchema),
-    connectPayouts: oc.route({ method: "POST", path: "/creator/payouts/connect" }).output(z.object({ url: z.url() })),
-    services: serviceContract,
+/* THE HOSTED PLAN, browser side: where the settings card reads its state and where its two buttons go.
+ * `checkout` and `portal` both answer a Stripe-hosted URL for the browser to navigate to, the platform hosts
+ * no payment UI of its own. Both refuse (NOT_FOUND) on a platform whose plan is off; Stripe's webhook is plain
+ * HTTP under /hosted-plan, not part of this contract, because no browser session could authenticate it. */
+export const hostedPlanContract = {
+    state: oc.route({ method: "GET", path: "/hosted-plan" }).output(HostedPlanStateSchema),
+    checkout: oc.route({ method: "POST", path: "/hosted-plan/checkout" }).output(z.object({ url: z.url() })),
+    portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
 };
 
 /* THE PUSH RELAY. APNs on behalf of daemons that hold no vendor secret (schemas.ts explains the split).
@@ -359,7 +251,7 @@ export const adminContract = {
     overview: oc.route({ method: "GET", path: "/admin/overview" }).output(AdminOverviewSchema),
     // The activation funnel + signups: the panel's most important read (see AdminFunnelSchema).
     funnel: oc.route({ method: "GET", path: "/admin/funnel" }).output(AdminFunnelSchema),
-    // The red-rows feed: every row that is a person's setup, money, or listing waiting on a human, as one
+    // The red-rows feed: every row that is a person's setup, plan, or machine waiting on a human, as one
     // ordered list of server-composed sentences. One endpoint on purpose — the operator's first question is
     // "what needs me today", not seven cards to scan.
     attention: oc.route({ method: "GET", path: "/admin/attention" }).output(AdminAttentionSchema),
@@ -383,8 +275,6 @@ export const adminContract = {
         .route({ method: "GET", path: "/admin/user" })
         .input(z.object({ idOrEmail: z.string().min(1).max(200) }))
         .output(AdminUserDetailSchema),
-    // The marketplace: demand (wants aggregate) beside supply (every listing against the published rules).
-    market: oc.route({ method: "GET", path: "/admin/market" }).output(AdminMarketSchema),
     // The trend lines: the daily rollup rows, oldest first, up to 90 days.
     trends: oc.route({ method: "GET", path: "/admin/trends" }).output(AdminTrendsSchema),
 
@@ -392,21 +282,6 @@ export const adminContract = {
      * ADMIN_MUTATIONS deployment switch (whether this deployment allows them at all — off until the panel
      * is a pinned install), and a typed `confirm` input that must name the target exactly (the retype-it
      * pattern; a mistyped confirmation is a 400, not a warning). Every one audit-logs its target. */
-    serviceSuspend: oc
-        .route({ method: "POST", path: "/admin/service/suspend" })
-        .input(z.object({ slug: z.string().min(1), reason: z.string().min(1).max(500), confirm: z.string() }))
-        .output(AdminActionResultSchema),
-    // Reinstates into PROBATION, not `listed`: the price cap and the badge are exactly what a listing that
-    // was just suspended should re-enter under.
-    serviceReinstate: oc
-        .route({ method: "POST", path: "/admin/service/reinstate" })
-        .input(z.object({ slug: z.string().min(1), confirm: z.string() }))
-        .output(AdminActionResultSchema),
-    // Re-attempt one reserved-but-unpaid payout under its original idempotency key.
-    payoutRetry: oc
-        .route({ method: "POST", path: "/admin/payout/retry" })
-        .input(z.object({ payoutId: z.string().min(1), confirm: z.string() }))
-        .output(AdminActionResultSchema),
     // Stop a hosted machine (abuse/cost brake). The owner can wake it again; nothing is destroyed.
     machineStop: oc
         .route({ method: "POST", path: "/admin/machine/stop" })
@@ -429,8 +304,7 @@ export const apiContract = {
     sandbox: sandboxContract,
     invite: inviteContract,
     desktop: desktopContract,
-    pool: poolContract,
-    creator: creatorContract,
+    hostedPlan: hostedPlanContract,
     push: pushRelayContract,
     admin: adminContract,
 };

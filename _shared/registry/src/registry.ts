@@ -72,15 +72,6 @@ export type RegistrySecurityReview = z.infer<typeof RegistrySecurityReviewSchema
 export const RegistryTrustSchema = z.enum(["verified", "listed", "blocked"]);
 export type RegistryTrust = z.infer<typeof RegistryTrustSchema>;
 
-/* WHAT A LISTING COSTS. `free` is the default and the whole story for most rows. `premium` opts the listing
- * into the creator pool: installing it requires an intentic membership and donates a published number of the
- * member's credits to the publisher (once, deduped monthly, an update in a later month donates again), and
- * both surfaces badge it so the price is visible before the click. No usage is ever metered or reported for
- * this; the deliberate act of installing is the whole signal. On a third-party registry the field still
- * parses but means nothing, the pool only pays listings the platform's members actually install. */
-export const RegistryTierSchema = z.enum(["free", "premium"]);
-export type RegistryTier = z.infer<typeof RegistryTierSchema>;
-
 const RegistryFileEntrySchema = z
     .object({
         name: z.string(),
@@ -100,7 +91,6 @@ const RegistryFileEntrySchema = z
         // sandbox promotes its "update available" badge from ambient to attention-demanding, because there the OLD
         // version is the dangerous one. Asserted by the pull request like trust, and worth exactly that review.
         securityFix: z.boolean().optional(),
-        tier: RegistryTierSchema.optional(),
         category: z.string().optional(),
         /* The mark the row is drawn with, copied off the extension's manifest exactly like the description and
          * the version, the same three tiers the manifest declares (the author's own inline drawing, then a
@@ -215,7 +205,6 @@ export const RegistryEntrySchema = z.object({
     // boundary and resolve their non-blocked rows as admitted without adopting intentic's policy.
     admitted: z.boolean(),
     securityFix: z.boolean().optional(),
-    tier: RegistryTierSchema,
     category: z.string().optional(),
     // The mark, as the gallery and the app's browse list draw it, see the curated file's fields above.
     art: z.string().optional(),
@@ -281,7 +270,6 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             trust,
             admitted,
             // Absent ⇒ free, so a registry that has never heard of the pool keeps meaning what it always did.
-            tier: plugin.tier ?? "free",
             ...(plugin.description !== undefined ? { description: plugin.description } : {}),
             ...(plugin.version !== undefined ? { version: plugin.version } : {}),
             ...(plugin.trustReason !== undefined ? { trustReason: plugin.trustReason } : {}),

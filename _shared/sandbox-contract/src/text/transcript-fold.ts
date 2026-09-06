@@ -392,8 +392,6 @@ export class TranscriptFold {
                 const { kind: _kind, ...ask } = event;
                 return this.park(event.requestId, { terminalHelp: { ...ask, status: "pending" } });
             }
-            case "service_offer":
-                return this.park(event.requestId, { serviceOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "capability_offer":
                 return this.park(event.requestId, { capabilityOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "payment_offer":
@@ -405,18 +403,6 @@ export class TranscriptFold {
                 // own card the instant its reply was accepted (card-status.ts, the same derivation), so this is a
                 // no-op there and earns its keep on every other surface.
                 return this.patchParked(event.requestId, (row) => Object.assign(row, settledCards(row, event.reply)));
-            case "service_event":
-                return this.patchParked(event.requestId, (row) => {
-                    if (row.serviceOffer !== undefined) {
-                        row.serviceOffer.events = [...(row.serviceOffer.events ?? []), event.event];
-                    }
-                });
-            case "service_receipt":
-                return this.patchParked(event.requestId, (row) => {
-                    if (row.serviceOffer !== undefined) {
-                        row.serviceOffer.receipt = { outcome: event.outcome, credits: event.credits, ...(event.remaining === undefined ? {} : { remaining: event.remaining }) };
-                    }
-                });
             case "capability_outcome":
                 return this.patchParked(event.requestId, (row) => {
                     if (row.capabilityOffer !== undefined) {

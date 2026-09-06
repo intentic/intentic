@@ -2,14 +2,10 @@ import { apiContract } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
-import { poolEnabled } from "../pool/pool-membership.js";
-import { retryPayout } from "../pool/pool-payout.js";
-import { stripeGateway } from "../pool/pool-stripe.js";
-import { deleteUserAccount, reinstateService, stopHostedMachine, suspendService } from "./admin-actions.js";
+import { deleteUserAccount, stopHostedMachine } from "./admin-actions.js";
 import { adminAttention } from "./admin-attention.js";
 import { adminCosts } from "./admin-costs.js";
 import { adminFunnel } from "./admin-funnel.js";
-import { adminMarket } from "./admin-market.js";
 import { adminOverview } from "./admin-overview.js";
 import { adminTrends } from "./admin-trends.js";
 import { adminUserDetail } from "./admin-user.js";
@@ -59,7 +55,7 @@ export const adminRoutes = {
     }),
     attention: os.admin.attention.handler(async ({ context }) => {
         audited(context, `admin.attention`);
-        return adminAttention(context.prisma, context.config);
+        return adminAttention(context.prisma);
     }),
     costs: os.admin.costs.handler(async ({ context }) => {
         audited(context, `admin.costs`);
@@ -77,34 +73,11 @@ export const adminRoutes = {
         }
         return detail;
     }),
-    market: os.admin.market.handler(async ({ context }) => {
-        audited(context, `admin.market`);
-        return adminMarket(context.prisma, context.config);
-    }),
     trends: os.admin.trends.handler(async ({ context }) => {
         audited(context, `admin.trends`);
         return adminTrends(context.prisma);
     }),
 
-    serviceSuspend: os.admin.serviceSuspend.handler(async ({ context, input }) => {
-        mutating(context, `admin.serviceSuspend`, input.confirm, input.slug);
-        return suspendService(context.prisma, input.slug, input.reason);
-    }),
-    serviceReinstate: os.admin.serviceReinstate.handler(async ({ context, input }) => {
-        mutating(context, `admin.serviceReinstate`, input.confirm, input.slug);
-        return reinstateService(context.prisma, input.slug);
-    }),
-    payoutRetry: os.admin.payoutRetry.handler(async ({ context, input }) => {
-        mutating(context, `admin.payoutRetry`, input.confirm, input.payoutId);
-        if (!poolEnabled(context.config)) {
-            return { ok: false, message: `The creator pool is not configured on this platform; there is no Stripe to retry against.` };
-        }
-        const outcome = await retryPayout(
-            { prisma: context.prisma, config: context.config, gateway: stripeGateway(context.config.pool.stripeSecretKey) },
-            input.payoutId,
-        );
-        return { ok: outcome.paid, message: outcome.message };
-    }),
     machineStop: os.admin.machineStop.handler(async ({ context, input }) => {
         mutating(context, `admin.machineStop`, input.confirm, input.sandboxId);
         return stopHostedMachine(context.prisma, context.config, input.sandboxId);

@@ -7,7 +7,7 @@ import { soleLiveConversation, turnRunOf } from "./turn-runs.js";
 /* AN OFFER CARD is a card raised from OUTSIDE the turn generator: the agent's CLI call arrives as an HTTP
  * request while the turn sits inside its Bash tool, or a tool call crosses a bridge on its way to somebody's
  * laptop, and the daemon parks that call on a card in the conversation's live turn. Five gates do it (a
- * premium service run, a payment, a capability ask, a gated credential, a command headed for a machine), and
+ * payment, a capability ask, a gated credential, a command headed for a machine), and
  * the plumbing under all five is this one shape: find the live run the caller may draw in, mint the request,
  * push the raised frame into the run's frame log AND mirror it to the registry by hand (the pump's own
  * parked-card journalling never sees an externally pushed frame, deliberately: the waiter is a held

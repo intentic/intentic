@@ -3,7 +3,7 @@ import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./cards.js";
-import { browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionAskSchema, permissionCard, planCard, questionCard, serviceOfferCard, ServiceReceiptSchema, ServiceStreamEventSchema, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
+import { browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionAskSchema, permissionCard, planCard, questionCard, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
 
 /* A CONVERSATION AS IT IS RECORDED AND REPLAYED: the rows, the cards they carry, and the patches that change
  * them while a turn runs.
@@ -57,13 +57,6 @@ export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpCard, status
 export type TranscriptBrowserHelp = z.infer<typeof TranscriptBrowserHelpSchema>;
 export const TranscriptTerminalHelpSchema = z.object({ ...terminalHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
 export type TranscriptTerminalHelp = z.infer<typeof TranscriptTerminalHelpSchema>;
-export const TranscriptServiceOfferSchema = z.object({
-    ...serviceOfferCard,
-    status: OfferStatusSchema.describe("Where the decision stands."),
-    events: z.array(ServiceStreamEventSchema).optional().describe("The approved run's stream, in order (the service_event frames)."),
-    receipt: ServiceReceiptSchema.optional().describe("How the approved run ended (the service_receipt frame)."),
-});
-export type TranscriptServiceOffer = z.infer<typeof TranscriptServiceOfferSchema>;
 export const TranscriptCapabilityOfferSchema = z.object({
     ...capabilityOfferCard,
     status: CapabilityOfferStatusSchema.describe("Where the decision stands."),
@@ -275,7 +268,6 @@ export const TranscriptRowSchema = z.object({
     permission: TranscriptPermissionSchema.optional().describe("The tool this row asked permission for, and the decision."),
     browserHelp: TranscriptBrowserHelpSchema.optional().describe("The browser hand-over this row asked for, and how it ended."),
     terminalHelp: TranscriptTerminalHelpSchema.optional().describe("The terminal hand-over this row asked for, and how it ended."),
-    serviceOffer: TranscriptServiceOfferSchema.optional().describe("The priced service run this row offered, the decision, and the receipt."),
     capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
@@ -293,7 +285,6 @@ export const CARD_FIELDS = [
     "permission",
     "browserHelp",
     "terminalHelp",
-    "serviceOffer",
     "capabilityOffer",
     "paymentOffer",
     "credentialOffer",

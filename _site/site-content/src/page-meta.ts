@@ -27,7 +27,7 @@ export const pageMeta: Record<string, PageMeta> = {
     },
     "/terms/": {
         title: "Terms of Service · intentic",
-        description: "The terms governing use of the intentic platform: accounts, sandboxes we host, membership, acceptable use and liability.",
+        description: "The terms governing use of the intentic platform: accounts, sandboxes we host, the hosted plan, acceptable use and liability.",
         datePublished: "2026-07-03",
     },
     "/acceptable-use/": {
@@ -103,40 +103,8 @@ export const pageMeta: Record<string, PageMeta> = {
     "/pricing/": {
         title: "Pricing · intentic is free. Bring your own AI plan",
         description:
-            "intentic is free and MIT: every sandbox, capability and shared workspace, no tiers and no card. Agents run on AI plans you already pay for. Membership is extra.",
+            "intentic is free and MIT: every sandbox, capability and shared workspace, no tiers and no card. Agents run on AI plans you already pay for. A hosted sandbox is the one thing sold.",
         datePublished: "2026-09-06",
-    },
-    /* The economy's own page, top-level because it serves members and creators alike. Its FIGURES come from
-     * pool.ts at render time; only the framing is authored here. The description names both readers: the
-     * member asking what credits do, the creator asking what the cut is. */
-    "/earn/": {
-        title: "Membership credits, creator pool & public ledger · intentic",
-        description:
-            "A daily credit allowance members spend on premium extensions and paid services, and the share of the pool that reaches whoever published them. Public ledger.",
-        datePublished: "2026-08-11",
-    },
-    /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the
-     * platform promises, and this is where a reader goes to check it, read live in their own browser from the
-     * public endpoint, so nothing here is authored. */
-    "/earn/ledger/": {
-        title: "The ledger · Earn · intentic",
-        description:
-            "Every month of the creator pool, live from the platform: what came in, what processing cost, what reached creators, and what is still owed.",
-        datePublished: "2026-08-12",
-    },
-    // The listings themselves, plus the wanted list, the demand side of the same live read.
-    "/earn/catalog/": {
-        title: "The catalog · Earn · intentic",
-        description:
-            "Every paid service agents can run, live from the platform: price, publisher, and each listing's served and refunded runs, plus what nobody serves yet.",
-        datePublished: "2026-08-19",
-    },
-    // The argued version of every promise /earn makes. Its own page so the short one stays scannable.
-    "/earn/fine-print/": {
-        title: "The fine print · Earn · intentic",
-        description:
-            "Every promise the Earn page makes, argued in full: the credit arithmetic, why farming loses money, the service rules, and what exists today.",
-        datePublished: "2026-08-11",
     },
     [compareHref("")]: compareIndex.meta,
     [guidesHref("")]: guidesIndex.meta,

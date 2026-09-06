@@ -300,123 +300,29 @@ export const configSchema = z.object({
             dailyMessages: z.coerce.number().int().nonnegative().default(12),
         })
         .prefault({}),
-    /* THE CREATOR POOL, the optional paid membership whose revenue premium-extension creators share.
-     *
-     * `stripeSecretKey` + `stripePriceId` are the switch, exactly like trial.keys: both empty (the default,
-     * and the right one for a self-hosted platform) and the pool does not exist: /pool routes 404, the web
-     * app offers no membership, premium extensions cannot be enabled anywhere that points at this platform.
-     * Stripe stays the money's source of truth; the platform mirrors just enough (pool/pool-membership.ts)
-     * to answer "is this user premium" without a Stripe round-trip on hot paths. */
-    pool: z
+    /* THE HOSTED PLAN, the one thing this platform sells: a Stripe subscription that makes the owner's hosted
+     * sandbox always on and never collected (docs/design/pricing-model.md). Off by default: with no key and no
+     * price there is no plan, every plan surface answers "not here", and the hosted lane is free-lane only. */
+    hostedPlan: z
         .object({
-            // The Stripe secret key (sk_… / rk_…). POOL_STRIPE_SECRET_KEY.
+            // The Stripe secret key (sk_… / rk_…). HOSTED_PLAN_STRIPE_SECRET_KEY.
             stripeSecretKey: z.string().default(``).meta({ secret: true }),
-            // The signing secret of the /pool/webhook endpoint (whsec_…), without it subscription events
-            // are refused, so a pool that takes money must set it. POOL_STRIPE_WEBHOOK_SECRET.
+            // The signing secret of the /hosted-plan/webhook endpoint (whsec_…), without it subscription
+            // events are refused, so a plan that takes money must set it. HOSTED_PLAN_STRIPE_WEBHOOK_SECRET.
             stripeWebhookSecret: z.string().default(``).meta({ secret: true }),
-            // The recurring Price the checkout sells (price_…). POOL_STRIPE_PRICE_ID.
+            // The recurring Price the checkout sells (price_…). HOSTED_PLAN_STRIPE_PRICE_ID.
             stripePriceId: z.string().default(``),
-            // The membership's monthly price in USD as the transparency page states it, display + pool math
-            // only; what Stripe actually charges is the Price above. POOL_PRICE_USD.
+            // The plan's monthly price in USD as the app and the admin panel state it, display only; what
+            // Stripe actually charges is the Price above. HOSTED_PLAN_PRICE_USD.
             priceUsd: z.coerce.number().nonnegative().default(20),
-            /* WHAT THE MEMBERSHIP BUYS BEFORE IT BUYS ANYTHING FOR A CREATOR: the per-member monthly cost of
-             * running the platform, a member's hosted machine and disk above all, taken off the top, so the
-             * pool is what is left rather than the whole ticket.
-             *
-             * Without this the shares are levied on gross, and a member who spends their whole allowance
-             * leaves the platform ~$2 of $20 while costing it more than that to host: the more someone uses
-             * the product, the worse it does, which is not a pricing bug that can be grown out of. Taking it
-             * off the top instead means the published share stays LITERALLY true of the pool it names, the
-             * alternative, quietly paying creators 90% of something called $20 that isn't, is the kind of
-             * asterisk this whole model exists not to have. The transparency report states it as its own
-             * line for the same reason. 0 restores the old gross-share behaviour. POOL_INFRA_USD. */
-            infraUsd: z.coerce.number().nonnegative().default(5),
-            // The fraction of a spent credit's VALUE its recipient earns, a donated credit pays the
-            // extension's creator this share, a consumed credit pays the service's provider this share
-            // (credit value is derived and published: (priceUsd − infraUsd) / (30 × dailyCredits)). The
-            // published number the whole model stands on, change it loudly or not at all. POOL_CREATOR_SHARE.
-            creatorShare: z.coerce.number().min(0).max(1).default(0.9),
-            // A member's daily credit allowance, reset at UTC midnight like the trial. The membership's cost
-            // ceiling: 1000/day bounds what a member can spend, on service runs and on install donations,
-            // which is what lets a flat price fund a per-credit economy at all. POOL_DAILY_CREDITS.
-            dailyCredits: z.coerce.number().int().nonnegative().default(1000),
-            // What a service's provider earns per consumed credit, as a share of its value, kept a separate
-            // knob from creatorShare because a service carries real upstream costs a prompt-pack does not.
-            // POOL_SERVICE_SHARE.
-            serviceShare: z.coerce.number().min(0).max(1).default(0.9),
-            // What installing (or, at most monthly, updating) a premium non-service extension donates to its
-            // creator, in credits. Flat across the catalog on purpose: a price the listing could set would be
-            // the first number anyone games. POOL_DONATION_CREDITS.
-            donationCredits: z.coerce.number().int().nonnegative().default(200),
-            // Seed the self-contained demo service (a canned research answerer the platform itself hosts) so
-            // the catalog is demonstrable without a provider. POOL_DEMO_SERVICE.
-            demoService: z.stringbool().default(false),
-            /* Comma-separated emails that count as premium WITHOUT a subscription, complimentary
-             * memberships. Checked at premium-answer time (pool-membership.ts), never seeded as rows, so it
-             * works the moment the account exists and reverts the moment the email leaves the list. A comped
-             * member rides the same daily credit meter as a paying one but is absent from the ledger's member
-             * count and revenue (they pay nothing); their spends still earn creators the usual share, which
-             * comes out of the pool, comp sparingly. Local dev's way to a runnable paid-services flow, and
-             * the operator's way to comp a person. POOL_COMP_EMAILS. */
+            /* Comma-separated emails that count as on the plan WITHOUT a subscription. Checked at answer time
+             * (hosted-plan.ts), never seeded as rows, so it works the moment the account exists and reverts
+             * the moment the email leaves the list. A comped account is absent from the admin panel's plan
+             * count and revenue (they pay nothing). Local dev's way to an unmetered hosted sandbox, and the
+             * operator's way to comp a person. HOSTED_PLAN_COMP_EMAILS. */
             compEmails: z.string().default(``),
-            // The registry whose listings decide which repositories back a publisher name, the authority a
-            // publisher claim is checked against (creator/creator-claim.ts). The official registry by default;
-            // a platform running its own points this at that repository's marketplace file, and claims are then
-            // proved against the listings it actually serves. POOL_REGISTRY_URL.
-            registryUrl: z.url().default(`https://raw.githubusercontent.com/intentic/registry/HEAD/.claude-plugin/marketplace.json`),
-            // The day of the month a closed month's statements become payable. A month closes as soon as it is
-            // over and pays mid-month, so the gap is a stated hold window for refunds and card disputes rather
-            // than an unexplained delay, and a creator reads a date instead of "soon". POOL_PAYOUT_DAY.
-            payoutDayOfMonth: z.coerce.number().int().min(1).max(28).default(15),
-            // How long earnings owed to an unclaimed publisher name stay claimable before returning to the pool
-            // and being split among creators who are still shipping. The published promise is twelve months;
-            // it lives here so the close and the page it is stated on cannot disagree. Deliberately shorter
-            // than the 396-day ledger retention, so a window never outlives the rows behind it.
-            // POOL_CLAIM_WINDOW_MONTHS.
-            claimWindowMonths: z.coerce.number().int().positive().default(12),
-            // The smallest payment worth making. Below it a creator's balance carries to the next run rather
-            // than generating a transfer whose fee is a meaningful fraction of itself; nothing is lost, and the
-            // creator screen says what is carrying. POOL_MIN_PAYOUT_CENTS.
-            minPayoutCents: z.coerce.number().int().nonnegative().default(2500),
-            // The currency transfers are made in, the platform's own Stripe currency. POOL_PAYOUT_CURRENCY.
-            payoutCurrency: z.string().default(`usd`),
-
-            /* OPEN ADMISSION (pool/pool-admission.ts), the published thresholds a provider is measured
-             * against. Every one of them is here rather than in the code because the whole promise of
-             * rules-based admission is that the rules are readable in advance: a number a provider cannot
-             * look up is a human review wearing a constant's clothes. */
-            // Whether a provider may list a service without an operator. Off restores the hand-written flow;
-            // operator rows keep working either way, because no gate applies to a row with no owner.
-            // POOL_OPEN_ADMISSION.
-            openAdmission: z.stringbool().default(true),
-            // The price band a listing may publish inside, and the tighter ceiling probation holds it under.
-            // A new listing that could name any price would make the probation badge the only thing standing
-            // between a member and a 1000-credit surprise. POOL_SERVICE_MIN_CREDITS / _MAX / _PROBATION_MAX.
-            serviceMinCredits: z.coerce.number().int().positive().default(1),
-            serviceMaxCredits: z.coerce.number().int().positive().default(200),
-            probationMaxCredits: z.coerce.number().int().positive().default(25),
-            // How long a passed conformance probe stays good enough to publish on. Short on purpose: the
-            // probe's whole claim is "this endpoint works right now". POOL_PROBE_FRESH_MINUTES.
-            probeFreshMinutes: z.coerce.number().int().positive().default(60),
-            // Served runs a probation listing needs before it graduates, and the refund rate that both blocks
-            // graduation and trips the watch. POOL_GRADUATION_RUNS / POOL_MAX_REFUND_RATE.
-            graduationRuns: z.coerce.number().int().positive().default(50),
-            maxRefundRate: z.coerce.number().min(0).max(1).default(0.2),
-            // How many recent runs the tripwire judges on, small enough to react, large enough that three
-            // unlucky timeouts don't delist a working service. POOL_WATCH_WINDOW_RUNS.
-            watchWindowRuns: z.coerce.number().int().positive().default(20),
-            // Consecutive failed canary probes before a live listing is suspended. POOL_CANARY_FAILURES.
-            canaryFailures: z.coerce.number().int().positive().default(3),
-            // How often a provider may move a listing's price. POOL_PRICE_CHANGE_HOURS.
-            priceChangeHours: z.coerce.number().int().nonnegative().default(24),
-            // The most listings one account may hold live at once, the crude Sybil bound the design doc
-            // names, priced against nothing yet because no abuse has been observed. POOL_MAX_SERVICES.
-            maxServicesPerOwner: z.coerce.number().int().positive().default(5),
         })
         .prefault({}),
-    // Where the connect bootstrap scripts are served from: the URL the setup wizard's copy-paste command and
-    // the desktop app's handoff both fetch. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.
-    scriptOrigin: z.url().default(`https://intentic.dev`),
     api: z
         .object({
             url: z.url().default(`http://localhost:6480`),
@@ -504,6 +410,8 @@ export const CONFIG_SECRETS = [
     `ingress.signingKey`,
     `hosted.flyApiToken`,
     `trial.keys`,
+    `hostedPlan.stripeSecretKey`,
+    `hostedPlan.stripeWebhookSecret`,
     `apns.keyP8`,
 ];
 

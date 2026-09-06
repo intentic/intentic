@@ -11,12 +11,11 @@ export const adminTrends = async (prisma: PrismaClient): Promise<AdminTrends> =>
         select: {
             day: true,
             newUsers: true,
-            serviceRuns: true,
             trialMessages: true,
             totalUsers: true,
             connectedUsers: true,
             activeSandboxes24h: true,
-            membershipsActive: true,
+            plansActive: true,
             hostedMachines: true,
         },
     });

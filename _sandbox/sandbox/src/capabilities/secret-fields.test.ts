@@ -13,7 +13,7 @@ import { partitionSecretValues } from "./secret-fields.js";
  * that can be written and never read again: it fails validation, and one bad entry is SKIPPED so the rest
  * survive (the right blast radius, and the reason this is silent).
  *
- * What that cost: the extension kind echoed neither `tier` nor `registry`, and the Discover page attaches the
+ * What that cost: the extension kind did not echo `registry`, and the Discover page attaches the
  * registry it browsed to every install. So every extension installed from Discover was vaulted into an entry
  * whose `registry` was no longer a url, dropped from the capability list on the next read, and therefore absent
  * from the extension inventory that list is built from: no row, no on/off switch, no view, no settings, no
@@ -44,7 +44,6 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
                 ref: SHA,
                 path: "sub",
                 token: "ghp_x",
-                tier: "premium",
                 registry: "https://registry.example.com/registry.json",
             },
         },
@@ -202,7 +201,7 @@ test.each(Object.entries(SAMPLES).flatMap(([kind, samples]) => samples.map((samp
 // The vault is not a place to hide config: what leaves the manifest must be a credential, and the only way this
 // stays true is that nothing NON-secret is in the complement of the echo. Pinned for the kind whose echo the
 // install path depends on, with the two fields that were missing named outright.
-test("an extension's registry and tier stay in the manifest: they are catalogue facts, not credentials", () => {
+test("an extension's registry stays in the manifest: it is a catalogue fact, not a credential", () => {
     const sample = SAMPLES.extension[0];
     expect(sample).toEqual(expect.any(Object));
     const { values } = partitionSecretValues(sample as Capability, new Map());

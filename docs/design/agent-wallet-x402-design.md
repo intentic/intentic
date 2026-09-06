@@ -279,7 +279,7 @@ expires unused); a 200-without-receipt is recorded as an anomaly against that en
 | Layer | Change |
 |---|---|
 | `_shared/sandbox-contract/src/events.ts` | `PaymentOfferSchema`, `PaymentReceiptSchema`; `payment_offer` / `payment_receipt` arms in `AgentEventSchema` (beside `service_offer` at ~:610) |
-| `_shared/sandbox-contract/src/schemas/plan-limits.ts` | reply arm `payment_offer{approve}`, beside `service_offer` |
+| `_shared/sandbox-contract/src/schemas/plan-limits.ts` | reply arm `payment_offer{approve}`, beside `capability_offer` and `credential_offer` |
 | `_shared/sandbox-contract/src/schemas/capabilities.ts` | `wallet` added to `CapabilityKindSchema` |
 | `_sandbox/sandbox/bin/wallet` | the CLI (services-CLI pattern: `node:http`, agent token, `INTENTIC_TURN_OWNER`) + `skills/wallet/SKILL.md` |
 | `_sandbox/sandbox/src/auth/grants.ts` | `agentReach` += `GET /wallet/status`, `POST /wallet/fetch`, `GET /wallet/history` |

@@ -120,7 +120,6 @@ const ADDRESSED_FRAMES: readonly AgentEvent["kind"][] = [
     "plan",
     "question",
     "permission",
-    "service_offer",
     "capability_offer",
     "payment_offer",
     "browser_help",

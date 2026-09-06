@@ -24,13 +24,11 @@ const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]
 
 // A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.handler.integration.test.ts pattern).
 // `stopped` records ctx.serviceProcesses.stop calls for the remove/update quiesce tests; `stored` is the capability store
-// the update path reads the OUTGOING config from (empty ⇒ a first install); `donatedTo` records the donation
-// gate's calls (the premium install/update path).
-const tempCtx = (member = false): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability>; donatedTo: string[] } => {
+// the update path reads the OUTGOING config from (empty ⇒ a first install).
+const tempCtx = (): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability> } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));
     const stopped: string[] = [];
     const stored = new Map<string, Capability>();
-    const donatedTo: string[] = [];
     const ctx = {
         workspace: { root },
         files: { read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath },
@@ -38,15 +36,8 @@ const tempCtx = (member = false): { ctx: CapabilityCtx; root: string; stopped: s
         terminalRun: createTerminalRunner(),
         serviceProcesses: { stop: (key: string) => stopped.push(key) },
         capabilities: { get: async (id: string) => stored.get(id) },
-        donatePremium: async (extensionId: string) => {
-            if (!member) {
-                return { ok: false, donated: 0, detail: "Installing a premium extension needs an intentic membership." };
-            }
-            donatedTo.push(extensionId);
-            return { ok: true, donated: 200 };
-        },
     } as unknown as CapabilityCtx;
-    return { ctx, root, stopped, stored, donatedTo };
+    return { ctx, root, stopped, stored };
 };
 
 const MANIFEST = {
@@ -91,32 +82,6 @@ test("apply installs a valid extension; status carries the pinned sha", async ()
 
     expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "active", detail: await gitHead(extensionDir(root, "demo")) });
-});
-
-test("a premium install whose donation is refused never goes live, and says why", async () => {
-    const { ctx, root, donatedTo } = tempCtx(false);
-    const remote = await fixtureRepo(MANIFEST, true);
-    await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }))).rejects.toThrow(
-        /premium extension.*needs an intentic membership/,
-    );
-    expect(donatedTo).toEqual([]);
-    expect(await readdir(extensionsRoot(root)).catch(() => [])).toEqual([]);
-});
-
-test("a premium install donates to the manifest-derived identity, then proceeds like any other", async () => {
-    const { ctx, root, donatedTo } = tempCtx(true);
-    const remote = await fixtureRepo(MANIFEST, true);
-    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }));
-    // publisher.name from the checkout's own manifest: never the capability entry id the form chose.
-    expect(donatedTo).toEqual(["acme.demo"]);
-    expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
-});
-
-test("a free install never touches the donation path", async () => {
-    const { ctx, donatedTo } = tempCtx(true);
-    const remote = await fixtureRepo(MANIFEST, true);
-    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));
-    expect(donatedTo).toEqual([]);
 });
 
 test("a checkout without a manifest is rejected before it goes live, leaving no debris", async () => {

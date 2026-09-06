@@ -26,7 +26,6 @@ import { createRouter } from "./router.js";
 import { verifySyncToken } from "./platform/sync.js";
 import { createSyncRoutes } from "./platform/sync.routes.js";
 import { createSyncSshRoute } from "./platform/sync-ssh.js";
-import { createPoolRoutes } from "./platform/pool/pool.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createFleetRoutes } from "./agents/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
@@ -589,12 +588,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // (extensions/backend/backend-proxy.routes.ts).
     app.get("/extensions/:id/bundle", createExtensionBundleRoute(services));
     app.all("/x/*", createBackendProxyRoute(services));
-
-    // The creator pool's metered services, relayed to the platform (platform/pool.routes.ts).
-    const pool = createPoolRoutes(services);
-    app.get("/pool/services", pool.catalog);
-    app.post("/pool/wanted", pool.wanted);
-    app.post("/pool/services/:slug/run", pool.run);
 
     /* The capability setup gate, the `capabilities` CLI's two routes (capabilities/ask.routes.ts).
      * `connectable` is discovery (every card, whether it's connected, names only, never config); `ask` parks

@@ -631,7 +631,7 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
-    expect(hosted?.textContent).toContain(`40h a month, more with membership`);
+    expect(hosted?.textContent).toContain(`40h a month, always on with the plan`);
     hosted!.click();
     await nextTick();
     // The card stays three lines: what this machine's disk is, the reader reads where they commit to it.

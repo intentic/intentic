@@ -7,7 +7,6 @@ import type {
     TranscriptPermission,
     TranscriptPlan,
     TranscriptQuestion,
-    TranscriptServiceOffer,
     TranscriptTerminalHelp,
 } from "@intentic/sandbox-contract";
 
@@ -81,12 +80,12 @@ export const helpStatus = (help: TranscriptBrowserHelp | TranscriptTerminalHelp)
     }
 };
 
-/* The two spend cards and the credential release, one shape: approved, skipped, or nobody answered. Whether
+/* The payment card and the credential release, one shape: approved, skipped, or nobody answered. Whether
  * the money actually moved — or WHO released the credential — is the receipt's to say, in its own row, not the
  * header chip's. The credential card joins them rather than getting a fourth copy of this switch because its
  * three endings are the same three, and the one thing that makes it different (it is addressed to named
  * people) changes who may press the buttons, not how the card reads once somebody has. */
-export const offerStatus = (offer: TranscriptServiceOffer | TranscriptPaymentOffer | TranscriptCredentialOffer): CardStatus | undefined => {
+export const offerStatus = (offer: TranscriptPaymentOffer | TranscriptCredentialOffer): CardStatus | undefined => {
     switch (offer.status) {
         case "approved":
             return { label: "Approved", tone: "done" };

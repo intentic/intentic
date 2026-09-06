@@ -13,7 +13,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         email: { apiKey: ``, from: `` },
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: { flyApiToken: `fly`, flyOrg: `intentic`, appPrefix: `intentic-sbx`, idleDays: 21, idleWarnDays: 14, ...over },
-        pool: { compEmails: `` },
+        hostedPlan: { compEmails: `` },
     }) as unknown as Config;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,7 +37,7 @@ const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Rec
         // address goes with it. The stub settles what the model calls already returned, as the hosted suite's does.
         sandbox: { update: vi.fn().mockResolvedValue({}) },
         $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
-        membership: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         ...over,
     }) as unknown as PrismaClient;
 
@@ -106,7 +106,7 @@ describe(`collecting the machines nobody came back to`, () => {
      * however long it sits, which is also what makes "your data stays" a real difference between the tiers. */
     it(`never touches a member's machine`, async () => {
         const calls = stubFly(`stopped`);
-        const prisma = prismaWith([machine()], { membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
+        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(calls).toHaveLength(0);
     });

@@ -11,7 +11,7 @@
  * contribution points had grown was missing. Nothing said a word until the lock test ran against a tree the
  * the declarations emit had built properly, by which point the drift read as a break arriving with no declaration. */
 import { writeFileSync } from "node:fs";
-import { currentLock, serializeLock } from "../src/state/contract-lock.js";
+import { currentLock, serializeLock } from "../dist/state/contract-lock.js";
 
 const lock = currentLock();
 writeFileSync(new URL("../contract.lock.json", import.meta.url), serializeLock(lock));

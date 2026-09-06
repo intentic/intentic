@@ -43,7 +43,7 @@ const summary = (id: string, updatedAt: number): AgentSummary => ({
     provider: `claude`,
     harness: `native`,
     updatedAt,
-    attention: { plan: false, question: false, permission: false, service: false, capability: false, credential: false, conflict: false },
+    attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
 });
 
 const hello = (): void => applySystemEvent({ kind: `hello`, workspaceId: `workspace`, build: `build-1` }, SANDBOX);

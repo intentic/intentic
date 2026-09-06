@@ -508,12 +508,8 @@ COPY --chmod=755 _sandbox/sandbox/bin/geo /usr/local/bin/geo
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.
 COPY --chmod=755 _sandbox/sandbox/bin/otp /usr/local/bin/otp
-# The premium-services command the services skill teaches: list the platform's priced catalog, run one on the
-# owner's credits. Same shape as vpn/otp — it relays through the daemon and owns no economics; the member
-# gate, the meter and the refund discipline are all platform-side.
-COPY --chmod=755 _sandbox/sandbox/bin/services /usr/local/bin/services
 # The capability-ask command the capabilities skill teaches: list what this sandbox can be connected to, and
-# ask the owner in chat to connect one. Same shape as services — it relays through the daemon, which owns the
+# ask the owner in chat to connect one. Same shape as vpn/otp — it relays through the daemon, which owns the
 # consent card and the setup watch; the CLI connects nothing and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
 # The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable

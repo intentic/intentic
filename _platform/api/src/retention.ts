@@ -1,7 +1,6 @@
 import { sendAdminDigest } from "./admin/admin-digest.js";
 import { rollupAdminDaily } from "./admin/admin-rollup.js";
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
-import { expireOffers } from "./mcp/mcp-offer.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import { sweepHostedBuilds } from "./sandbox/hosted/hosted-build.js";
@@ -22,38 +21,16 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     const now = new Date();
     // A handoff normally lives seconds, the redeem deletes it, so this only ever catches the ones nobody
     // picked up. They hold a Google ID token, which is exactly why an unclaimed one must not sit for a day.
-    // The creator pool's ledgers keep 13 months: a full year of transparency history plus the month in
-    // progress, then the rows go, they are pseudonymous but per-user, so storage limitation applies. The
-    // credit meter's day rows follow the same window (nothing reads a past day, but a year of them is what
-    // lets a member dispute a bill), as do the donation and service-run rows earnings were computed from.
+    // The hosted hour meter's month rows keep 13 months: nothing reads a past month, but a year of them is
+    // what lets someone dispute a limit they were told they hit. Pseudonymous but per-user, so storage
+    // limitation applies and they go after that.
     const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS).toISOString().slice(0, 10);
     const [sessions, verifications, handoffs] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
-        prisma.donation.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
-        prisma.creditSpend.deleteMany({ where: { day: { lt: ledgerCutoff } } }),
-        prisma.serviceRun.deleteMany({ where: { createdAt: { lt: new Date(`${ledgerCutoff}T00:00:00.000Z`) } } }),
-        // The hosted hour meter's month rows, on the same window and for the same reason: nothing reads a
-        // past month, but a year of them is what lets someone dispute a limit they were told they hit.
         prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
-        // Wanted-list rows go far sooner than the ledgers: the public aggregate reads 90 days, and a want is
-        // a lead rather than a record anyone disputes, double the read window is all the history it needs.
-        prisma.serviceWant.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * DAY_MS) } } }),
-        /* Approval offers are ephemera, not a ledger, the CHARGE is recorded as a service run, which the
-         * window above keeps. What an offer holds is the request body an agent composed, which can carry
-         * anything the task was about, so it goes on the shortest window here: a day is far past the ten
-         * minutes it could ever be acted on, and long enough that "what did my agent ask for this morning"
-         * is still answerable. */
-        prisma.serviceOffer.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - DAY_MS) } } }),
-        // OAuth access tokens Better Auth issued to MCP clients, once even their refresh token is dead. The
-        // library never prunes them; without this, every reconnect leaves a row behind forever.
-        prisma.oauthAccessToken.deleteMany({ where: { refreshTokenExpiresAt: { lt: now } } }),
     ]);
-    /* Offers nobody answered, marked before the delete above eventually takes them. Not a correctness
-     * requirement, every reader already treats a lapsed row as expired, but a `pending` row that can never
-     * be clicked is a table lying at rest, and this is the one statement that stops it. */
-    await expireOffers(prisma, now);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },
         select: { id: true, email: true },
@@ -140,8 +117,8 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         } catch (error) {
             logger.error({ err: error }, `hosted meter sweep failed`);
         }
-        // Collect the free machines nobody has opened in weeks (one warning email first). Members are never
-        // touched, nor is anything currently running.
+        // Collect the free machines nobody has opened in weeks (one warning email first). A machine on the
+        // hosted plan is never touched, nor is anything currently running.
         try {
             logger.info(await reapIdleHosted(prisma, config, logger), `hosted idle sweep completed`);
         } catch (error) {

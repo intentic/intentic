@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { premiumOf } from "../../pool/pool-membership.js";
+import { onHostedPlan } from "./hosted-plan.js";
 import { getMachine, isFlyGone } from "./fly.js";
 
 /* THE FREE HOSTED LANE'S HOUR METER, what a machine we run costs its owner's monthly allowance, and whether
@@ -30,7 +30,7 @@ export const usageMonth = (at: Date): string => at.toISOString().slice(0, 7);
 const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
 
 export interface HostedBudget {
-    // False when this owner is metered at all, a member, or a platform with the ceiling switched off.
+    // False when this owner is not metered at all: on the hosted plan, or a platform with the ceiling off.
     readonly metered: boolean;
     // The ceiling in minutes, and what is left of it. Both 0 when unmetered; read `metered` first.
     readonly allowanceMinutes: number;
@@ -40,14 +40,14 @@ export interface HostedBudget {
 
 const unmetered: HostedBudget = { metered: false, allowanceMinutes: 0, usedMinutes: 0, remainingMinutes: 0 };
 
-/* What this OWNER has left this month. Membership is checked first and answers immediately: members are
- * unmetered by decision, so a member never pays the cost of a Fly round-trip or a meter read to be told so.
+/* What this OWNER has left this month. The plan is checked first and answers immediately: the plan is
+ * unmetered by decision, so a subscriber never pays the cost of a Fly round-trip or a meter read to be told so.
  *
  * `userId` is always the sandbox's owner, never the caller, a shared sandbox's guests spend the owner's
  * month, which is the only reading under which sharing cannot be used to launder machine time. */
 export const hostedBudgetOf = async (prisma: PrismaClient, config: Config, userId: string): Promise<HostedBudget> => {
     const allowanceMinutes = config.hosted.monthlyHours * 60;
-    if (allowanceMinutes === 0 || (await premiumOf(prisma, config, userId))) {
+    if (allowanceMinutes === 0 || (await onHostedPlan(prisma, config, userId))) {
         return unmetered;
     }
     const row = await prisma.hostedUsage.findUnique({

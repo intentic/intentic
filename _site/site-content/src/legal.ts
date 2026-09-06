@@ -4,7 +4,7 @@
  *
  * THESE ARE WRITTEN AGAINST THE CODE, and that is the only reason they can be this specific. Every window,
  * region, size and data category below was read out of the implementation, the retention sweep, the hosted
- * provisioner's region pick, the trial's per-account meter, the pool's Stripe wiring, the analytics client's
+ * provisioner's region pick, the trial's per-account meter, the hosted plan's Stripe wiring, the analytics client's
  * own configuration (web/src/composables/analytics.ts, desktop-app/src/analytics.ts), rather than guessed at
  * from what a service like this usually does. The corollary is a maintenance duty: a change to any of those
  * makes a sentence here false, and a false privacy statement is a regulatory problem rather than stale copy.
@@ -77,7 +77,7 @@ export const privacyDoc: LegalDoc = {
                 "Sandbox records: sandbox names, their public addresses, and the connection tokens used to reach them. Tokens are stored encrypted.",
                 "Hosted machine records: for a sandbox we host, the machine and volume identifiers at our infrastructure provider and the region it runs in.",
                 "Teammate emails: addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Invitations never accepted are deleted after 90 days.",
-                "Membership and credit records: your subscription status and billing period from Stripe, and the ledger of credits you spent, which extension installs you donated to and which service runs you paid for. Kept 13 months so a full year of the public payout ledger stays auditable and you can query a charge.",
+                "Hosted plan records: your subscription status and billing period from Stripe. Hosted usage: the awake minutes of your hosted sandbox each calendar month, so the free lane's allowance can be enforced; kept 13 months so you can query a limit you were told you hit.",
                 "Trial usage: a per-day count of model messages you used on the free trial, so the daily allowance can be enforced.",
             ],
         },
@@ -85,7 +85,7 @@ export const privacyDoc: LegalDoc = {
             heading: "What we do not collect",
             paragraphs: [
                 "We run no advertising and no ad or cross-site tracking, on the website or in the app, and we sell no data to anyone. The only cookie is the strictly necessary session cookie that keeps you signed in. We do run product analytics, in the workspace app and the desktop app: the next section says exactly what that captures.",
-                "The sandbox itself reports nothing to us. A sandbox you run on your own machine sends no usage pings, no active-day signals and no counts: the creator payout pool is deliberately built so that nothing a sandbox could report is worth money, which is why it can ask for nothing. Your code, your files and your prompts are never sent to us by a sandbox: what the analytics below sees is the workspace interface in your browser, and the next section is explicit about that.",
+                "The sandbox itself reports nothing to us. A sandbox you run on your own machine sends no usage pings, no active-day signals and no counts: nothing the platform sells is priced on anything a sandbox could report, which is why it can ask for nothing. Your code, your files and your prompts are never sent to us by a sandbox: what the analytics below sees is the workspace interface in your browser, and the next section is explicit about that.",
                 "We never receive your payment card details. Stripe collects them directly and we see only a customer reference, the subscription status and the billing period.",
             ],
         },
@@ -154,7 +154,7 @@ export const privacyDoc: LegalDoc = {
             heading: "Legal bases",
             paragraphs: ["Under the GDPR we rely on:"],
             list: [
-                "Performance of our contract with you (Art. 6(1)(b)) for account data, sandbox records, hosted machines, membership and credits.",
+                "Performance of our contract with you (Art. 6(1)(b)) for account data, sandbox records, hosted machines, hosted usage and the hosted plan.",
                 "Our legitimate interest (Art. 6(1)(f)) in keeping accounts and infrastructure secure, for session and sign-in security data and for acting on abuse reports.",
                 "Our legitimate interest (Art. 6(1)(f)) in understanding and improving the product, for the analytics above. You can object to that one, and the section says how.",
                 "Compliance with a legal obligation (Art. 6(1)(c)) for tax and accounting records of payments.",
@@ -173,11 +173,11 @@ export const privacyDoc: LegalDoc = {
             list: [
                 "Sessions and sign-in verifications: deleted when they expire.",
                 "Unaccepted sandbox invitations: deleted after 90 days.",
-                "Credit ledger, donations and service-run records: 13 months.",
+                "Hosted usage records: 13 months.",
                 "Analytics events and session replays: held by PostHog under the retention of our plan with them, and nowhere else. Ask and we delete yours before that.",
-                "Account, sandbox and membership records: until you delete your account.",
+                "Account, sandbox and hosted plan records: until you delete your account.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
-                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account, and, for a machine without a membership, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
+                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account, and, for a machine whose owner is not on the hosted plan, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
             ],
         },
         {
@@ -219,7 +219,7 @@ export const termsDoc: LegalDoc = {
             list: [
                 "The connection layer: accounts, and the link between your browser and sandboxes you run on your own infrastructure. Free.",
                 "Hosted sandboxes: one virtual machine per account that we create and pay for at our infrastructure provider. Free, and subject to the section below.",
-                "The membership: a paid monthly subscription that includes premium extensions and a daily allowance of credits.",
+                "The hosted plan: a paid monthly subscription that makes your hosted sandbox always on and never removed for going unused.",
                 "The model trial: a small daily allowance of AI messages served with our own model keys, so you can try the product before you own a subscription.",
             ],
         },
@@ -233,14 +233,14 @@ export const termsDoc: LegalDoc = {
             heading: "Sandboxes we host",
             paragraphs: [
                 "You may have one hosted sandbox per account. We create it at Fly.io on a machine of the size published in the app, with a disk of the published size, and we pay the bill. It stops on its own after a period of inactivity and starts again when you return.",
-                "Without a membership it also has an allowance of running time each calendar month, of the number of hours published in the app. Only time the machine is actually running counts against it; while it is asleep, nothing does. When the allowance is used up we will not start the machine again until the next month begins, and we will say so rather than failing quietly. We never stop a machine that is already running to enforce this. A membership removes the allowance entirely.",
+                "Without the hosted plan it also has an allowance of running time each calendar month, of the number of hours published in the app. Only time the machine is actually running counts against it; while it is asleep, nothing does. When the allowance is used up we will not start the machine again until the next month begins, and we will say so rather than failing quietly. We never stop a machine that is already running to enforce this. The hosted plan removes the allowance entirely.",
                 "Four things about it you should plan around, because they are not incidental limitations but the terms on which it is free:",
             ],
             list: [
                 "There is no availability commitment. It is provided on a best-effort basis, it will sometimes be unavailable, and we owe you no service level, credit or refund for that.",
                 "We run no backup service. Our infrastructure provider takes automatic daily snapshots of the disk and keeps them for a few days, but that is their disaster-recovery mechanism rather than a feature of ours: we offer no way to browse or restore one, and we will not restore one on request. Do not plan around it.",
                 "Your own copy is the one that counts. Turn on desktop sync and the workspace mirrors continuously to a folder on your own computer, or keep your work in a git remote: the workspace is where work happens, not where it is kept.",
-                "It does not wait for you indefinitely. Without a membership, a machine you have not opened for the period published in the app is destroyed along with its disk, after we email you a warning first. Opening it stops that. A member's machine is not destroyed for going unused.",
+                "It does not wait for you indefinitely. Without the hosted plan, a machine you have not opened for the period published in the app is destroyed along with its disk, after we email you a warning first. Opening it stops that. A machine on the hosted plan is not destroyed for going unused.",
                 "It is not for production. Do not run anything on it that other people depend on, and do not store the only copy of anything on it.",
             ],
         },
@@ -248,7 +248,7 @@ export const termsDoc: LegalDoc = {
             heading: "What we may do to a hosted sandbox",
             paragraphs: [
                 "We can create, stop, start and destroy the machine. We cannot read what is on it, and we will not build ourselves a way to.",
-                "We may stop or destroy a hosted machine: at your request; when you delete the sandbox or your account; immediately and without notice if it breaches our Acceptable Use Policy or if leaving it running would expose us or others to harm or legal liability; after telling you first, if we discontinue the hosted offering or if a machine without a membership has gone unopened for the period published in the app. We may also decline to start a machine whose free monthly running-time allowance is used up, until that allowance resets.",
+                "We may stop or destroy a hosted machine: at your request; when you delete the sandbox or your account; immediately and without notice if it breaches our Acceptable Use Policy or if leaving it running would expose us or others to harm or legal liability; after telling you first, if we discontinue the hosted offering or if a machine whose owner is not on the hosted plan has gone unopened for the period published in the app. We may also decline to start a machine whose free monthly running-time allowance is used up, until that allowance resets.",
                 "Because we cannot inspect the machine, stopping or destroying it is the whole of our response to an abuse report: we cannot investigate what is inside, and we will not pretend to. Where we destroy a machine and the circumstances allow it, we will give you a chance to retrieve your data first; where they do not, we will not.",
             ],
         },
@@ -274,11 +274,10 @@ export const termsDoc: LegalDoc = {
             ],
         },
         {
-            heading: "Membership, credits and payment",
+            heading: "The hosted plan and payment",
             paragraphs: [
-                "The membership is billed monthly in advance through Stripe, renews automatically until cancelled, and is stated exclusive of any VAT that applies to you. You can cancel at any time in Settings; cancellation takes effect at the end of the period you have paid for, and access continues until then. If a payment fails, membership benefits pause while Stripe retries.",
-                "Credits are a daily allowance, reset at UTC midnight. They do not roll over, have no cash value, cannot be exchanged for money, and are not refundable once spent. A service run that never produces an answer is not charged; one that produces an answer you did not like is. What a run costs is shown before it runs.",
-                "If you are a consumer in the EU, you have 14 days to withdraw from the subscription. By starting to use the membership within that period you ask us to begin immediately and accept that you will owe a proportionate amount for what you used before withdrawing. Creator earnings and payouts are governed by the terms published on the Earn pages.",
+                "The hosted plan is billed monthly in advance through Stripe, renews automatically until cancelled, and is stated exclusive of any VAT that applies to you. You can cancel at any time in Settings; cancellation takes effect at the end of the period you have paid for, and the plan continues until then. If a payment fails, the plan pauses while Stripe retries: the free lane's allowance and removal rules apply to your hosted sandbox until it resumes.",
+                                "If you are a consumer in the EU, you have 14 days to withdraw from the subscription. By starting to use the plan within that period you ask us to begin immediately and accept that you will owe a proportionate amount for what you used before withdrawing.",
             ],
         },
         {
@@ -311,7 +310,7 @@ export const termsDoc: LegalDoc = {
             heading: "Liability",
             paragraphs: [
                 "For the parts of the service provided free of charge: the connection layer, hosted sandboxes and the trial, our liability is excluded to the maximum extent the law permits.",
-                "For the paid membership, our total liability for all claims in any 12-month period is limited to what you paid us in that period. We are not liable in any case for indirect or consequential loss, lost profits, lost or corrupted data on infrastructure we do not control, or costs you incur at your own providers.",
+                "For the paid hosted plan, our total liability for all claims in any 12-month period is limited to what you paid us in that period. We are not liable in any case for indirect or consequential loss, lost profits, lost or corrupted data on infrastructure we do not control, or costs you incur at your own providers.",
                 "Nothing here excludes liability that cannot be excluded by law: intentional harm, personal injury, and, if you are a consumer, your statutory rights.",
             ],
         },
@@ -354,7 +353,7 @@ export const acceptableUseDoc: LegalDoc = {
                 "Host or distribute malware, ransomware, exploit kits, phishing pages, or infrastructure for fraud.",
                 "Store or transmit material that is unlawful where you are or where the machine runs, and in particular child sexual abuse material, which we report to the authorities.",
                 "Infringe intellectual property or misappropriate someone else's confidential information.",
-                "Circumvent limits: the per-account hosted machine allowance, the trial meter, the credit allowance, or any other quota, whether by extra accounts, automation or otherwise.",
+                "Circumvent limits: the per-account hosted machine allowance, the trial meter, or any other quota, whether by extra accounts, automation or otherwise.",
                 "Resell the hosted sandbox, or provide it to third parties as your own service.",
                 "Deploy production services or anything other people depend on. The hosted box is a workspace, not a hosting product, and it is sized and operated accordingly.",
             ],
@@ -398,7 +397,7 @@ export const dpaDoc: LegalDoc = {
             heading: "When this applies",
             paragraphs: [
                 "It applies to personal data that ends up inside a sandbox we host for you: in repositories, files, databases or logs in that workspace, where you decide what is there and why.",
-                "It does not apply to your account, membership or sandbox records: for those we decide the purposes ourselves and act as controller, governed by the Privacy Policy. It also does not apply to a sandbox you run on your own infrastructure, because nothing of its contents reaches us.",
+                "It does not apply to your account, hosted plan or sandbox records: for those we decide the purposes ourselves and act as controller, governed by the Privacy Policy. It also does not apply to a sandbox you run on your own infrastructure, because nothing of its contents reaches us.",
             ],
         },
         {
@@ -526,7 +525,7 @@ export const subprocessorsDoc: LegalDoc = {
                     ],
                     [
                         "Stripe Payments Europe Ltd (IE)",
-                        "Membership payments, invoicing and creator payouts, including the identity and tax details a payout account needs",
+                        "Hosted plan payments and invoicing",
                         "European Union and United States",
                         "Data Privacy Framework and Standard Contractual Clauses",
                     ],

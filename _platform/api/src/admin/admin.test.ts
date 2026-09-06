@@ -6,13 +6,11 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
-import { retryPayout } from "../pool/pool-payout.js";
-import { deleteUserAccount, reinstateService, stopHostedMachine, suspendService } from "./admin-actions.js";
+import { deleteUserAccount, stopHostedMachine } from "./admin-actions.js";
 import { adminAttention } from "./admin-attention.js";
 import { adminCosts } from "./admin-costs.js";
 import { sendAdminDigest } from "./admin-digest.js";
 import { adminFunnel } from "./admin-funnel.js";
-import { adminMarket } from "./admin-market.js";
 import { adminOverview } from "./admin-overview.js";
 import { adminRoutes } from "./admin.routes.js";
 import { rollupAdminDaily } from "./admin-rollup.js";
@@ -34,15 +32,7 @@ const NOW = new Date(`2026-08-25T10:30:00Z`);
 const configWith = (overrides?: Record<string, unknown>): Config =>
     ({
         admin: { emails: `radarsu@gmail.com`, mutations: false },
-        pool: {
-            priceUsd: 20,
-            canaryFailures: 3,
-            stripeSecretKey: `sk`,
-            stripePriceId: `price`,
-            graduationRuns: 50,
-            watchWindowRuns: 20,
-            maxRefundRate: 0.2,
-        },
+        hostedPlan: { priceUsd: 20, stripeSecretKey: `sk`, stripePriceId: `price` },
         hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
         ingress: { url: ``, signingKey: ``, zone: `sbx.test` },
         trial: { keys: `k1`, dailyMessages: 12 },
@@ -92,7 +82,7 @@ describe(`requireAdmin`, () => {
 });
 
 describe(`adminOverview`, () => {
-    it(`assembles counts, the membership book, activity windows and lanes — absent group-by rows zero-filled`, async () => {
+    it(`assembles counts, the plan book, activity windows and lanes — absent group-by rows zero-filled`, async () => {
         // The sandbox mock answers by window: the where's gte names which count is being asked for.
         const windows = new Map([
             [new Date(`2026-08-25T10:25:00Z`).getTime(), 3], // 5 min — connected now
@@ -108,15 +98,13 @@ describe(`adminOverview`, () => {
                     return gte ? (windows.get(gte.getTime()) ?? -1) : 9;
                 },
             },
-            membership: {
+            hostedPlan: {
                 groupBy: async () => [
                     { status: `active`, _count: { _all: 2 } },
                     { status: `past_due`, _count: { _all: 1 } },
                 ],
                 count: async () => 1,
             },
-            service: { groupBy: async () => [{ status: `listed`, _count: { _all: 4 } }] },
-            serviceRun: { count: async () => 11 },
             hostedMachine: { count: async () => 5 },
         } as unknown as PrismaClient;
 
@@ -126,12 +114,10 @@ describe(`adminOverview`, () => {
             sandboxes: 9,
             activeDaemons: 3,
             activeSandboxes: { day: 4, week: 5, month: 6 },
-            memberships: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 40 },
-            services: { draft: 0, probation: 0, listed: 4, suspended: 0 },
-            runsToday: 11,
+            plans: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 40 },
             hostedMachines: 5,
-            // trial has a key and the pool has Stripe; hosted, wallet and push are unconfigured.
-            lanes: { trial: true, pool: true, hosted: false, wallet: false, push: false },
+            // trial has a key and the plan has Stripe; hosted, wallet and push are unconfigured.
+            lanes: { trial: true, hostedPlan: true, hosted: false, wallet: false, push: false },
             mutationsEnabled: false,
         });
     });
@@ -212,21 +198,17 @@ describe(`adminAttention`, () => {
     const emptyPrisma = () =>
         ({
             sandbox: { findMany: async () => [] },
-            creatorPayout: { findMany: async () => [] },
-            creatorStatement: { findMany: async () => [] },
-            payoutAccount: { findMany: async () => [] },
-            membership: { findMany: async () => [] },
+            hostedPlan: { findMany: async () => [] },
             hostedPoolMachine: { findMany: async () => [] },
-            service: { findMany: async () => [] },
         }) as unknown as PrismaClient;
 
     it(`answers empty and untruncated when nothing needs a human`, async () => {
-        expect(await adminAttention(emptyPrisma(), configWith(), () => NOW)).toEqual({ items: [], truncated: false });
+        expect(await adminAttention(emptyPrisma(), () => NOW)).toEqual({ items: [], truncated: false });
     });
 
     it(`composes sentences server-side, orders danger before warning then newest, and anchors drill-downs`, async () => {
         const prisma = emptyPrisma();
-        // A stuck setup WITH a failure (danger), a payout failing (danger), a canary climbing (warning).
+        // A stuck setup WITH a failure (danger), a warm-pool claim that crashed (danger), a plan past due (warning).
         (prisma.sandbox as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
             args.where[`setupCodeClaimedAt`]
                 ? [
@@ -243,22 +225,16 @@ describe(`adminAttention`, () => {
                       },
                   ]
                 : [];
-        (prisma.creatorPayout as { findMany: unknown }).findMany = async () => [
-            {
-                amountCents: 2500,
-                attempts: 2,
-                lastError: `account requirements past due`,
-                createdAt: new Date(`2026-08-24T00:00:00Z`),
-                user: { email: `creator@example.com` },
-            },
+        (prisma.hostedPoolMachine as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
+            args.where[`state`] === `claimed` ? [{ appName: `intentic-sbx-warm`, region: `arn`, updatedAt: new Date(`2026-08-25T07:00:00Z`) }] : [];
+        (prisma.hostedPlan as { findMany: unknown }).findMany = async () => [
+            { currentPeriodEnd: new Date(`2026-08-20T00:00:00Z`), updatedAt: new Date(`2026-08-24T00:00:00Z`), user: { email: `late@example.com` } },
         ];
-        (prisma.service as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
-            args.where[`canaryFails`] ? [{ slug: `research`, canaryFails: 2, updatedAt: new Date(`2026-08-25T09:00:00Z`) }] : [];
 
-        const attention = await adminAttention(prisma, configWith(), () => NOW);
+        const attention = await adminAttention(prisma, () => NOW);
         expect(attention.truncated).toBe(false);
-        expect(attention.items.map((item) => item.kind)).toEqual([`stuck-setup`, `payout-stuck`, `service-canary`]);
-        const [stuck, payout, canary] = attention.items;
+        expect(attention.items.map((item) => item.kind)).toEqual([`stuck-setup`, `pool-claim-lingering`, `plan-past-due`]);
+        const [stuck, claim, pastDue] = attention.items;
         expect(stuck).toMatchObject({
             severity: `danger`,
             title: `Setup stuck for alice@example.com (“dev box”)`,
@@ -266,20 +242,21 @@ describe(`adminAttention`, () => {
             email: `alice@example.com`,
             sandboxId: `sb1`,
         });
-        expect(payout).toMatchObject({ severity: `danger`, title: `$25.00 payout to creator@example.com failing (2 attempts)` });
-        // The canary sentence quotes the configured suspension threshold, not a constant.
-        expect(canary).toMatchObject({ severity: `warning`, detail: `Suspends at 3.`, serviceSlug: `research` });
+        expect(claim).toMatchObject({ severity: `danger`, title: `Warm-pool machine intentic-sbx-warm (arn) stuck in “claimed”` });
+        // The plan sentence names the account and the period that ran out, and anchors the drill-down.
+        expect(pastDue).toMatchObject({ severity: `warning`, title: `late@example.com's hosted plan is past due`, email: `late@example.com` });
+        expect(pastDue?.detail).toContain(`2026-08-20`);
     });
 
     it(`says truncated when any category hits its cap, so a bounded feed never reads as complete`, async () => {
         const prisma = emptyPrisma();
-        (prisma.membership as { findMany: unknown }).findMany = async () =>
+        (prisma.hostedPlan as { findMany: unknown }).findMany = async () =>
             Array.from({ length: 20 }, (_, index) => ({
                 currentPeriodEnd: new Date(`2026-08-01T00:00:00Z`),
                 updatedAt: new Date(`2026-08-20T00:00:00Z`),
                 user: { email: `user${index}@example.com` },
             }));
-        const attention = await adminAttention(prisma, configWith(), () => NOW);
+        const attention = await adminAttention(prisma, () => NOW);
         expect(attention.items).toHaveLength(20);
         expect(attention.truncated).toBe(true);
     });
@@ -367,7 +344,7 @@ describe(`adminUserDetail`, () => {
         expect(await adminUserDetail(prisma, `nobody@example.com`, () => NOW)).toBeNull();
     });
 
-    it(`assembles the support page: sandboxes with their operational columns, meters, and the creator side`, async () => {
+    it(`assembles the support page: sandboxes with their operational columns, the plan and the meters`, async () => {
         const captured: { lookup?: unknown } = {};
         const prisma = {
             user: {
@@ -394,8 +371,7 @@ describe(`adminUserDetail`, () => {
                 ],
             },
             account: { findMany: async () => [{ providerId: `google` }, { providerId: `google` }] },
-            membership: { findUnique: async () => ({ status: `active`, currentPeriodEnd: new Date(`2026-09-01T00:00:00Z`) }) },
-            creditSpend: { findUnique: async () => ({ credits: 40 }) },
+            hostedPlan: { findUnique: async () => ({ status: `active`, currentPeriodEnd: new Date(`2026-09-01T00:00:00Z`) }) },
             trialUsage: { findMany: async () => [{ day: `2026-08-25`, messages: 3, lastModel: `gemini-2.5-flash` }] },
             hostedUsage: { findUnique: async () => ({ minutes: 120 }) },
             wallet: { findMany: async () => [{ id: `w1`, network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }] },
@@ -426,9 +402,6 @@ describe(`adminUserDetail`, () => {
                     },
                 ],
             },
-            publisherClaim: { findMany: async () => [{ publisher: `alice` }] },
-            service: { findMany: async () => [] },
-            creatorPayout: { findMany: async () => [] },
         } as unknown as PrismaClient;
 
         const detail = await adminUserDetail(prisma, ` alice@example.COM `, () => NOW);
@@ -438,8 +411,7 @@ describe(`adminUserDetail`, () => {
         });
         expect(detail?.user).toMatchObject({ id: `u1`, email: `Alice@Example.com`, termsVersion: `2026-05` });
         expect(detail?.providers).toEqual([`google`]);
-        expect(detail?.membership).toEqual({ status: `active`, currentPeriodEnd: `2026-09-01T00:00:00.000Z` });
-        expect(detail?.creditsToday).toBe(40);
+        expect(detail?.plan).toEqual({ status: `active`, currentPeriodEnd: `2026-09-01T00:00:00.000Z` });
         expect(detail?.hostedMonthMinutes).toBe(120);
         expect(detail?.wallets).toEqual([
             { network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, payments30d: 4 },
@@ -452,19 +424,17 @@ describe(`adminUserDetail`, () => {
             members: [{ email: `bob@example.com`, role: `collaborator`, accepted: false }],
         });
         expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, role: `viewer`, accepted: true }]);
-        // A publisher claim alone makes the account a creator, even with no listing and no payout yet.
-        expect(detail?.creator).toEqual({ publishers: [`alice`], services: [], payouts: [] });
     });
 });
 
 describe(`adminUsers`, () => {
-    const row = (id: string, extra?: { membership?: { status: string } | null; sandboxes?: number }) => ({
+    const row = (id: string, extra?: { plan?: { status: string } | null; sandboxes?: number }) => ({
         id,
         email: `${id}@example.com`,
         name: `User ${id}`,
         image: null,
         createdAt: new Date(`2026-08-01T00:00:00Z`),
-        membership: extra?.membership ?? null,
+        hostedPlan: extra?.plan ?? null,
         _count: { sandboxes: extra?.sandboxes ?? 0 },
     });
 
@@ -482,9 +452,9 @@ describe(`adminUsers`, () => {
             },
         }) as unknown as PrismaClient;
 
-    it(`maps rows to the wire shape: ISO createdAt, sandbox count, membership status only when one exists`, async () => {
+    it(`maps rows to the wire shape: ISO createdAt, sandbox count, plan status only when one exists`, async () => {
         const captured: { findArgs?: Record<string, unknown> } = {};
-        const prisma = prismaWith([row(`a`, { membership: { status: `active` }, sandboxes: 2 }), row(`b`)], 2, captured);
+        const prisma = prismaWith([row(`a`, { plan: { status: `active` }, sandboxes: 2 }), row(`b`)], 2, captured);
         const result = await adminUsers(prisma, { limit: 50 });
         expect(result).toEqual({
             total: 2,
@@ -496,7 +466,7 @@ describe(`adminUsers`, () => {
                     image: null,
                     createdAt: `2026-08-01T00:00:00.000Z`,
                     sandboxCount: 2,
-                    membershipStatus: `active`,
+                    planStatus: `active`,
                 },
                 { id: `b`, email: `b@example.com`, name: `User b`, image: null, createdAt: `2026-08-01T00:00:00.000Z`, sandboxCount: 0 },
             ],
@@ -542,7 +512,7 @@ describe(`admin over the OpenAPI wire`, () => {
         const handler = new OpenAPIHandler({ admin: adminRoutes });
         const context = {
             prisma,
-            config: { admin: { emails: `radarsu@gmail.com`, mutations: options?.mutations ?? false } },
+            config: { admin: { emails: `radarsu@gmail.com`, mutations: options?.mutations ?? false }, hosted: { flyApiToken: ``, flyOrg: `` } },
             user: user ? { id: `u1`, email: user.email, name: `x`, image: null } : null,
             logger,
         } as unknown as OrpcContext;
@@ -594,37 +564,37 @@ describe(`admin over the OpenAPI wire`, () => {
 
     it(`refuses every mutation while ADMIN_MUTATIONS is off, even for a verified admin`, async () => {
         const prisma = {} as PrismaClient;
-        const response = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
-            body: { slug: `research`, reason: `x`, confirm: `research` },
+        const response = await serve(`/rpc/admin/machine/stop`, { email: `radarsu@gmail.com` }, prisma, {
+            body: { sandboxId: `sb1`, confirm: `sb1` },
         });
         expect(response.status).toBe(403);
         expect(((await response.json()) as { message: string }).message).toContain(`ADMIN_MUTATIONS`);
     });
 
-    it(`a mistyped confirmation is a 400 before anything is touched; a correct one flips the row`, async () => {
+    it(`a mistyped confirmation is a 400 before anything is touched; a correct one reaches the action`, async () => {
         let touched = false;
         const prisma = {
-            service: {
-                findUnique: async () => ({ status: `listed` }),
-                update: async () => {
+            hostedMachine: {
+                findUnique: async () => {
                     touched = true;
-                    return {};
+                    return null;
                 },
             },
         } as unknown as PrismaClient;
-        const wrong = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
+        const wrong = await serve(`/rpc/admin/machine/stop`, { email: `radarsu@gmail.com` }, prisma, {
             mutations: true,
-            body: { slug: `research`, reason: `bad actor`, confirm: `reserach` },
+            body: { sandboxId: `sb1`, confirm: `sb2` },
         });
         expect(wrong.status).toBe(400);
         expect(touched).toBe(false);
-        const right = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
+        // The gate passed; what answers now is the action itself, which on this context (no hosted lane)
+        // declines in a sentence rather than throwing.
+        const right = await serve(`/rpc/admin/machine/stop`, { email: `radarsu@gmail.com` }, prisma, {
             mutations: true,
-            body: { slug: `research`, reason: `bad actor`, confirm: `research` },
+            body: { sandboxId: `sb1`, confirm: `sb1` },
         });
         expect(right.status).toBe(200);
-        expect(((await right.json()) as { ok: boolean }).ok).toBe(true);
-        expect(touched).toBe(true);
+        expect((await right.json()) as { ok: boolean }).toMatchObject({ ok: false });
     });
 
     it(`erasure demands the account's email retyped and refuses the admin's own account`, async () => {
@@ -648,86 +618,6 @@ describe(`admin over the OpenAPI wire`, () => {
     });
 });
 
-describe(`adminMarket`, () => {
-    it(`reduces wants to distinct owners with the newest phrasing, and joins each listing to its counters`, async () => {
-        const prisma = {
-            serviceWant: {
-                findMany: async () => [
-                    { userId: `u1`, text: `pdf OCR`, normalized: `pdf ocr`, createdAt: new Date(`2026-08-01T00:00:00Z`) },
-                    { userId: `u2`, text: `PDF ocr`, normalized: `pdf ocr`, createdAt: new Date(`2026-08-02T00:00:00Z`) },
-                    { userId: `u1`, text: `pdf ocr please`, normalized: `pdf ocr please`, createdAt: new Date(`2026-08-03T00:00:00Z`) },
-                ],
-            },
-            service: {
-                findMany: async () => [
-                    {
-                        id: `s1`,
-                        slug: `research`,
-                        publisher: `acme`,
-                        name: `Research`,
-                        status: `probation`,
-                        creditsPerRun: 10,
-                        userId: `owner1`,
-                        canaryFails: 1,
-                        probedAt: new Date(`2026-08-24T00:00:00Z`),
-                        suspendedFor: null,
-                    },
-                    {
-                        id: `s2`,
-                        slug: `demo`,
-                        publisher: `intentic`,
-                        name: `Demo`,
-                        status: `listed`,
-                        creditsPerRun: 1,
-                        userId: null,
-                        canaryFails: 0,
-                        probedAt: null,
-                        suspendedFor: null,
-                    },
-                ],
-            },
-            serviceRun: {
-                groupBy: async (args: { by: string[] }) =>
-                    args.by.length === 1
-                        ? [{ serviceId: `s1`, _count: { _all: 42 } }]
-                        : [
-                              { serviceId: `s1`, status: `ok`, _count: { _all: 8 } },
-                              { serviceId: `s1`, status: `refunded`, _count: { _all: 2 } },
-                          ],
-            },
-            publisherClaim: { count: async () => 3 },
-            payoutAccount: { count: async () => 2 },
-            creatorPayout: { aggregate: async () => ({ _sum: { amountCents: 2500 } }) },
-            creatorStatement: { aggregate: async () => ({ _sum: { amountCents: 9000 } }) },
-        } as unknown as PrismaClient;
-
-        const market = await adminMarket(prisma, configWith(), () => NOW);
-        // Two owners beat recency; the two-owner ask shows its newest phrasing.
-        expect(market.wants).toEqual([
-            { text: `PDF ocr`, owners: 2, lastAt: `2026-08-02T00:00:00.000Z` },
-            { text: `pdf ocr please`, owners: 1, lastAt: `2026-08-03T00:00:00.000Z` },
-        ]);
-        expect(market.services[0]).toEqual({
-            slug: `research`,
-            publisher: `acme`,
-            name: `Research`,
-            status: `probation`,
-            creditsPerRun: 10,
-            owned: true,
-            servedRuns: 42,
-            runs7d: 10,
-            refunds7d: 2,
-            canaryFails: 1,
-            probedAt: `2026-08-24T00:00:00.000Z`,
-            suspendedFor: null,
-        });
-        // The operator row: no owner, no counters, and `owned: false` says the gates don't apply.
-        expect(market.services[1]).toMatchObject({ slug: `demo`, owned: false, servedRuns: 0, runs7d: 0 });
-        expect(market.thresholds).toEqual({ graduationRuns: 50, watchWindowRuns: 20, maxRefundRate: 0.2, canaryFailures: 3 });
-        expect(market.creators).toEqual({ publishers: 3, payoutEnabled: 2, pendingPayoutCents: 2500, unclaimedCents: 9000 });
-    });
-});
-
 describe(`rollupAdminDaily`, () => {
     const prismaWith = (existing: boolean, captured: { windows: unknown[]; upsert?: Record<string, unknown> }) =>
         ({
@@ -739,10 +629,9 @@ describe(`rollupAdminDaily`, () => {
                     return args?.where ? 4 : 100;
                 },
             },
-            serviceRun: { count: async () => 7 },
             trialUsage: { aggregate: async () => ({ _sum: { messages: 33 } }) },
             sandbox: { count: async () => 12 },
-            membership: { count: async () => 5 },
+            hostedPlan: { count: async () => 5 },
             hostedMachine: { count: async () => 6 },
             adminDailyStat: {
                 findUnique: async () => (existing ? { id: `row` } : null),
@@ -763,7 +652,7 @@ describe(`rollupAdminDaily`, () => {
         });
         expect(captured.upsert).toMatchObject({
             where: { day: `2026-08-24` },
-            create: { day: `2026-08-24`, newUsers: 4, serviceRuns: 7, trialMessages: 33, totalUsers: 100, membershipsActive: 5 },
+            create: { day: `2026-08-24`, newUsers: 4, trialMessages: 33, totalUsers: 100, plansActive: 5 },
         });
     });
 
@@ -809,10 +698,7 @@ describe(`sendAdminDigest`, () => {
         ({
             adminDailyStat: { updateMany: async () => ({ count: latchWins ? 1 : 0 }) },
             sandbox: { findMany: async () => [] },
-            creatorPayout: { findMany: async () => [] },
-            creatorStatement: { findMany: async () => [] },
-            payoutAccount: { findMany: async () => [] },
-            membership: {
+            hostedPlan: {
                 findMany: async () =>
                     Array.from({ length: pastDue }, (_, index) => ({
                         currentPeriodEnd: new Date(`2026-08-01T00:00:00Z`),
@@ -821,7 +707,6 @@ describe(`sendAdminDigest`, () => {
                     })),
             },
             hostedPoolMachine: { findMany: async () => [] },
-            service: { findMany: async () => [] },
         }) as unknown as PrismaClient;
 
     it(`sends once per day: the latch losing means somebody else already sent`, async () => {
@@ -853,44 +738,6 @@ describe(`sendAdminDigest`, () => {
 });
 
 describe(`admin actions`, () => {
-    it(`suspend records the operator's reason where the provider reads it; an already-suspended row refuses`, async () => {
-        let update: Record<string, unknown> | undefined;
-        const prisma = {
-            service: {
-                findUnique: async () => ({ status: `listed` }),
-                update: async (args: Record<string, unknown>) => {
-                    update = args;
-                    return {};
-                },
-            },
-        } as unknown as PrismaClient;
-        const result = await suspendService(prisma, `research`, `provider asked us to pause it`);
-        expect(result.ok).toBe(true);
-        expect(update).toMatchObject({
-            where: { slug: `research` },
-            data: { status: `suspended`, suspendedFor: `Suspended by the operator: provider asked us to pause it` },
-        });
-        const already = { service: { findUnique: async () => ({ status: `suspended` }) } } as unknown as PrismaClient;
-        expect((await suspendService(already, `research`, `x`)).ok).toBe(false);
-    });
-
-    it(`reinstate goes to probation with a clean canary, and refuses anything not suspended`, async () => {
-        let update: Record<string, unknown> | undefined;
-        const prisma = {
-            service: {
-                findUnique: async () => ({ status: `suspended` }),
-                update: async (args: Record<string, unknown>) => {
-                    update = args;
-                    return {};
-                },
-            },
-        } as unknown as PrismaClient;
-        expect((await reinstateService(prisma, `research`)).ok).toBe(true);
-        expect(update).toMatchObject({ data: { status: `probation`, suspendedFor: null, canaryFails: 0 } });
-        const listed = { service: { findUnique: async () => ({ status: `listed` }) } } as unknown as PrismaClient;
-        expect((await reinstateService(listed, `research`)).ok).toBe(false);
-    });
-
     it(`machine stop refuses cleanly when the hosted lane is off, and when the sandbox has no machine`, async () => {
         expect((await stopHostedMachine({} as PrismaClient, configWith(), `sb1`)).ok).toBe(false);
         const hostedOn = configWith({
@@ -921,55 +768,4 @@ describe(`admin actions`, () => {
     });
 
     const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
-});
-
-describe(`retryPayout`, () => {
-    const deps = (payout: Record<string, unknown> | null, account: Record<string, unknown> | null, transfer?: () => Promise<{ id: string }>) =>
-        ({
-            prisma: {
-                creatorPayout: {
-                    findUnique: async () => payout,
-                    update: async () => ({}),
-                },
-                payoutAccount: { findUnique: async () => account },
-            },
-            config: configWith(),
-            gateway: { transfer: transfer ?? (async () => ({ id: `tr_1` })) },
-        }) as unknown as Parameters<typeof retryPayout>[0];
-
-    it(`refuses an unknown id and a payout that is not pending, in sentences`, async () => {
-        const missing = await retryPayout(deps(null, null), `p1`);
-        const wrongStatus = await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`);
-        expect(missing.paid).toBe(false);
-        expect(wrongStatus.paid).toBe(false);
-        expect(missing.message).not.toBe(wrongStatus.message);
-        expect(wrongStatus.message).toContain(`paid`);
-    });
-
-    it(`pays a pending payout through the shared settle path under its own idempotency key`, async () => {
-        const result = await retryPayout(
-            deps(
-                { id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` },
-                { stripeAccountId: `acct`, payoutsEnabled: true },
-                undefined,
-            ),
-            `p1`,
-        );
-        expect(result).toEqual({ paid: true, message: `Paid: $25.00 transferred.` });
-    });
-
-    it(`a transfer that fails again stays pending and says so`, async () => {
-        const result = await retryPayout(
-            deps(
-                { id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` },
-                { stripeAccountId: `acct`, payoutsEnabled: true },
-                async () => {
-                    throw new Error(`account requirements past due`);
-                },
-            ),
-            `p1`,
-        );
-        expect(result.paid).toBe(false);
-        expect(result.message).toContain(`account requirements past due`);
-    });
 });

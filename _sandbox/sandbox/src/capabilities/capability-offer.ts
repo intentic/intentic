@@ -6,7 +6,7 @@ import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, whyOf } from "../
 
 /* THE SETUP GATE, how an agent asks the owner to connect a capability it is missing, mid-task, in chat.
  *
- * The shape is the spend gate's (platform/service-offer.ts), because the trust problem is the same: the model
+ * The shape is the wallet's payment gate (wallet/payment-offer.ts), because the trust problem is the same: the model
  * may ASK, and only the owner's click makes anything happen. The agent's `capabilities request` call PARKS
  * here, a card goes up in the conversation's live turn with the CATALOG's own words on it (the card id and
  * title come from the catalog the ask was validated against, the model contributes its one-line `why` and

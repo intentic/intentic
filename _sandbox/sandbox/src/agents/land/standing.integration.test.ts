@@ -206,7 +206,7 @@ test("a branch ahead by commits that cancel out is landed, not ready", async () 
     // that commit, which drops the agent's own work commit (upstream now) and keeps the two that cancel out.
     await sh(work, "add", "-A");
     await commit(work, "user reviews and commits");
-    await syncConversation(worktrees, "c1", conversation.repos, "Creator pool");
+    await syncConversation(worktrees, "c1", conversation.repos, "Warm pool");
     expect(await sh(conversation.cwd, "rev-parse", "HEAD^^")).toBe(await sh(work, "rev-parse", "HEAD"));
 
     // Two commits ahead of a main tree holding every byte of it. Nothing to land, so nothing is offered, and

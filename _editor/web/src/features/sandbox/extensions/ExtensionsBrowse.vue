@@ -8,7 +8,6 @@ import { startAgent } from "../../agents/fleet/agentActions";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
 import { useRegistry } from "../../extensions/useRegistry";
-import { useMembership } from "../../settings/membership/useMembership";
 import { useRole } from "../secrets/useRole";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
@@ -70,8 +69,6 @@ const { entries, registryName, url, token, isOfficial, isLoading, error, refetch
 const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
-// Re-read the credit balance the moment a premium install has spent from it: see the install handler.
-const { spent } = useMembership();
 
 const installing = ref<string | undefined>(undefined);
 const failure = ref<NoticeModel | undefined>(undefined);
@@ -138,9 +135,8 @@ watch(
 );
 
 /* INSTALLING FROM HERE IS THE SAME INSTALL, not a shortcut past it. The registry row supplies exactly what the
- * capability form collected: the repository, the commit, the subdirectory, and the tier the daemon's premium
- * gate reads, so nothing is being skipped; there was simply never anything for a person to type that the
- * listing did not already know. The apply streams into a real terminal, which is what the user watches. */
+ * capability form collected: the repository, the commit and the subdirectory, so nothing is being skipped;
+ * there was simply never anything for a person to type that the listing did not already know. The apply streams into a real terminal, which is what the user watches. */
 const install = async (listing: DiscoverListing): Promise<void> => {
     const pointer = listing.entry.install;
     if (pointer === undefined || listing.state.action === undefined || installing.value !== undefined) {
@@ -161,7 +157,6 @@ const install = async (listing: DiscoverListing): Promise<void> => {
                     ...(pointer.path !== undefined && pointer.path !== `` ? { path: pointer.path } : {}),
                     // Code inside a private registry repo clones with the same token that read the registry.
                     ...(token.value !== `` && pointer.url === url.value.trim() ? { token: token.value } : {}),
-                    ...(listing.entry.tier === `premium` ? { tier: `premium` } : {}),
                     // Where this listing lives: what the daemon's update check compares the pinned sha
                     // against afterwards, and where its advisories come from. A hand-typed install on the
                     // Capabilities form records no origin and is rightly compared against the official
@@ -178,15 +173,6 @@ const install = async (listing: DiscoverListing): Promise<void> => {
         // Installed, but nothing of it is RUNNING until the host runs again: the same convergence the section's
         // reload button performs, done here so the extension works without a page reload.
         await reloadExtensions();
-        /* A premium install has just spent credits, so every surface showing a balance is now wrong by exactly
-         * the donation: the account menu, this catalogue's next cost block, the composer's pill. Re-read once
-         * here rather than letting each of them discover it on its own timer: the number the reader will look at
-         * to check what just happened is the one that must not be the pre-spend figure. Cheap and unconditional
-         * for a premium row, including the reinstall the platform charged nothing for: "nothing changed" is a
-         * perfectly good answer to arrive at from the platform rather than to assume. */
-        if (listing.entry.tier === `premium`) {
-            await spent();
-        }
         detailOpen.value = false;
     } catch (err) {
         failure.value = noticeFrom(err, `Could not install ${listing.entry.name}.`);

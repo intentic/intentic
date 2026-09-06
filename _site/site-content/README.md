@@ -19,8 +19,9 @@ markup.
 - [src/automate.ts](src/automate.ts): the words of the automation machine — six triggers, the check that may veto a
   run, what a run turns out to be. One source for two drawings of it: the home page's Automate stage and the hero
   figure on /features/automate/, both rendered by `AutomateFigure.astro`.
-- [src/pricing.ts](src/pricing.ts): the pricing page's copy; figures from [src/pool.ts](src/pool.ts), the
-  published membership figures every page that mentions money reads.
+- [src/pricing.ts](src/pricing.ts): the pricing page's copy; figures from [src/hosted.ts](src/hosted.ts), the
+  published hosted figures (the plan's price, the free lane's hours and removal window, the machine's shape)
+  every page that mentions money reads.
 - [src/nav.ts](src/nav.ts) / [src/page-meta.ts](src/page-meta.ts): navigation and per-page metadata.
 - [src/structured-data.ts](src/structured-data.ts): the JSON-LD the site emits.
 

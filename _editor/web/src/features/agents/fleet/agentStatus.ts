@@ -297,7 +297,6 @@ export const blocked = (agent: AgentStanding): boolean =>
         : agent.attention.plan ||
           agent.attention.question ||
           agent.attention.permission ||
-          agent.attention.service ||
           agent.attention.capability ||
           agent.attention.conflict ||
           BLOCKING_ENDINGS.has(agent.status);
@@ -311,7 +310,6 @@ export const awaitingUser = (agent: AgentStanding): boolean =>
     agent.attention.plan ||
     agent.attention.question ||
     agent.attention.permission ||
-    agent.attention.service ||
     agent.attention.capability ||
     agent.status === `awaiting`;
 
@@ -335,10 +333,7 @@ export const awaitingUser = (agent: AgentStanding): boolean =>
  * taken off the agent's own name at lane width (see the length test, and `Usage limit`'s note on it). */
 const ATTENTION_WORDS = {
     plan: { chip: `Approval needed`, verb: `Review plan` },
-    // Money outranks a generic question: the agent is parked on a priced run only your click can release, and
-    // the verb carries the spend, unlike the plain approval above it.
-    service: { chip: `Spend approval`, verb: `Approve spend` },
-    // Same rank as spend, same reason: the agent is parked on a setup only you can do. The verb carries the
+    // Outranks a generic question: the agent is parked on a setup only you can do. The verb carries the
     // work, because this click leads into a flow rather than settling a one-press approval.
     capability: { chip: `Setup needed`, verb: `Set up` },
     /* A CREDENTIAL WAITING FOR THE PEOPLE THE OWNER NAMED, and the one park on this board that may not be the

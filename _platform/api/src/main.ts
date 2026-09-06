@@ -5,8 +5,6 @@ import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
-import { startPoolCycle } from "./pool/pool-cycle-job.js";
-import { seedDemoService } from "./pool/pool-demo.js";
 import { startHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
@@ -36,10 +34,6 @@ if (!config.email.apiKey || !config.email.from) {
 
 const prisma = createPrisma(config);
 startRetention(prisma, config, logger);
-// Freezes every finished month the platform has not closed yet, then pays out everything that has come due.
-// The frozen month is what payouts settle on, and the only record of what was owed once the ledger rows behind
-// it age out. No-ops on a platform without a pool.
-startPoolCycle(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand (and drains them when the pool is off), see hosted-pool.ts.
 startHostedPool(prisma, config, logger);
 // Ends the environment builds whose builder never reported, destroys builders past their timeout, and keeps
@@ -51,9 +45,6 @@ startHostedHealth(prisma, config, logger);
 // …and the same question asked the only way that can answer it for certain: provision a sandbox end to end
 // and wait for its daemon to check in (hosted-canary.ts). Off unless HOSTED_CANARY_MINUTES says otherwise.
 startHostedCanary(prisma, config, logger);
-// The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
-// and self-swallowing, a catalog short one demo row must never hold the platform's boot.
-void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));
 const { app } = createApp(config, prisma, logger);
 
 /* Dev serves https (the SPA does too, for FedCM); prod runs plain http behind a TLS-terminating proxy.

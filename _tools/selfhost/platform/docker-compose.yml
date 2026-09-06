@@ -69,7 +69,7 @@ services:
             #
             # The list itself, though, must be COMPLETE — compose only forwards what is named here, so a knob
             # missing from it is one an operator can set in .env and watch do nothing, with no error anywhere.
-            # That is how POOL_* and TRIAL_* came to be set on a deployment that was not reading them. Add the
+            # That is how HOSTED_PLAN_* and TRIAL_* came to be set on a deployment that was not reading them. Add the
             # variable here in the same commit that adds the field to config.ts.
             #
             # Comma-separated emails whose signed-in session may call the /admin surface (the operator's
@@ -157,44 +157,15 @@ services:
             TRIAL_BASE_URL: ${TRIAL_BASE_URL:-}
             TRIAL_MODELS: ${TRIAL_MODELS:-}
             TRIAL_DAILY_MESSAGES: ${TRIAL_DAILY_MESSAGES:-}
-            # THE CREATOR POOL (the paid membership). stripeSecretKey + stripePriceId are the switch: both
-            # empty and the pool does not exist — /pool routes 404 and no membership is offered anywhere.
-            POOL_STRIPE_SECRET_KEY: ${POOL_STRIPE_SECRET_KEY:-}
-            POOL_STRIPE_WEBHOOK_SECRET: ${POOL_STRIPE_WEBHOOK_SECRET:-}
-            POOL_STRIPE_PRICE_ID: ${POOL_STRIPE_PRICE_ID:-}
-            # The published economics: price, the per-member infra cost taken off the top, the creator/service
-            # shares of a spent credit's value, the daily allowance, and what an install donates.
-            POOL_PRICE_USD: ${POOL_PRICE_USD:-}
-            POOL_INFRA_USD: ${POOL_INFRA_USD:-}
-            POOL_CREATOR_SHARE: ${POOL_CREATOR_SHARE:-}
-            POOL_SERVICE_SHARE: ${POOL_SERVICE_SHARE:-}
-            POOL_DAILY_CREDITS: ${POOL_DAILY_CREDITS:-}
-            POOL_DONATION_CREDITS: ${POOL_DONATION_CREDITS:-}
-            # Comma-separated emails that count as premium WITHOUT a subscription (comped memberships).
-            POOL_COMP_EMAILS: ${POOL_COMP_EMAILS:-}
-            # Seed the self-contained demo service so the catalog is demonstrable without a provider.
-            POOL_DEMO_SERVICE: ${POOL_DEMO_SERVICE:-}
-            # The registry a publisher claim is proved against.
-            POOL_REGISTRY_URL: ${POOL_REGISTRY_URL:-}
-            # Payouts: the day a closed month becomes payable, how long an unclaimed name stays claimable, the
-            # smallest transfer worth making, and the currency.
-            POOL_PAYOUT_DAY_OF_MONTH: ${POOL_PAYOUT_DAY_OF_MONTH:-}
-            POOL_CLAIM_WINDOW_MONTHS: ${POOL_CLAIM_WINDOW_MONTHS:-}
-            POOL_MIN_PAYOUT_CENTS: ${POOL_MIN_PAYOUT_CENTS:-}
-            POOL_PAYOUT_CURRENCY: ${POOL_PAYOUT_CURRENCY:-}
-            # OPEN ADMISSION — the published thresholds a service provider is measured against. They live in
-            # config rather than code because rules-based admission means the rules are readable in advance.
-            POOL_OPEN_ADMISSION: ${POOL_OPEN_ADMISSION:-}
-            POOL_SERVICE_MIN_CREDITS: ${POOL_SERVICE_MIN_CREDITS:-}
-            POOL_SERVICE_MAX_CREDITS: ${POOL_SERVICE_MAX_CREDITS:-}
-            POOL_PROBATION_MAX_CREDITS: ${POOL_PROBATION_MAX_CREDITS:-}
-            POOL_PROBE_FRESH_MINUTES: ${POOL_PROBE_FRESH_MINUTES:-}
-            POOL_GRADUATION_RUNS: ${POOL_GRADUATION_RUNS:-}
-            POOL_MAX_REFUND_RATE: ${POOL_MAX_REFUND_RATE:-}
-            POOL_WATCH_WINDOW_RUNS: ${POOL_WATCH_WINDOW_RUNS:-}
-            POOL_CANARY_FAILURES: ${POOL_CANARY_FAILURES:-}
-            POOL_PRICE_CHANGE_HOURS: ${POOL_PRICE_CHANGE_HOURS:-}
-            POOL_MAX_SERVICES_PER_OWNER: ${POOL_MAX_SERVICES_PER_OWNER:-}
+            # THE HOSTED PLAN (the one paid thing). stripeSecretKey + stripePriceId are the switch: both empty
+            # and the plan does not exist — /hosted-plan routes 404 and no plan is offered anywhere.
+            HOSTED_PLAN_STRIPE_SECRET_KEY: ${HOSTED_PLAN_STRIPE_SECRET_KEY:-}
+            HOSTED_PLAN_STRIPE_WEBHOOK_SECRET: ${HOSTED_PLAN_STRIPE_WEBHOOK_SECRET:-}
+            HOSTED_PLAN_STRIPE_PRICE_ID: ${HOSTED_PLAN_STRIPE_PRICE_ID:-}
+            # The published price, display only; what Stripe charges is the Price above.
+            HOSTED_PLAN_PRICE_USD: ${HOSTED_PLAN_PRICE_USD:-}
+            # Comma-separated emails that count as on the plan WITHOUT a subscription (comped).
+            HOSTED_PLAN_COMP_EMAILS: ${HOSTED_PLAN_COMP_EMAILS:-}
             # The agent wallet's signer: the credential authenticating this platform to the custody provider
             # that holds a member's wallet. Both empty → /wallet routes 404 and the capability stays pending.
             WALLET_CUSTODY_URL: ${WALLET_CUSTODY_URL:-}

@@ -9,7 +9,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * This page used to carry five jobs: how to list, what the installer sees, how updates behave, the trust model,
  * and money, which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
  * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
- * the trust vocabulary on /developers/verify/, the release cycle on /developers/maintain/, and the money at /earn/. What is
+ * the trust vocabulary on /developers/verify/, the release cycle on /developers/maintain/. What is
  * left is the one thing an author does here: get a pointer to their repository into a registry. */
 
 const registry = `{
@@ -119,21 +119,6 @@ const shapeParts = [
     heading="Publish & registries"
     lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
 >
-    {/* THE WRONG-ARTIFACT CATCH, and it is first because the mis-route happens before the page starts. Every
-        creator CTA on this site lands here, and the artifact-neutral ones ("List your work", "Get listed")
-        caught the provider along with everybody else, on a page that is entirely git repos and extension
-        bundles: four screens of registry mechanics before discovering none of it was addressed to them.
-
-        The Earn page has since renamed its buttons after their artifact, which is the better fix because it
-        works before the click. This line stays for the routes that cannot: the gallery's "Get listed", where
-        the surrounding page makes the artifact obvious enough to keep the shorter label, and every inbound
-        link written by somebody else. */}
-    <p>
-        <strong>Selling metered runs rather than shipping code?</strong> That is a service rather than an extension: no repo, no bundle
-        and no pointer, just one endpoint the platform forwards paid calls to. Take{" "}
-        <a href="/developers/services/">Offer a paid service</a> instead. Everything below is the extension's route.
-    </p>
-
     <h2>The shape of it</h2>
     <p>
         intentic does not host extension code, build it, sign it, or take a cut of it. A registry entry is a{" "}
@@ -541,10 +526,7 @@ const shapeParts = [
         <code>publisher.name</code>, a scan that finds a repo claiming a slug somebody else already holds refuses it rather than opening a pull
         request that looks legitimate.
     </p>
-    <p>
-        Listing is free and stays cut-free. Publishers can opt into a paid <code>premium</code> tier that draws from the creator pool,
-        one field on your entry, and the whole economy is stated once on <a href="/earn/">Earn</a>.
-    </p>
+    <p>Listing is free and stays cut-free: nothing about a listing is priced, metered or reported.</p>
 
     <h2>What the person installing sees</h2>
     <p>

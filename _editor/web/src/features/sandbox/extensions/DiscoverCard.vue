@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { BrandMark, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
-import { formatCredits } from "../../settings/membership/creditMeter";
-import { useMembership } from "../../settings/membership/useMembership";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 
 /* ONE PUBLISHED EXTENSION, as a card in a grid: the same tile the "+" catalog is read as, on purpose.
@@ -28,18 +26,6 @@ const name = computed(() => splitListingName(listing.entry.name));
 const problem = computed(() => checksProblem(listing.entry));
 const loads = computed(() => checksOk(listing.entry));
 const dim = computed(() => listing.state.kind === `blocked` || listing.state.kind === `unavailable`);
-
-/* THE PREMIUM CHIP NAMES ITS PRICE. It used to hover as "needs an intentic membership; its use pays its
- * creator from the pool", true, and silent on the one number a person scanning a grid wants: how much. The
- * figure is the platform's own (shared membership read), so a platform that prices installs differently, or
- * gives them away, is described correctly rather than by a sentence somebody typed here. */
-const { donationCredits } = useMembership();
-
-const premiumHint = computed(() =>
-    donationCredits.value > 0
-        ? `Premium: installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month. Using it is always free.`
-        : `Premium, needs an intentic membership; its use pays its creator from the pool`,
-);
 </script>
 
 <template>
@@ -76,13 +62,6 @@ const premiumHint = computed(() =>
                         "
                         aria-label="Verified"
                     />
-                    <!-- The price, before the click. -->
-                    <span
-                        v-if="listing.entry.tier === `premium`"
-                        class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                        v-tooltip.top="premiumHint"
-                        >Premium</span
-                    >
                 </div>
                 <div v-if="name.publisher !== ``" class="truncate text-2xs text-subtle">{{ name.publisher }}</div>
             </div>

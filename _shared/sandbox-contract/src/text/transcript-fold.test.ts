@@ -367,32 +367,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // An offer's whole life is on its card: the click, the run showing itself living, and how the spend ended.
-    it("keeps an offer's decision, its stream and its receipt on the card that offered it", () => {
-        const offer = { slug: "research", name: "Research", publisher: "acme", description: "d", creditsPerRun: 3, request: "{}" };
-        const events: AgentEvent[] = [
-            { kind: "service_offer", requestId: "s1", offer },
-            { kind: "resolved", requestId: "s1", reply: { kind: "service_offer", requestId: "s1", approve: true } },
-            { kind: "service_event", requestId: "s1", event: { event: "status", text: "searching" } },
-            { kind: "service_receipt", requestId: "s1", outcome: "ok", credits: 3, remaining: 7 },
-            { kind: "delta", text: "Found it." },
-        ];
-        expect(foldOf("research", events).slice(1)).toEqual([
-            {
-                role: "assistant",
-                text: "",
-                serviceOffer: {
-                    requestId: "s1",
-                    offer,
-                    status: "approved",
-                    events: [{ event: "status", text: "searching" }],
-                    receipt: { outcome: "ok", credits: 3, remaining: 7 },
-                },
-            },
-            { role: "assistant", text: "Found it." },
-        ]);
-    });
-
     /* A GATED CREDENTIAL's card keeps WHO released it, not merely that something was approved: the approver is
      * the whole point of the gate, and the reply cannot carry them (it is the daemon that verified the
      * identity), so the receipt frame is the only place that name ever appears. */

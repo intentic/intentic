@@ -104,20 +104,7 @@ export const ExtensionConfigSchema = z.object({
         .optional()
         .describe("Where inside the repository the extension lives, for one that sits in a larger checkout."),
     token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
-    /* The registry row's tier, copied onto the install by the browse pre-fill. `premium` is what the daemon's
-     * two pool duties key off: installing (or updating) donates the owner's credits to the publisher, the
-     * gate the apply passes through, and enabling needs the owner's membership. An absent tier means free,
-     * donates nothing, and asks for nothing; NO usage is metered or reported either way. Self-declared rather
-     * than verified against the registry (the daemon is the owner's own machine; a stripped marker skips a
-     * donation the owner was choosing to make, which cheats the creator once, and is exactly the honesty the
-     * open-source posture accepts and the docs state). */
-    tier: z
-        .enum(["free", "premium"])
-        .optional()
-        .describe(
-            "Whether installing this donates credits to its publisher. Absent means free, which donates nothing and asks for nothing. Taken from the listing rather than checked against it, which is the honesty an open-source posture accepts.",
-        ),
-    /* The registry this install's row lives in, copied on by the browse pre-fill like `tier`, what the update
+    /* The registry this install's row lives in, copied on by the browse pre-fill, what the update
      * check compares the pinned sha against and reads advisories from. Absent (a hand-typed git install) falls
      * back to the official registry: if the extension is listed there, its updates and its blocked-markings
      * concern this owner exactly as much as anyone's. */

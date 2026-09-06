@@ -347,7 +347,7 @@ CTA and the FAQ answer "Is any of it paid?", and the `SoftwareApplication` `offe
 SEO. `/pricing/` and a bar link now exist, reversing the older "no pricing link anywhere" rule: "pricing" is
 the highest-intent click on a developer-tool site, and a visitor who finds no link assumes the price is
 hidden, not that the product is free. Copy is `site-content/src/pricing.ts`; every figure derives from
-`pool.ts`.
+`hosted.ts`. The one paid thing is a hosted sandbox (docs/design/pricing-model.md).
 
 Note for any auto-improver (`loop.md`): **do not** add a pricing band to the landing page, **do not** delete
 the pricing page as a rule violation, and **do not** re-add deployment-engine framing: the deployment engine

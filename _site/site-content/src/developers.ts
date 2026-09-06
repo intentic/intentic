@@ -15,13 +15,7 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
  * TWO SHELVES, AND THEY ARE THE TWO JOBS. "Build" is the code: the format, the APIs, a working extension, and
  * the reference you open at a field name. "Ship" is the process: getting a pointer into a registry, what the
  * trust words claim, and staying listed release after release. The old single "lifecycle" shelf braided the
- * two: a reader after a manifest field scrolled through registry policy to reach it, and its last row was
- * money, which belongs to neither.
- *
- * THE MONEY IS NOT IN THIS BOOK. The economy: membership, credits, the pool, the split, the
- * ledger has TWO audiences: the member spending credits and the creator earning them. Filed here it read as
- * a step of publishing and served only half its readers; it now lives at /earn/, top-level, and Ship's
- * lifecycle strip points out to it the same way it points out to /docs for the installer's steps.
+ * two: a reader after a manifest field scrolled through registry policy to reach it.
  *
  * Inside Build, the guide and the reference stay DIFFERENT KINDS OF READING: the guide is walked once, front
  * to back, by someone shipping their first extension; the reference is never walked at all: it is opened at
@@ -144,37 +138,15 @@ export const developersBook: Book = {
                         {
                             /* Last in the extension's run because it is the step that repeats: everything above happens
                              * once per extension; this happens once per release. It existed only as fragments in the
-                             * publishing guide, money page and trust page. So "how do I stay listed and keep earning"
-                             * had no page to be asked of. */
+                             * publishing guide and trust page, so "how do I stay listed" had no page to be asked of. */
                             id: "maintain",
                             title: "Maintain & grow",
-                            blurb: "Ship updates, stay ranked, and what sustained revenue rests on",
+                            blurb: "Ship updates and stay ranked, release after release",
                             meta: {
                                 title: "Maintain & grow an extension · intentic API",
                                 description:
                                     "Ship an extension update with one pull request, know when it re-asks for approval, stay ranked in discovery, and how maintenance turns into revenue.",
                                 datePublished: "2026-08-11",
-                            },
-                        },
-                        {
-                            /* THE SECOND KIND OF THING YOU CAN SHIP. It is not an extension: no manifest, no
-                             * bundle, no repo pointer, just an HTTPS endpoint the platform forwards metered calls
-                             * to. It closes the shelf rather than joining the run above it, because the four pages
-                             * above are one artifact's lifecycle and this is a different artifact. Before it, the
-                             * provider's story was one honest sentence in /earn/'s fine print and a dead end. */
-                            id: "services",
-                            /* "PAID" IS LOAD-BEARING IN THE LABEL. "Offer a service" reads as consulting to
-                             * half the people who see it, and against a shelf of extension rows the one word
-                             * that separates the two artifacts is the money: an extension is free to run and
-                             * this is not. The label is the same everywhere it appears, so the footer, the
-                             * rail and the two forks that point here cannot teach three vocabularies. */
-                            title: "Offer a paid service",
-                            blurb: "One endpoint, a signed forward, and a price in credits",
-                            meta: {
-                                title: "Offer a paid service · intentic API",
-                                description:
-                                    "Wire a paid service into intentic: one JSON endpoint, the signature to verify, what is paid versus refunded, and how pricing in credits works.",
-                                datePublished: "2026-08-12",
                             },
                         },
                     ],
@@ -191,41 +163,14 @@ export function developersHref(id: string): string {
     return bookHref(developersBook, id);
 }
 
-/* THE ONE PAGE THAT IS ALSO A NAV ROW, and the single exception to "the bar shows shelves, not pages".
- *
- * The rule earns its keep for the four extension pages: they are one artifact's lifecycle, they will keep
- * multiplying, and a bar listing them individually would go stale the week someone adds a fifth. A service is
- * the opposite shape. It is one page because it is one endpoint, there is no second page coming, and it is
- * the only OTHER THING YOU CAN SHIP here: filed under a shelf whose entry page is about git registries, the
- * bar told a provider this menu was not about their thing. A rule that hides the second of two artifacts is
- * being applied past the point it was reasoning about.
- *
- * Derived from the book entry rather than retyped, so the row still cannot drift from the page: rename the
- * page and the bar, the phone menu and the footer all follow. The throw is the anti-drift half of the same
- * bargain, turning a page that moved into a loud build failure instead of a blank menu row. */
-const servicesPage = developersPages.find((page) => page.id === "services");
-if (servicesPage === undefined) {
-    throw new Error("The api book has no services page for the nav row to derive from.");
-}
-
-export const developersServicesDestination = {
-    label: servicesPage.title,
-    href: developersHref(servicesPage.id),
-    // A short scent line of its own rather than the page blurb, held to the same few-word budget as every
-    // other menu row.
-    description: "One endpoint, priced in credits",
-    icon: "circle-dollar-sign",
-};
-
-/* THE SEVEN STEPS, in order, with the page that owns each: the cycle the API overview draws as a diagram and
+/* THE SIX STEPS, in order, with the page that owns each: the cycle the API overview draws as a diagram and
  * the gallery draws as a strip of chips.
  *
  * It exists as data because two very different surfaces render it and they were drifting: the gallery drew
  * grey chips that were not links while the docs described a lifecycle with no picture of it anywhere. Three of
- * the seven point OUT of this book: Discover and Install into /docs, because they are what the
- * reader on the other side of the listing does, and Earn to the top-level /earn/, because the economy is a
- * system of its own with two audiences. The last step loops because Maintain makes the revenue renewable,
- * which is why it comes after Earn rather than before it.
+ * the six point OUT of this book: Discover and Install into /docs, because they are what the
+ * reader on the other side of the listing does. The last step loops because Maintain is what makes the
+ * listing stay current.
  *
  * EVERY STEP IS NAMED FOR THE PAGE IT LINKS TO. Publish, not "List"; Maintain, not "Update", because a chip
  * that says one word and lands on a page titled another teaches the reader that the site has two vocabularies. */
@@ -235,6 +180,5 @@ export const extensionLifecycle: readonly { step: string; href: string; what: st
     { step: "Verify", href: developersHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
     { step: "Discover", href: "/extensions/", what: "The gallery, and browse from inside the app.", audience: "user" },
     { step: "Install", href: "/docs/extensions/", what: "One commit, approved by its owner.", audience: "user" },
-    { step: "Earn", href: "/earn/", what: "Premium listings draw from the creator pool.", audience: "author" },
     { step: "Maintain", href: developersHref("maintain"), what: "A new sha, and the cycle runs again.", audience: "author" },
 ];

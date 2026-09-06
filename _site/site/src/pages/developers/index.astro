@@ -28,10 +28,9 @@ const uiPoints = [
 ];
 
 /* THE LIFECYCLE, DRAWN — a wave through two swimlanes. The x-axis is time, the lanes are WHO ACTS: the flow
- * runs along the author's lane, dips into the user's for Discover and Install, and comes back up for Earn —
- * which is the one fact the old seven-row list buried: publishing is not the end of the story, and the money
- * arrives only after somebody else's two steps. The dashed arc over the top is Maintain re-entering review,
- * what makes the figure a cycle rather than a line. Geometry is computed from the shared lifecycle data, so
+ * runs along the author's lane, dips into the user's for Discover and Install, and comes back up for Maintain,
+ * which is the one fact the old six-row list buried: publishing is not the end of the story. The dashed arc
+ * over the top is Maintain re-entering review, what makes the figure a cycle rather than a line. Geometry is computed from the shared lifecycle data, so
  * the diagram cannot show a step the site doesn't have. */
 const LC = { w: 600, h: 212, chipW: 64, chipH: 30 };
 const lcPitch = (LC.w - 20 - LC.chipW) / (extensionLifecycle.length - 1);
@@ -95,7 +94,7 @@ const agentPoints = [
                 viewBox={`0 0 ${LC.w} ${LC.h}`}
                 class="relative h-auto w-full text-link"
                 role="img"
-                aria-label="The lifecycle as a cycle: you Build, Publish and Verify; your user Discovers and Installs; you Earn and Maintain — and a maintained release re-enters review."
+                aria-label="The lifecycle as a cycle: you Build, Publish and Verify; your user Discovers and Installs; you Maintain — and a maintained release re-enters review."
             >
                 <defs>
                     <marker id="lc-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -136,8 +135,8 @@ const agentPoints = [
                                 width={LC.chipW}
                                 height={LC.chipH}
                                 rx="15"
-                                fill={chip.step === "Earn" ? "color-mix(in srgb, var(--color-primary-500) 14%, var(--color-canvas))" : "var(--color-canvas)"}
-                                stroke={chip.step === "Earn" ? "color-mix(in srgb, var(--color-primary-500) 55%, transparent)" : "var(--color-line-strong)"}
+                                fill="var(--color-canvas)"
+                                stroke="var(--color-line-strong)"
                                 stroke-width="1.25"
                             />
                             <text
@@ -147,7 +146,7 @@ const agentPoints = [
                                 dominant-baseline="central"
                                 font-size="12"
                                 font-weight="600"
-                                style={chip.step === "Earn" ? "fill: var(--color-link)" : "fill: var(--color-content)"}
+                                style="fill: var(--color-content)"
                             >
                                 {chip.step}
                             </text>
@@ -166,11 +165,7 @@ const agentPoints = [
                         <a
                             href={stage.href}
                             title={stage.what}
-                            class={
-                                stage.step === "Earn"
-                                    ? "rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline"
-                                    : "rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline"
-                            }
+                            class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline"
                         >
                             {stage.step}
                         </a>
@@ -308,25 +303,6 @@ const agentPoints = [
     <p>
         All three land in one list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. Switching one off unwires it
         everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
-    </p>
-
-    {/* THE SECOND ARTIFACT, named on the book's own front page. This page defined "what you can ship here" for
-        nine screens without once using the word service, so the only reader who learned the other one existed
-        was the reader who happened to scroll the rail to the end of a shelf they had no reason to open. It
-        closes the page rather than opening it because the proportion is real: almost everything should be an
-        extension, and the fork is worth one section at the end, not a fifty-fifty framing at the top. */}
-    <h2>The other thing you can ship</h2>
-    <p>
-        Everything above is an <strong>extension</strong>: code of yours that runs in somebody else's sandbox, free to install and free to
-        run forever. There is a second artifact here, and it is not a smaller version of this one. A <strong>service</strong> is a single
-        HTTPS endpoint that the platform forwards metered, signed calls to. No manifest, no bundle, no repo pointer, and none of your code on
-        anybody's machine.
-    </p>
-    <p>
-        The line between them is who pays per run. An extension costs you nothing each time it is used, so it is free. A service is for
-        when every run costs <em>you</em> real money, such as a paid data API, heavy compute or a licensed corpus, where giving it away per
-        run would mean paying to be used. Almost everything should be an extension; if yours is the exception,{" "}
-        <a href="/developers/services/">Offer a paid service</a> is the provider's whole side of it.
     </p>
 
     <DocsRelated

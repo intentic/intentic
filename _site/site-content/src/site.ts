@@ -6,9 +6,7 @@ import { PLATFORM_SITE_ORIGIN, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
  * owner. Re-exported under the site's own names because every page here says SITE_URL. */
 export const SITE_URL = PLATFORM_SITE_ORIGIN;
 export const APP_URL = PLATFORM_WEB_ORIGIN;
-// The platform API. The site is static, so the one page that shows live numbers, the pool ledger, reads
-// them from here in the browser. That endpoint is public and unauthenticated by design; a number anybody is
-// asked to trust should not need a login to check.
+// The platform API, for the pages that read a live figure from it in the browser.
 export const API_URL = "https://api.intentic.dev";
 // The interactive demo (@intentic/demo): the real app running against a recorded fixture instead of a
 // sandbox. It builds into this site's own public/, so it ships in one deploy. More importantly, the

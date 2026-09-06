@@ -2401,26 +2401,6 @@ export class Conversation {
         void this.drainQueue();
     }
 
-    /* The spend decision, the click that is the ONLY way a priced service run can happen (the daemon holds
-     * the agent's request parked until this settles it; platform/service-offer.ts). Approve releases exactly
-     * one run; skip charges nothing and tells the agent to carry on without it. The receipt that follows an
-     * approval arrives as its own frame and patches the card, nothing here predicts how the run will end. */
-    async decideServiceOffer(message: ChatMessage, approve: boolean): Promise<void> {
-        const offer = message.serviceOffer;
-        if (offer?.status !== `pending`) {
-            return;
-        }
-        const landed = await this.decide(
-            message,
-            { kind: `service_offer`, requestId: offer.requestId, approve },
-            `Could not record your decision: the offer may have expired.`,
-            { serviceOffer: offer },
-        );
-        if (landed) {
-            void this.drainQueue();
-        }
-    }
-
     /* The payment decision, the click that is the ONLY way a USDC payment can leave the wallet (the daemon
      * holds the agent's `wallet fetch` parked until this settles it; wallet/payment-offer.ts). Approve
      * releases exactly one payment at exactly the price on the card; skip spends nothing and tells the agent

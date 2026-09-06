@@ -8,38 +8,8 @@ import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
 
 /* THE ADMIN MUTATIONS — the only writes on the admin surface, behind three gates the ROUTES enforce
  * (requireAdmin, the ADMIN_MUTATIONS switch, the typed confirmation); what lives here is the action itself,
- * each answering a sentence the panel shows verbatim. Every action is either a plain status flip the daily
- * jobs already know how to live with, or a reuse of the exact teardown the owner's own flows run — nothing
- * in this file invents a new way to touch money or machines. */
-
-// Suspend a listing, in the operator's own words. The same state the watch's automatic suspension reaches,
-// so everything downstream (catalog absence, provider's creator screen, re-publish path) already handles it.
-export const suspendService = async (prisma: PrismaClient, slug: string, reason: string): Promise<AdminActionResult> => {
-    const service = await prisma.service.findUnique({ where: { slug }, select: { status: true } });
-    if (service === null) {
-        return { ok: false, message: `No service with slug “${slug}”.` };
-    }
-    if (service.status === `suspended`) {
-        return { ok: false, message: `“${slug}” is already suspended.` };
-    }
-    await prisma.service.update({ where: { slug }, data: { status: `suspended`, suspendedFor: `Suspended by the operator: ${reason}` } });
-    return { ok: true, message: `“${slug}” suspended. The reason is recorded where the provider will read it.` };
-};
-
-/* Reinstate into PROBATION, never straight to `listed`: the price ceiling and the badge are exactly what a
- * listing that was just suspended should re-enter under, and graduation is the watch's call, not this
- * button's. Canary count resets — the failures it counted belong to the suspended era. */
-export const reinstateService = async (prisma: PrismaClient, slug: string): Promise<AdminActionResult> => {
-    const service = await prisma.service.findUnique({ where: { slug }, select: { status: true } });
-    if (service === null) {
-        return { ok: false, message: `No service with slug “${slug}”.` };
-    }
-    if (service.status !== `suspended`) {
-        return { ok: false, message: `“${slug}” is ${service.status}, not suspended — nothing to reinstate.` };
-    }
-    await prisma.service.update({ where: { slug }, data: { status: `probation`, suspendedFor: null, canaryFails: 0 } });
-    return { ok: true, message: `“${slug}” reinstated into probation, under the probation price ceiling and the watch.` };
-};
+ * each answering a sentence the panel shows verbatim. Every action is a reuse of the exact teardown the owner's
+ * own flows run — nothing in this file invents a new way to touch machines. */
 
 // Stop a hosted machine — the cost/abuse brake. Deliberately NOT destroy: the volume, the row and the
 // owner's way back in (wake) all survive, and the hour meter's daily settle closes the stretch.
@@ -79,5 +49,5 @@ export const deleteUserAccount = async (prisma: PrismaClient, config: Config, lo
             }
         }
     }
-    return { ok: true, message: `${user.email} erased: sandboxes, grants, memberships and ledger links are gone with the account.` };
+    return { ok: true, message: `${user.email} erased: sandboxes, grants and the hosted plan's mirror are gone with the account.` };
 };

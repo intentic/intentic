@@ -400,76 +400,20 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
-// The caller's creator-pool membership, as the settings card renders it. `enabled: false` (a platform with
-// no pool configured) means the card does not exist; everything else describes the caller: `member` is the
-// premium answer, `status` is Stripe's word for the state (shown only when it isn't "active", past_due is
-// worth a sentence), `renewsAt` is display. Price and share ride along so the card and the transparency page
-// can never disagree with the platform about the number on the button.
-//
-// THE PUBLISHED FIGURES ARE FOR EVERYONE, member or not. `dailyCredits` and `donationCredits` are what the
-// membership actually buys, and the person deciding whether to buy it is precisely the one who does not have
-// it yet, withholding them until after checkout left the offer describing itself as "premium extensions"
-// and nothing else. They also spare the card from retyping numbers the platform already owns: what a day's
-// credits come to in installs is arithmetic, done where they are rendered.
-export const MembershipStateSchema = z.object({
+// The caller's hosted plan, as the settings card renders it. `enabled: false` (a platform with no plan
+// configured) means the card does not exist; everything else describes the caller: `onPlan` is the
+// entitlement answer, `status` is Stripe's word for the state (shown only when it isn't "active", past_due is
+// worth a sentence), `renewsAt` is display. The price rides along so the card can never disagree with the
+// platform about the number on the button, and it is for everyone: the person deciding whether to buy is
+// precisely the one who does not have it yet.
+export const HostedPlanStateSchema = z.object({
     enabled: z.boolean(),
-    member: z.boolean(),
+    onPlan: z.boolean(),
     status: z.string().optional(),
     renewsAt: z.iso.datetime().optional(),
     priceUsd: z.number(),
-    creatorShare: z.number(),
-    // A member's daily credit allowance, and what installing a premium extension donates to its creator.
-    dailyCredits: z.number(),
-    donationCredits: z.number(),
-    // The daily credit meter for metered service runs, present exactly when the caller is a member,
-    // because only a member has one. `resetsAt` is the next UTC midnight, rendered locally by the card.
-    credits: z
-        .object({
-            allowance: z.number(),
-            used: z.number(),
-            remaining: z.number(),
-            resetsAt: z.iso.datetime(),
-        })
-        .optional(),
 });
-export type MembershipState = z.infer<typeof MembershipStateSchema>;
-
-/* THE APPROVAL CARD, as a page rather than a chat frame, what an agent outside a sandbox parks on while it
- * waits for its owner to release one metered run (api mcp/mcp-offer.ts).
- *
- * Every field is read back off the offer row rather than recomputed, which is the whole point: `credits` was
- * stamped when the ask went up, so a listing repriced while somebody is deciding cannot change what they
- * agreed to, and nothing the calling agent typed can reach this card except `request` and `why`, the two
- * fields the page labels as the agent's own words. */
-export const ServiceOfferStatusSchema = z.enum([`pending`, `approved`, `declined`, `spent`, `expired`]);
-
-export const ServiceOfferCardSchema = z.object({
-    id: z.string(),
-    status: ServiceOfferStatusSchema,
-    slug: z.string(),
-    name: z.string(),
-    publisher: z.string(),
-    description: z.string(),
-    credits: z.number(),
-    // True while the listing is still in open admission's probation, live, price-capped, badged `new`.
-    probation: z.boolean(),
-    // The body the agent composed, verbatim. Shown because "what is about to be sent" is half of consent.
-    request: z.string(),
-    why: z.string().optional(),
-    expiresAt: z.iso.datetime(),
-    // The owner's meter, so the page can state the price against what is actually left, absent when the
-    // account has no membership, which the page turns into a join prompt rather than a dead button.
-    credits_remaining: z.number().optional(),
-    allowance: z.number().optional(),
-});
-export type ServiceOfferCard = z.infer<typeof ServiceOfferCardSchema>;
-
-// What the click did. `already_settled` and `expired` are ordinary answers, not errors, two tabs racing, or
-// a card left open past its ten minutes.
-export const ServiceOfferSettledSchema = z.object({
-    outcome: z.enum([`approved`, `declined`, `already_settled`, `expired`]),
-});
-export type ServiceOfferSettled = z.infer<typeof ServiceOfferSettledSchema>;
+export type HostedPlanState = z.infer<typeof HostedPlanStateSchema>;
 
 // Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale), this caps
 // what the API will persist (~110 kB decoded; a 128px webp/jpeg is ~5-10 kB) so no multi-megabyte string
@@ -986,209 +930,6 @@ export const DeploymentSchema = z.object({
 });
 export type Deployment = z.infer<typeof DeploymentSchema>;
 
-/* THE CREATOR'S SIDE OF THE POOL: which publisher names this account has proved are its own, and whether money
- * owed to them can actually be sent. Earnings have always been computable per listing; what this state adds is
- * a payee, so every field here exists to answer one of two questions a creator asks, "is this name mine" and
- * "will I be paid".
- *
- * `payouts` is present whenever the pool is on, connected or not: "you have not started" is an answer the
- * screen must render, not an absence it has to infer. */
-/* A publisher name, in either of its two provable forms. Dotless is a name as the extension manifest spells
- * it (mirrored rather than imported because the manifest lives in the sandbox packages and this contract is
- * the platform's own), proved by push access to a registry-listed repository. Dotted is a DOMAIN, proved by
- * serving the challenge token at its well-known path, the lane for a business with a service to sell and no
- * extension to ship.
- *
- * The dot is the entire discriminator, and it is safe by construction: registry publisher names are the
- * prefix of an extension id before its first dot, so a registry-provable name can never contain one, and a
- * domain always does. Nothing else anywhere needs to record which lane a name came through. */
-export const PublisherSlugSchema = z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$/)
-    .max(64);
-
-export const PublisherClaimSchema = z.object({
-    publisher: z.string(),
-    // The repository that carried the proof, shown back so a creator can see WHICH of their repositories the
-    // platform accepted, and so a disputed name has something to point at.
-    repo: z.string(),
-    claimedAt: z.iso.datetime(),
-});
-export type PublisherClaim = z.infer<typeof PublisherClaimSchema>;
-
-export const PayoutStateSchema = z.object({
-    connected: z.boolean(),
-    payoutsEnabled: z.boolean(),
-    detailsSubmitted: z.boolean(),
-    // Why a finished account still cannot be paid, when Stripe names a cause, a creator reading "not ready"
-    // with no reason has nothing to act on.
-    disabledReason: z.string().optional(),
-});
-export type PayoutState = z.infer<typeof PayoutStateSchema>;
-
-/* ONE CLOSED MONTH'S EARNINGS for one of the caller's publisher names. Only closed months appear: a month in
- * progress is a number that still moves, and showing it beside settled ones would invite a creator to read an
- * estimate as an amount owed.
- *
- * `payableAt` is the date the money is due, stated rather than implied. `expiresAt` rides along because the
- * twelve-month window is a promise with a deadline in it, and a deadline nobody is shown is a trap. */
-export const CreatorStatementSchema = z.object({
-    month: z.string(),
-    publisher: z.string(),
-    amountCents: z.number(),
-    payableAt: z.iso.datetime(),
-    expiresAt: z.iso.datetime(),
-});
-export type CreatorStatement = z.infer<typeof CreatorStatementSchema>;
-
-/* A PAYMENT THAT WAS MADE, or is still trying to be. `pending` is shown rather than hidden because a payment
- * that has not landed is the single thing a creator most needs to be able to see, and the run never abandons
- * one, it retries the same payment until it goes through. */
-export const CreatorPaymentSchema = z.object({
-    amountCents: z.number(),
-    status: z.string(),
-    createdAt: z.iso.datetime(),
-    paidAt: z.iso.datetime().optional(),
-    // Stripe's own id for the transfer, what a creator quotes when asking anyone about it.
-    reference: z.string().optional(),
-});
-export type CreatorPayment = z.infer<typeof CreatorPaymentSchema>;
-
-export const CreatorStateSchema = z.object({
-    enabled: z.boolean(),
-    claims: z.array(PublisherClaimSchema),
-    payouts: PayoutStateSchema.optional(),
-    // What is still OWED: closed months not yet settled, newest first. A month drops off this list the moment
-    // it is paid and appears in `payments` instead, so the two never double-count the same money.
-    statements: z.array(CreatorStatementSchema),
-    // Receipts, newest first.
-    payments: z.array(CreatorPaymentSchema),
-});
-export type CreatorState = z.infer<typeof CreatorStateSchema>;
-
-/* What a claimant must do, computed for one publisher name. `repos` is every repository the registry lists
- * under it, the claim is provable from ANY of them, which is why they are all named rather than one being
- * picked for the creator. Empty means the name has no github-sourced listing to prove against, and the screen
- * says that instead of offering an impossible instruction.
- *
- * `token` is stable for this account and this name: a creator can read it today, push the file tomorrow, and
- * finish the claim without the platform having remembered anything in between. */
-export const ClaimChallengeSchema = z.object({
-    publisher: z.string(),
-    repos: z.array(z.string()),
-    path: z.string(),
-    token: z.string(),
-    // Set when the name is already claimed, by this account (so the screen shows it as done) or by another
-    // (so it says so plainly rather than letting someone push a file that can never verify).
-    claimedByYou: z.boolean(),
-    claimedByOther: z.boolean(),
-});
-export type ClaimChallenge = z.infer<typeof ClaimChallengeSchema>;
-
-/* WHICH NAMES THIS CREATOR COULD CLAIM, worked out from repositories they already have rather than asked for.
- *
- * The claim screen used to open on an empty box, which is the wrong question: a creator does not necessarily
- * know that the name to type is the publisher half of an extension id, and typing it wrong looks identical to
- * having nothing to claim. So the screen sends the projects open in their workspace and the platform answers
- * with the publisher names those projects back, a list to click, and the exact set of names the claim can
- * actually succeed for.
- *
- * `repos` names WHICH of the caller's own projects back each name, so the screen can say why a name is being
- * offered instead of producing it from nowhere. */
-export const ClaimableNameSchema = z.object({ publisher: z.string(), repos: z.array(z.string()) });
-export type ClaimableName = z.infer<typeof ClaimableNameSchema>;
-export const ClaimableNamesSchema = z.object({ names: z.array(ClaimableNameSchema) });
-export type ClaimableNames = z.infer<typeof ClaimableNamesSchema>;
-
-/* ── OPEN ADMISSION: a provider's own listings ─────────────────────────────────────────────────────────── */
-
-/* THE PUBLISHED RULES, read from the platform rather than written on a screen. Every number here is a
- * threshold the admission algorithm actually applies (api config.ts pool.*), and the whole promise of
- * rules-based admission is that a provider can look them up before they build anything. A screen that
- * hardcoded them would be a second copy free to drift from the one that decides. */
-export const AdmissionRulesSchema = z.object({
-    // Whether self-serve listing is on at all. Off means the platform kept the hand-written flow.
-    openAdmission: z.boolean(),
-    minCredits: z.number(),
-    maxCredits: z.number(),
-    // The tighter ceiling a listing is held under until it graduates.
-    probationMaxCredits: z.number(),
-    // How long a passing conformance probe stays good enough to publish on.
-    probeFreshMinutes: z.number(),
-    // Served runs needed to graduate, and the refund rate that both blocks graduation and trips the watch.
-    graduationRuns: z.number(),
-    maxRefundRate: z.number(),
-    watchWindowRuns: z.number(),
-    canaryFailures: z.number(),
-    priceChangeHours: z.number(),
-    maxServicesPerOwner: z.number(),
-});
-export type AdmissionRules = z.infer<typeof AdmissionRulesSchema>;
-
-export const ServiceStatusSchema = z.enum([`draft`, `probation`, `listed`, `suspended`]);
-export type ServiceStatus = z.infer<typeof ServiceStatusSchema>;
-
-/* ONE OF THE CALLER'S OWN LISTINGS. The signing secret is deliberately absent: it is shown once when it is
- * minted and once when it is rotated, and never read back, so a compromised session cannot harvest it.
- *
- * The two counters are here because graduation is a counter and a provider staring at "probation" with no
- * numbers has no idea whether it is two runs away or two hundred. */
-export const ProviderServiceSchema = z.object({
-    slug: z.string(),
-    publisher: z.string(),
-    name: z.string(),
-    description: z.string(),
-    upstreamUrl: z.string(),
-    creditsPerRun: z.number(),
-    sampleRequest: z.string(),
-    status: ServiceStatusSchema,
-    // When the last conformance probe passed, absent until one has.
-    probedAt: z.iso.datetime().optional(),
-    // Why the watch suspended it, in a sentence written for the provider reading it.
-    suspendedFor: z.string().optional(),
-    servedRuns: z.number(),
-    refundedRuns: z.number(),
-    createdAt: z.iso.datetime(),
-});
-export type ProviderService = z.infer<typeof ProviderServiceSchema>;
-
-export const ProviderServicesStateSchema = z.object({
-    enabled: z.boolean(),
-    rules: AdmissionRulesSchema,
-    services: z.array(ProviderServiceSchema),
-    // Whether this account could publish at all today, the two identity gates, answered before a provider
-    // spends an afternoon building against a door that is shut.
-    holdsAnyPublisher: z.boolean(),
-    payoutsEnabled: z.boolean(),
-});
-export type ProviderServicesState = z.infer<typeof ProviderServicesStateSchema>;
-
-/* WHAT A CONFORMANCE PROBE FOUND. Every check is reported, passed or not, a provider fixing their endpoint
- * wants the whole picture, and "one of three failed" without saying which is a support ticket waiting to
- * happen. `message` is the first failure as a sentence, which is what a screen puts in front of them. */
-export const ServiceProbeResultSchema = z.object({
-    passed: z.boolean(),
-    checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string() })),
-    message: z.string(),
-});
-export type ServiceProbeResult = z.infer<typeof ServiceProbeResultSchema>;
-
-// A listing as its provider writes it. The same fields the rules are checked against, which is why there is
-// no separate "draft" shape, an edit and a creation are the same validation.
-export const ServiceListingInputSchema = z.object({
-    slug: z
-        .string()
-        .regex(/^[a-z0-9][a-z0-9-]*$/)
-        .max(64),
-    publisher: PublisherSlugSchema,
-    name: z.string().min(1).max(60),
-    description: z.string().min(1).max(400),
-    upstreamUrl: z.url(),
-    creditsPerRun: z.number().int().positive(),
-    sampleRequest: z.string().max(4000),
-});
-export type ServiceListingInput = z.infer<typeof ServiceListingInputSchema>;
-
 // ---- push relay: APNs on behalf of daemons that hold no vendor secret ----
 //
 // Apple only accepts pushes from the app's vendor, so a native install cannot be posted to directly the way a
@@ -1245,30 +986,21 @@ export const AdminOverviewSchema = z.object({
     // Sandboxes whose daemon announced within the last 24h / 7d / 30d — the engagement proxies. Honest
     // caveat rendered in-UI: lastSeenAt is an announce, so a long-running box reads as active all along.
     activeSandboxes: z.object({ day: z.number(), week: z.number(), month: z.number() }),
-    // The membership book, by Stripe's own words. past_due is churn about to happen; canceled30d is churn
-    // that did. mrrUsd is the honest approximation active × POOL_PRICE_USD — display, never accounting.
-    memberships: z.object({
+    // The hosted plan's book, by Stripe's own words. past_due is churn about to happen; canceled30d is churn
+    // that did. mrrUsd is the honest approximation active × HOSTED_PLAN_PRICE_USD — display, never accounting.
+    plans: z.object({
         active: z.number(),
         trialing: z.number(),
         pastDue: z.number(),
         canceled30d: z.number(),
         mrrUsd: z.number(),
     }),
-    // Service listings by lifecycle status (pool-admission.ts vocabulary).
-    services: z.object({
-        draft: z.number(),
-        probation: z.number(),
-        listed: z.number(),
-        suspended: z.number(),
-    }),
-    // Metered service runs since UTC midnight.
-    runsToday: z.number(),
     hostedMachines: z.number(),
     /* Which optional lanes this deployment actually runs — "is prod configured the way I think" as a card
      * rather than an ssh session. Booleans only: the switches are secrets, their being set is not. */
     lanes: z.object({
         trial: z.boolean(),
-        pool: z.boolean(),
+        hostedPlan: z.boolean(),
         hosted: z.boolean(),
         wallet: z.boolean(),
         push: z.boolean(),
@@ -1310,29 +1042,15 @@ export type AdminFunnel = z.infer<typeof AdminFunnelSchema>;
  * (title/detail) so the vocabulary lives in one place and the panel stays a renderer; `kind` and the anchor
  * ids exist for grouping and drill-down, never for the UI to re-derive the words from. */
 export const AdminAttentionItemSchema = z.object({
-    kind: z.enum([
-        `stuck-setup`,
-        `announce-refusal`,
-        `unreachable-sandbox`,
-        `payout-stuck`,
-        `statement-expiring`,
-        `payout-account-disabled`,
-        `membership-past-due`,
-        `pool-claim-lingering`,
-        `pool-build-stale`,
-        `service-canary`,
-        `service-suspended`,
-    ]),
+    kind: z.enum([`stuck-setup`, `announce-refusal`, `unreachable-sandbox`, `plan-past-due`, `pool-claim-lingering`, `pool-build-stale`]),
     severity: z.enum([`danger`, `warning`]),
     title: z.string(),
     detail: z.string().optional(),
-    // The relevant moment (ISO): when the setup was claimed, the payout created, the statement expires…
+    // The relevant moment (ISO): when the setup was claimed, the plan's last webhook, the claim's last move…
     at: z.iso.datetime().optional(),
-    // Drill-down anchors, present where they apply. `payoutId` is also the retry action's target.
+    // Drill-down anchors, present where they apply.
     email: z.email().optional(),
     sandboxId: z.string().optional(),
-    serviceSlug: z.string().optional(),
-    payoutId: z.string().optional(),
 });
 export type AdminAttentionItem = z.infer<typeof AdminAttentionItemSchema>;
 
@@ -1430,8 +1148,7 @@ export const AdminUserDetailSchema = z.object({
     ),
     // Auth providers on the account ("google", …).
     providers: z.array(z.string()),
-    membership: z.object({ status: z.string(), currentPeriodEnd: z.iso.datetime() }).nullable(),
-    creditsToday: z.number(),
+    plan: z.object({ status: z.string(), currentPeriodEnd: z.iso.datetime() }).nullable(),
     trialDays: z.array(z.object({ day: z.string(), messages: z.number(), lastModel: z.string().nullable() })),
     hostedMonthMinutes: z.number(),
     wallets: z.array(
@@ -1446,20 +1163,6 @@ export const AdminUserDetailSchema = z.object({
     sandboxes: z.array(AdminUserSandboxSchema),
     // Sandboxes this account is a MEMBER of (owned ones are above).
     memberOf: z.array(z.object({ sandboxName: z.string(), ownerEmail: z.email(), role: z.string(), accepted: z.boolean() })),
-    creator: z
-        .object({
-            publishers: z.array(z.string()),
-            services: z.array(z.object({ slug: z.string(), status: z.string(), creditsPerRun: z.number() })),
-            payouts: z.array(
-                z.object({
-                    amountCents: z.number(),
-                    status: z.string(),
-                    createdAt: z.iso.datetime(),
-                    lastError: z.string().nullable(),
-                }),
-            ),
-        })
-        .nullable(),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
 
@@ -1472,9 +1175,9 @@ export const AdminUserSchema = z.object({
     image: z.string().nullable(),
     createdAt: z.iso.datetime(),
     sandboxCount: z.number(),
-    // Stripe's word for the membership state ("active", "past_due", …), absent when the account never
+    // Stripe's word for the hosted plan's state ("active", "past_due", …), absent when the account never
     // completed a checkout.
-    membershipStatus: z.string().optional(),
+    planStatus: z.string().optional(),
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 
@@ -1486,49 +1189,6 @@ export const AdminUserListSchema = z.object({
 });
 export type AdminUserList = z.infer<typeof AdminUserListSchema>;
 
-/* THE MARKETPLACE, both sides at once: what agents asked for and did not find (the operator's build-next
- * list — the platform's only demand signal), and how the supply that exists is behaving, each listing shown
- * against the published thresholds it is judged by. `refunds7d`/`runs7d` are the recent-health window the
- * panel derives a rate from; `servedRuns` is the all-time graduation counter. */
-export const AdminMarketSchema = z.object({
-    // Grouped by normalized text, counted by DISTINCT owners (one noisy sandbox is one voice), newest
-    // phrasing shown. The same reduction the public catalog serves, unbounded by its display cap.
-    wants: z.array(z.object({ text: z.string(), owners: z.number(), lastAt: z.iso.datetime() })),
-    services: z.array(
-        z.object({
-            slug: z.string(),
-            publisher: z.string(),
-            name: z.string(),
-            status: z.string(),
-            creditsPerRun: z.number(),
-            // Operator rows (no owner) answer to nobody and are exempt from the gates; said explicitly so
-            // the panel never renders a probation bar for one.
-            owned: z.boolean(),
-            servedRuns: z.number(),
-            runs7d: z.number(),
-            refunds7d: z.number(),
-            canaryFails: z.number(),
-            probedAt: z.iso.datetime().nullable(),
-            suspendedFor: z.string().nullable(),
-        }),
-    ),
-    // The published rules the numbers above are judged by, echoed so the panel renders promise vs. actual.
-    thresholds: z.object({
-        graduationRuns: z.number(),
-        watchWindowRuns: z.number(),
-        maxRefundRate: z.number(),
-        canaryFailures: z.number(),
-    }),
-    creators: z.object({
-        publishers: z.number(),
-        payoutEnabled: z.number(),
-        // Money reserved in pending payouts, and money frozen in unclaimed/unexpired statements.
-        pendingPayoutCents: z.number(),
-        unclaimedCents: z.number(),
-    }),
-});
-export type AdminMarket = z.infer<typeof AdminMarketSchema>;
-
 /* THE TREND LINES — the daily rollup rows (admin_daily_stat), oldest first, up to 90 days. Two kinds of
  * column, and the panel labels them: window counts are exact facts about that day, snapshot counts are the
  * platform as it stood when the rollup ran (the morning after). */
@@ -1537,12 +1197,11 @@ export const AdminTrendsSchema = z.object({
         z.object({
             day: z.string(),
             newUsers: z.number(),
-            serviceRuns: z.number(),
             trialMessages: z.number(),
             totalUsers: z.number(),
             connectedUsers: z.number(),
             activeSandboxes24h: z.number(),
-            membershipsActive: z.number(),
+            plansActive: z.number(),
             hostedMachines: z.number(),
         }),
     ),

@@ -24,8 +24,7 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
     const month = at.toISOString().slice(0, 7);
     const memberEmail = user.email.toLowerCase();
 
-    const [sessions, accounts, membership, creditToday, trialRows, hostedRows, wallets, sandboxes, memberships, publishers, services, payouts] =
-        await Promise.all([
+    const [sessions, accounts, plan, trialRows, hostedRows, wallets, sandboxes, memberships] = await Promise.all([
             prisma.session.findMany({
                 where: { userId: user.id },
                 orderBy: { createdAt: `desc` },
@@ -33,8 +32,7 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
                 select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
             }),
             prisma.account.findMany({ where: { userId: user.id }, select: { providerId: true } }),
-            prisma.membership.findUnique({ where: { userId: user.id }, select: { status: true, currentPeriodEnd: true } }),
-            prisma.creditSpend.findUnique({ where: { userId_day: { userId: user.id, day: utcDayOf(at) } }, select: { credits: true } }),
+            prisma.hostedPlan.findUnique({ where: { userId: user.id }, select: { status: true, currentPeriodEnd: true } }),
             prisma.trialUsage.findMany({
                 where: { userId: user.id, day: { in: week } },
                 orderBy: { day: `desc` },
@@ -66,34 +64,12 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
                 where: { email: memberEmail },
                 select: { role: true, acceptedAt: true, sandbox: { select: { name: true, owner: { select: { email: true } } } } },
             }),
-            prisma.publisherClaim.findMany({ where: { userId: user.id }, select: { publisher: true } }),
-            prisma.service.findMany({ where: { userId: user.id }, select: { slug: true, status: true, creditsPerRun: true } }),
-            prisma.creatorPayout.findMany({
-                where: { userId: user.id },
-                orderBy: { createdAt: `desc` },
-                take: 5,
-                select: { amountCents: true, status: true, createdAt: true, lastError: true },
-            }),
         ]);
 
     // Payment counts per wallet, bounded by the wallet count (one per network).
     const paymentCounts = await Promise.all(
         wallets.map((wallet) => prisma.walletPayment.count({ where: { walletId: wallet.id, createdAt: { gte: new Date(at.getTime() - 30 * DAY_MS) } } })),
     );
-
-    const creator =
-        publishers.length === 0 && services.length === 0 && payouts.length === 0
-            ? null
-            : {
-                  publishers: publishers.map((claim) => claim.publisher),
-                  services,
-                  payouts: payouts.map((payout) => ({
-                      amountCents: payout.amountCents,
-                      status: payout.status,
-                      createdAt: payout.createdAt.toISOString(),
-                      lastError: payout.lastError,
-                  })),
-              };
 
     return {
         user: {
@@ -111,8 +87,7 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
             userAgent: session.userAgent,
         })),
         providers: [...new Set(accounts.map((account) => account.providerId))],
-        membership: membership ? { status: membership.status, currentPeriodEnd: membership.currentPeriodEnd.toISOString() } : null,
-        creditsToday: creditToday?.credits ?? 0,
+        plan: plan ? { status: plan.status, currentPeriodEnd: plan.currentPeriodEnd.toISOString() } : null,
         trialDays: trialRows,
         hostedMonthMinutes: hostedRows?.minutes ?? 0,
         wallets: wallets.map((wallet, index) => ({
@@ -148,6 +123,5 @@ export const adminUserDetail = async (prisma: PrismaClient, idOrEmail: string, n
             role: row.role,
             accepted: row.acceptedAt !== null,
         })),
-        creator,
     };
 };

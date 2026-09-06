@@ -421,9 +421,9 @@ const lanes = computed(() => lanesFor({ address: addressRead.value, hosted: host
 // There is a lane to take, so the ladder and the run step are worth drawing. Everything else is a card that
 // explains itself and leaves the attach link where it has always been.
 const laneTakeable = computed(() => lanes.value.kind === `takeable`);
-/* The free lane's awake-hour budget, or null for anyone it does not apply to: a member, or a platform
- * running without a ceiling. The distinction is the whole point of reading it here: `null` means the cards
- * below say nothing about hours at all, rather than showing a member a limit they do not have. */
+/* The free lane's awake-hour budget, or null for anyone it does not apply to: an owner on the hosted plan,
+ * or a platform running without a ceiling. The distinction is the whole point of reading it here: `null`
+ * means the cards below say nothing about hours at all, rather than showing a limit that does not apply. */
 const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
 // The daemon's announced host, once it exists: step 1's address line for a lane that never mints a code.
 const hostedHost = computed(() => {
@@ -513,12 +513,11 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * reader looks for the cost is the version of this card that has to be corrected later:
                    * AND IT SAYS WHAT HAPPENS AFTER THE HOURS, for the same reason. "40h a month" answers
                    * "how much do I get" and leaves "and then?" hanging, which is precisely the question a
-                   * price is read to settle; the honest answer is that a membership lifts the limit (and the
-                   * two rungs beside this one never had it): said as the upgrade it is. It read "then
-                   * membership" for a release, which names the same fact as a subscription already scheduled.
-                   * Members and ceiling-less platforms send no hours at all and read the old way. */
+                   * price is read to settle; the honest answer is that the hosted plan lifts the limit (and the
+                   * rung beside this one never had it): said as the upgrade it is. Owners on the plan and
+                   * ceiling-less platforms send no hours at all and read the old way. */
                   meta:
-                      hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, more with membership`,
+                      hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, always on with the plan`,
                   note: `Runs on our servers`,
               },
           ]

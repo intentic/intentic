@@ -118,12 +118,10 @@ export const LOOP_DESIGNS = family(`loop-designs`);
 
 /* ---- the signed-in ACCOUNT, which is not a sandbox --------------------------------------------------------
  *
- * The membership and its credit meter belong to the person, not to the box they happen to be looking at: one
- * allowance is spent by every sandbox they own, and the platform keys it by user. So this registers under
- * `.every`, the bare path, for a different reason to the three above. Scoped, it would cache a separate copy
- * per sandbox and show a switcher's worth of disagreeing balances, and a spend made in one would leave the
- * others reading the pre-spend figure until something else evicted them. */
-export const MEMBERSHIP = family(`membership`);
+ * The hosted plan belongs to the person, not to the box they happen to be looking at, and the platform keys
+ * it by user. So this registers under `.every`, the bare path, for a different reason to the three above:
+ * scoped, it would cache a separate copy per sandbox and a switcher's worth of disagreeing answers. */
+export const HOSTED_PLAN = family(`hosted-plan`);
 
 // ---- sandbox surfaces ----
 

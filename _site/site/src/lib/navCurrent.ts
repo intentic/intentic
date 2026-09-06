@@ -17,7 +17,7 @@ const bare = (path: string): string => path.replace(/\/+$/u, "");
  * claim a row inside the menu must not make.
  *
  * A MENU CARRIES SEVERAL PREFIXES because a menu is no longer one folder: Resources gathers /guides, /blog,
- * /compare and /changelog, and Developers gathers /developers, /api, /extensions and /earn. A bare link is
+ * /compare and /changelog, and Developers gathers /developers, /api and /extensions. A bare link is
  * still one path, because a link that stood for several regions would be a menu.
  */
 export function isCurrentSection(entry: NavEntry, path: string): boolean {

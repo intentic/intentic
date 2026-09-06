@@ -276,16 +276,6 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             ),
         note: z.string().optional().describe("Anything the agent should know, which goes back to it either way."),
     }),
-    // A premium service run's yes or no. The click is the ONLY way the spend can happen, the daemon holds the
-    // agent's run request parked until this settles it (platform/service-offer.ts), so `approve` carries no
-    // qualifiers: one true releases exactly one run, and anything else charges nothing.
-    z.object({
-        kind: z.literal("service_offer").describe("Answering a request to spend on a paid service."),
-        requestId: z.string().min(1).describe("Which card you are answering."),
-        approve: z
-            .boolean()
-            .describe("Yes releases exactly one run. Anything else charges nothing. This click is the only way the spend can happen."),
-    }),
     // A missing-capability ask's yes or no. `connect: true` is "I'll set it up", it opens the card's setup
     // and keeps the agent's request parked while the daemon watches for the connection to come live
     // (capabilities/capability-offer.ts); false tells the agent to continue without it. The click decides

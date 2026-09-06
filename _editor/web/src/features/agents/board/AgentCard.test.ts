@@ -28,7 +28,6 @@ const NO_ATTENTION: AgentSummary[`attention`] = {
     plan: false,
     question: false,
     permission: false,
-    service: false,
     capability: false,
     credential: false, conflict: false,
 };

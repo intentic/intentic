@@ -281,32 +281,12 @@ Every surface this one process owns, and the reason each one lives here rather t
   has to exist and carry commits the pinned base does not, so a repository the step never touched is dropped
   and a step that committed nothing says so: an unresolved name sends a reviewer to an empty diff, which comes
   back as a pass over work it never saw.
-- Hold up the daemon's end of the creator pool: with NO usage telemetry, by design. Installing (or updating)
-  a `tier: "premium"` extension donates the owner's credits to its publisher through the platform
-  (src/platform/pool/pool-donate.ts: the donation IS the premium gate, keyed on the checkout's own manifest
-  identity, refused installs leave no debris); enabling one re-checks the membership (src/platform/pool/pool-status.ts);
-  nothing about what runs on this machine is ever reported. Metered service runs relay through
-  src/platform/pool/pool-services.ts (the `/pool` routes are `pool.routes.ts`): the daemon adds the connect token, the member gate, the credit meter and
-  the refund discipline are the platform's. A run's answer is the platform's NDJSON stream (the contract's
-  ServiceStreamEvent vocabulary plus its own receipt trailer), which the relay forks: provider `status`
-  lines surface live, the buffered `result` is what the caller is answered with. The AGENT's own run is
-  additionally parked on an owner-approval card in the chat before anything is forwarded
-  (src/platform/pool/service-offer.ts): every number on the card is the platform's catalog answer, the owner's
-  click is the only thing that releases the spend, and one click covers one run: consent is plumbing, not
-  the skill's etiquette. The plumbing itself is src/agent/run/offer-card.ts, shared by every card a gate raises
-  from outside the turn generator (this one, a payment, a capability ask, a gated credential, a command headed
-  for somebody's machine): find the live run the caller may draw in, push the raised and resolved frames into
-  its log and the registry by hand, hold the call under a deadline, and tell an answer from the abort stand-in. While the approved run streams, its status lines land under that card as
-  service_event frames, and the receipt frame is the platform's trailer verbatim. The agent reaches the
-  priced catalog through the `services` CLI (bin/services + the baked services skill), scoped by the agent
-  token's grant; `services wanted` files a "the catalog had nothing for this" onto the platform's public
-  wanted list (no spend, no card, bounded platform-side) and the baked **provide** skill walks an owner
-  from an existing API to a listable wrapper endpoint (self-tested against the admission probe's three
-  checks) plus the exact values the listing screen asks for. An extension backend's runs pass straight
-  through the gate, because which services it may spend the owner's credits on is a `permissions.daemon`
-  glob approved at install.
 - Let an agent ask the owner, in chat, to connect a capability the task is missing: the same consent shape
-  as the spend gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The agent's
+  as the wallet's payment gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The
+  plumbing itself is src/agent/run/offer-card.ts, shared by every card a gate raises from outside the turn
+  generator (a capability ask, a payment, a gated credential, a command headed for somebody's machine): find the
+  live run the caller may draw in, push the raised and resolved frames into its log and the registry by hand,
+  hold the call under a deadline, and tell an answer from the abort stand-in. The agent's
   `capabilities request` (bin/capabilities + the baked capabilities skill) parks on a card titled with the
   catalog's own words (the daemon validates the ask against src/capabilities/connectable.ts: the static
   catalog merged with contributed cards); a yes keeps the call parked while the daemon watches the manifest

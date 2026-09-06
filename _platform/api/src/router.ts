@@ -1,10 +1,9 @@
 import { adminRoutes } from "./admin/admin.routes.js";
-import { creatorRoutes } from "./creator/creator.orpc.js";
 import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
-import { poolRoutes } from "./pool/pool.orpc.js";
 import { pushRelayRoutes } from "./push-relay/push-relay.routes.js";
+import { hostedPlanRoutes } from "./sandbox/hosted/hosted-plan.orpc.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
 
 // The implemented oRPC router, the per-domain route objects assembled into the apiContract shape. The
@@ -14,8 +13,7 @@ export const router = {
     sandbox: sandboxRoutes,
     invite: inviteRoutes,
     desktop: desktopRoutes,
-    pool: poolRoutes(),
-    creator: creatorRoutes(),
+    hostedPlan: hostedPlanRoutes(),
     push: pushRelayRoutes(),
     admin: adminRoutes,
 };

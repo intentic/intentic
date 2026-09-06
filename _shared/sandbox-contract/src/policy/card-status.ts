@@ -13,7 +13,7 @@ type Cards = { -readonly [K in CardField]?: TranscriptRow[K] };
 
 export const settledCards = (cards: TranscriptCards, reply: AgentReply | undefined): TranscriptCards => {
     const out: Cards = {};
-    const { plan, question, permission, browserHelp, terminalHelp, serviceOffer, capabilityOffer, paymentOffer, credentialOffer } = cards;
+    const { plan, question, permission, browserHelp, terminalHelp, capabilityOffer, paymentOffer, credentialOffer } = cards;
     if (plan !== undefined) {
         out.plan = { ...plan, status: reply?.kind !== "plan" ? "cancelled" : reply.approve ? "approved" : "rejected" };
     }
@@ -43,9 +43,6 @@ export const settledCards = (cards: TranscriptCards, reply: AgentReply | undefin
     }
     if (terminalHelp !== undefined) {
         out.terminalHelp = { ...terminalHelp, status: reply?.kind !== "terminal_help" ? "cancelled" : reply.helped ? "helped" : "declined" };
-    }
-    if (serviceOffer !== undefined) {
-        out.serviceOffer = { ...serviceOffer, status: reply?.kind !== "service_offer" ? "cancelled" : reply.approve ? "approved" : "skipped" };
     }
     // A yes settles the DECISION, not the ask: the owner is now setting the capability up, so the card moves to
     // `connecting` and stays there until the capability_outcome frame says how the setup ended.
@@ -85,7 +82,6 @@ export const cancelledCards = (cards: TranscriptCards): TranscriptCards => {
         "permission",
         "browserHelp",
         "terminalHelp",
-        "serviceOffer",
         "capabilityOffer",
         "paymentOffer",
         "credentialOffer",

@@ -5,11 +5,11 @@ import { hostedBudgetOf, openHostedStretch, settleHostedStretch, usageMonth } fr
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
-const config = (monthlyHours = 40): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours }, pool: { compEmails: `` } }) as unknown as Config;
+const config = (monthlyHours = 40): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours }, hostedPlan: { compEmails: `` } }) as unknown as Config;
 
 const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({
-        membership: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
         hostedMachine: { update: vi.fn().mockResolvedValue({}) },
         ...over,
@@ -51,7 +51,7 @@ describe(`the hosted hour meter`, () => {
          * member never pays a query to be told a limit does not apply to them. */
         it(`exempts a member without reading the meter`, async () => {
             const usage = { findUnique: vi.fn().mockResolvedValue({ minutes: 99_999 }) };
-            const prisma = prismaWith({ membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) }, hostedUsage: usage });
+            const prisma = prismaWith({ hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) }, hostedUsage: usage });
             expect(await hostedBudgetOf(prisma, config(), `u1`)).toMatchObject({ metered: false });
             expect(usage.findUnique).not.toHaveBeenCalled();
         });
@@ -60,10 +60,10 @@ describe(`the hosted hour meter`, () => {
             expect(await hostedBudgetOf(prismaWith({}), config(0), `u1`)).toMatchObject({ metered: false });
         });
 
-        // past_due is not premium (pool-membership's rule): a charge that failed pauses the exemption too,
+        // past_due is not on the plan (hosted-plan's rule): a charge that failed pauses the exemption too,
         // otherwise a lapsed card would buy unmetered hours for as long as Stripe kept retrying.
         it(`meters an owner whose payment is failing`, async () => {
-            const prisma = prismaWith({ membership: { findUnique: vi.fn().mockResolvedValue({ status: `past_due` }) } });
+            const prisma = prismaWith({ hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `past_due` }) } });
             expect(await hostedBudgetOf(prisma, config(), `u1`)).toMatchObject({ metered: true });
         });
 

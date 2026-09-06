@@ -30,21 +30,9 @@ model User {
     sandboxes        Sandbox[]
     trialUsage       TrialUsage[]
     hostedUsage      HostedUsage[]
-    membership       Membership?
-    donations        Donation[]
-    creditSpends     CreditSpend[]
-    serviceRuns      ServiceRun[]
-    serviceWants     ServiceWant[]
-    services         Service[]
-    publisherClaims  PublisherClaim[]
-    payoutAccount    PayoutAccount?
-    payouts          CreatorPayout[]
+    hostedPlan       HostedPlan?
     wallets          Wallet[]
     pushDevices      PushDevice[]
-    oauthApps        OauthApplication[]
-    oauthTokens      OauthAccessToken[]
-    oauthConsents    OauthConsent[]
-    serviceOffers    ServiceOffer[]
 
     @@map("user")
 }
@@ -124,94 +112,6 @@ model Verification {
     updatedAt  DateTime @updatedAt
 
     @@map("verification")
-}
-
-/* ---------------------------------------------------------------------------
- * OAuth 2.1 as an AUTHORIZATION SERVER — the three tables Better Auth's `mcp`
- * plugin owns (auth.ts). The platform issues tokens here rather than only
- * consuming Google's, because an MCP client (Claude Code) is a piece of
- * software the user installs, not a browser holding our session cookie: it
- * discovers `/.well-known/oauth-authorization-server`, registers itself
- * dynamically, and carries a bearer that names a USER and no sandbox.
- *
- * That last part is the whole reason these exist. Every metered route used to
- * authenticate by a sandbox's connect token, which meant a person without a
- * machine could not buy or spend anything. A bearer minted here is the second
- * principal class — same `userId`, no sandbox — and pool.routes.ts `ownerOf`
- * accepts either.
- *
- * Written and read only by Better Auth; shapes mirror its oidc-provider schema
- * exactly, so `npx @better-auth/cli generate` stays the source of truth for
- * them. Everything cascades with the user, like every other account-owned row.
- *
- * THE CASING IS LOAD-BEARING and cost an hour: Better Auth's Prisma adapter
- * resolves a model by indexing the client with its OWN model name —
- * `prisma.oauthAccessToken` — so `OAuthAccessToken` here (whose accessor is
- * `oAuthAccessToken`) makes every lookup throw "model does not exist" at
- * runtime, with nothing failing at compile time to warn you. `Oauth…` it is.
- * --------------------------------------------------------------------------- */
-
-// One registered MCP client. Created by dynamic client registration (RFC 7591) the first time a Claude Code
-// install points at this platform — `userId` is null for those, because nobody owns a client that registered
-// itself. `redirectUrls` is a comma-separated list, Better Auth's own encoding.
-model OauthApplication {
-    id           String             @id @default(cuid())
-    name         String
-    icon         String?
-    metadata     String?
-    clientId     String             @unique
-    clientSecret String?
-    redirectUrls String
-    type         String
-    disabled     Boolean            @default(false)
-    userId       String?
-    user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-    createdAt    DateTime           @default(now())
-    updatedAt    DateTime           @updatedAt
-    tokens       OauthAccessToken[]
-    consents     OauthConsent[]
-
-    @@index([userId])
-    @@map("oauth_application")
-}
-
-// One issued bearer (plus its refresh token). This is what a Claude Code session presents on /mcp, and the
-// row `ownerOf` resolves to a userId through.
-model OauthAccessToken {
-    id                      String           @id @default(cuid())
-    accessToken             String           @unique
-    refreshToken            String           @unique
-    accessTokenExpiresAt    DateTime
-    refreshTokenExpiresAt   DateTime
-    clientId                String
-    client                  OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-    userId                  String?
-    user                    User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-    scopes                  String
-    createdAt               DateTime         @default(now())
-    updatedAt               DateTime         @updatedAt
-
-    @@index([clientId])
-    @@index([userId])
-    @@map("oauth_access_token")
-}
-
-// "This user already said yes to this client's scopes" — what keeps the consent screen from reappearing on
-// every reconnect.
-model OauthConsent {
-    id           String           @id @default(cuid())
-    clientId     String
-    client       OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-    userId       String
-    user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-    scopes       String
-    consentGiven Boolean
-    createdAt    DateTime         @default(now())
-    updatedAt    DateTime         @updatedAt
-
-    @@index([clientId])
-    @@index([userId])
-    @@map("oauth_consent")
 }
 
 // ---------------------------------------------------------------------------
@@ -498,22 +398,16 @@ model DesktopHandoff {
 // accepted invitee has daemon access immediately. inviteToken/inviteExpiresAt gate the accept link (resend mints
 // fresh ones); an unaccepted invite that expires is inert — the invitee never received a connect token.
 // ---------------------------------------------------------------------------
-// The creator pool. The membership a user bought (mirrored from Stripe by
-// webhook — Stripe stays the source of truth for money, this row is the
-// platform's fast local answer to "is this user premium"), and the credit
-// economy the revenue share is computed from: the per-day credit meter, the
-// donation ledger (install-time support for non-service extensions — the
-// platform's ONLY signal about them; no usage telemetry exists), the catalog
-// of priced upstreams, and the service-run ledger. The pool's numbers are
-// PUBLIC by design (GET /pool/transparency), so no table here may ever hold
-// more than ids, statuses, counts and months — the one secret (a service's
-// signing key) is encrypted at rest.
+// The hosted plan: the one thing the platform sells (docs/design/pricing-model.md).
+// Mirrored from Stripe by webhook — Stripe stays the source of truth for money,
+// this row is the platform's fast local answer to "is this owner's hosted sandbox
+// on the plan" (api sandbox/hosted/hosted-usage.ts, hosted-idle.ts).
 // ---------------------------------------------------------------------------
 
-// One row per user who ever completed a membership checkout. `status` is Stripe's subscription status
-// verbatim ("active", "past_due", "canceled", …) — a bare string, not an enum, so Stripe growing a status is
-// a webhook update, not a migration. Premium = active/trialing (pool/pool-membership.ts owns that rule).
-model Membership {
+// One row per user who ever completed a plan checkout. `status` is Stripe's subscription status verbatim
+// ("active", "past_due", "canceled", …) — a bare string, not an enum, so Stripe growing a status is a webhook
+// update, not a migration. On the plan = active/trialing (api sandbox/hosted/hosted-plan.ts owns that rule).
+model HostedPlan {
     id                   String   @id @default(cuid())
     userId               String   @unique
     user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -521,210 +415,15 @@ model Membership {
     stripeSubscriptionId String   @unique
     status               String
     // When the paid period runs out (Stripe's current_period_end) — display only ("renews on …"); the
-    // premium answer keys off `status`, which the webhook keeps current through every renewal and lapse.
+    // plan answer keys off `status`, which the webhook keeps current through every renewal and lapse.
     currentPeriodEnd     DateTime
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt
 
-    @@map("membership")
+    @@map("hosted_plan")
 }
 
-// One row = "this member's install of this premium extension donated its credits this month" — the unit a
-// non-service extension is paid on. Written by POST /pool/donate at install/update time and NEVER from any
-// usage signal: sandboxes are self-hosted, so the platform meters only what passes through its own hands
-// (credits), and no telemetry leaves anyone's machine. The unique key is the whole dedupe story: a reinstall
-// in the same month is a no-op that charges nothing, an update in a later month donates again — at most
-// twelve donations per install per year, which is also what bounds an update-spamming publisher. `credits`
-// is stamped from config at donation time, so a later price change never rewrites history. Keyed by the
-// manifest-derived extension identity (publisher.name), the same identity listings and payouts use.
-model Donation {
-    id          String   @id @default(cuid())
-    userId      String
-    user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    extensionId String
-    month       String
-    credits     Int
-    createdAt   DateTime @default(now())
-
-    @@unique([userId, extensionId, month])
-    // The transparency aggregate and the retention sweep both scan by month; the unique above leads with
-    // userId and can't serve them.
-    @@index([month])
-    @@map("donation")
-}
-
-/* A priced upstream the platform will meter and forward to — one row per premium service. `slug` is the
- * public id extensions call it by; `secret` is the provider's signing key (encrypted at rest, api crypto.ts —
- * the one secret in the pool's tables), spent on the HMAC that lets the provider verify a forwarded call came
- * from intentic. `creditsPerRun` is the visible price.
- *
- * TWO KINDS OF ROW LIVE HERE, told apart by `userId`. An OPERATOR row (null owner — the demo service, and any
- * listing written by hand) answers to nobody and is exempt from every admission gate. An OWNED row arrived
- * through open admission (pool-admission.ts): its owner claimed the publisher name, connected payouts, and
- * passed a live conformance probe, and it is subject to the watch forever after.
- *
- * `status` replaced the old `active` boolean because "live" stopped being one bit: `draft` is editable and
- * invisible, `probation` is live under a price ceiling and badged as new, `listed` is graduated, `suspended`
- * is delisted with its reason recorded. Run history survives every transition — a suspended service's
- * earnings are somebody's money, and its public numbers are the evidence for why it was suspended. */
-model Service {
-    id            String        @id @default(cuid())
-    slug          String        @unique
-    publisher     String
-    name          String
-    description   String
-    upstreamUrl   String
-    secret        String
-    creditsPerRun Int
-    /* A request body this service actually answers, as JSON. Two jobs, which is why it is required of an
-     * owned listing: it is the body the conformance probe sends (so the probe tests a call the provider
-     * knows works, rather than a canonical one they never anticipated), and the catalog hands it to the
-     * agent as the worked example of this service's request shape. */
-    sampleRequest String        @default("{}")
-    // "draft" | "probation" | "listed" | "suspended" — see pool-admission.ts ServiceStatus.
-    status        String        @default("listed")
-    // Null for operator-created rows; set to the provider who published it through open admission.
-    userId        String?
-    user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
-    // When the last conformance probe passed. Publishing requires one inside the freshness window; the
-    // canary refreshes it for a listed service that is still answering.
-    probedAt      DateTime?
-    // How many consecutive canary probes have failed — the counter the watch suspends on.
-    canaryFails   Int           @default(0)
-    // Why a suspended row is suspended, in a sentence written for the provider reading it.
-    suspendedFor  String?
-    // When the price last moved — the rate limit's whole state.
-    pricedAt      DateTime?
-    createdAt     DateTime      @default(now())
-    updatedAt     DateTime      @updatedAt
-    runs          ServiceRun[]
-    probes        ServiceProbe[]
-    offers        ServiceOffer[]
-
-    // The catalog reads live rows; the watch scans by owner.
-    @@index([status])
-    @@index([userId])
-    @@map("service")
-}
-
-// One conformance probe attempt — kept rather than overwritten so a provider debugging a rejection can read
-// what actually happened, and so a suspension has the failing runs behind it on record. Swept by retention.
-model ServiceProbe {
-    id        String   @id @default(cuid())
-    serviceId String
-    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-    // Whether all three checks passed.
-    passed    Boolean
-    // "publish" (the gate) or "canary" (the watch) — the two callers, told apart in the provider's log.
-    kind      String
-    // Per-check outcome as JSON, and the first failing check's sentence. Read by humans, never by logic.
-    detail    String
-    createdAt DateTime @default(now())
-
-    @@index([serviceId, createdAt])
-    @@index([createdAt])
-    @@map("service_probe")
-}
-
-// The credit meter: what a member has spent today, the trial_usage shape verbatim — atomic upsert on
-// (userId, day) so a spend is one statement, refusal decided from the post-increment value. The allowance
-// itself is config (pool.dailyCredits), never a row. Swept by retention.ts; cascades with the user.
-model CreditSpend {
-    id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    day       String
-    credits   Int      @default(0)
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    @@unique([userId, day])
-    @@index([day])
-    @@map("credit_spend")
-}
-
-// One metered call to a service — what provider earnings and the transparency page's services section are
-// computed from. `status` is "ok" or "refunded" (provider failure gave the credits back; the row stays, so
-// a flaky service is visible in its own public numbers). Swept with the use-day window; cascades with user.
-model ServiceRun {
-    id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    serviceId String
-    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-    credits   Int
-    status    String
-    createdAt DateTime @default(now())
-
-    // Earnings and transparency aggregate by service and by time; the FK columns get no automatic index.
-    @@index([serviceId, createdAt])
-    @@index([userId])
-    @@index([createdAt])
-    @@map("service_run")
-}
-
-/* THE SPEND GATE, WRITTEN DOWN — one row per "an agent asked to run a paid service and the owner has not
- * answered yet". The sandbox's version of this gate lives in memory (sandbox platform/service-offer.ts): the
- * CLI call parks on the daemon while a card sits in the owner's live conversation, and the held connection
- * IS the waiter. Off-sandbox there is no daemon, no conversation and no held connection — an MCP client
- * opens a URL, the browser lands somewhere else entirely, and the tool call is retried later, possibly by a
- * different process. So the offer has to be a row, and the row is the grant.
- *
- * WHAT MAKES IT A GATE RATHER THAN A PROMPT: `status` moves to `approved` only from the approval page, under
- * the owner's own browser session (pool.orpc.ts settleOffer) — never from anything the MCP client says. The
- * client's elicitation answer is not consent and is not read as consent; the run re-reads THIS row. So an
- * `Elicitation` hook that auto-answers the dialog buys nothing, which is the one property the port had to
- * keep. `approved` → `spent` is a conditional update, so one approval can release exactly one run even if
- * the tool call is retried twice.
- *
- * `credits` is stamped at offer time: the card, the page and the charge all quote the same number even if the
- * listing is repriced while the owner is deciding. `request` is the agent's body verbatim — the page shows it,
- * because "what is about to be sent" is half of what consent means. Rows are disposable; retention sweeps them. */
-model ServiceOffer {
-    id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    serviceId String
-    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-    // Price snapshot, in credits, as the catalog stated it when the offer went up.
-    credits   Int
-    // The provider's request body, exactly as the agent composed it.
-    request   String
-    // The agent's one line of "why this helps", capped at the route. Absent when it offered none.
-    why       String?
-    // pending → approved → spent, or pending → declined, or pending → expired.
-    status    String   @default("pending")
-    createdAt DateTime @default(now())
-    expiresAt DateTime
-    decidedAt DateTime?
-
-    @@index([userId, createdAt])
-    @@index([expiresAt])
-    @@map("service_offer")
-}
-
-/* ONE "THE CATALOG HAD NOTHING FOR THIS" — the platform's only demand signal, filed by an agent that read
- * the catalog and found no service that answered. Published in aggregate (the public catalog groups by
- * `normalized` and counts distinct owners), so providers build against measured asks instead of guesses.
- * `userId` exists to bound the writer — a small daily cap per owner — and is never published. Swept by
- * retention.ts well before the ledger window: a want is a lead, not a record anyone disputes. */
-model ServiceWant {
-    id         String   @id @default(cuid())
-    userId     String
-    user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    // As typed by the agent (bounded at the route); the newest raw text is what the aggregate displays.
-    text       String
-    // Lowercased, whitespace-collapsed — the grouping key, so "PDF invoices" and "pdf  invoices" are one ask.
-    normalized String
-    createdAt  DateTime @default(now())
-
-    @@index([normalized, createdAt])
-    @@index([userId, createdAt])
-    @@index([createdAt])
-    @@map("service_want")
-}
-
-/* THE MEMBER'S OWN USDC WALLET — one per (account, network), and the reason the platform is in this story at
+/* THE OWNER'S OWN USDC WALLET — one per (account, network), and the reason the platform is in this story at
  * all: the sandbox container is not a key boundary (its daemon and its agent both run as root in one
  * container, which SECURITY.md states as the threat model), so a wallet the agent could read is a wallet the
  * agent can drain. The key therefore lives on the far side of the connect token, and not even here as raw
@@ -732,8 +431,8 @@ model ServiceWant {
  * from an account to it plus the caps the signer enforces.
  *
  * OWNER-SCOPED, NEVER POOLED, and that is a compliance property rather than a schema preference: funds are
- * the member's own, the platform never aggregates or moves value between accounts, and every signature is
- * one instruction from that member's own balance. `perPaymentMaxUsd`/`dailyCapUsd` mirror the sandbox
+ * the owner's own, the platform never aggregates or moves value between accounts, and every signature is
+ * one instruction from that owner's own balance. `perPaymentMaxUsd`/`dailyCapUsd` mirror the sandbox
  * capability card's policy — re-sent on every apply, and re-checked HERE on every signature, so a
  * compromised sandbox can at worst spend what its owner already delegated.
  *
@@ -784,160 +483,9 @@ model WalletPayment {
     @@map("wallet_payment")
 }
 
-/* WHO A PUBLISHER NAME BELONGS TO — the join the pool has never had. Earnings accrue against the manifest's
- * `publisher.name`, which is a string a listing declares, not a person the platform can pay. This row is what
- * turns one into the other: an account proved control of a source repository the official registry lists under
- * that publisher, so money owed to the name is money owed to this user.
- *
- * `publisher` is the unique key, not (publisher, userId): the name is first-come and singular, exactly as the
- * registry treats it, so a second claimant collides with the holder instead of quietly earning beside them.
- * `repo` records WHICH repository carried the proof — a claim nobody can retrace is not evidence, and when a
- * slug is disputed this is the line that settles it. */
-model PublisherClaim {
-    id        String   @id @default(cuid())
-    publisher String   @unique
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    repo      String
-    createdAt DateTime @default(now())
-
-    // The creator surface lists a caller's claims; the unique above is on publisher and can't serve that.
-    @@index([userId])
-    @@map("publisher_claim")
-}
-
-/* WHERE A CREATOR'S MONEY GOES. One per account rather than one per publisher: a person holding three listings
- * is still one payee with one set of tax details, and splitting the destination per listing would multiply the
- * onboarding without buying anything.
- *
- * The platform stores an account REFERENCE and three answers it needs to render honestly — never bank details,
- * never tax forms, which is the whole reason payouts ride a Connect account instead of a form here. `payoutsEnabled`
- * is the only field the settlement job may read as permission to send money; `detailsSubmitted` separates "still
- * filling it in" from "finished but held", and `disabledReason` is why a finished account still cannot be paid,
- * so the creator reads a cause rather than a silence. */
-model PayoutAccount {
-    id               String   @id @default(cuid())
-    userId           String   @unique
-    user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    stripeAccountId  String   @unique
-    payoutsEnabled   Boolean  @default(false)
-    detailsSubmitted Boolean  @default(false)
-    disabledReason   String?
-    createdAt        DateTime @default(now())
-    updatedAt        DateTime @updatedAt
-
-    @@map("payout_account")
-}
-
-/* A MONTH, CLOSED. The public ledger recomputes its figures live from the donation and run rows every time
- * anyone reads it, which is right for a month still in progress and impossible to pay against: a number that
- * moves cannot be settled on, and the rows it is computed from are swept at thirteen months (retention.ts).
- * This row is the month frozen — computed once, never recomputed, and from then on the record.
- *
- * `grossCents`/`feeCents` are what actually SETTLED at Stripe in the month, not members × price: the published
- * promise is a share of what members spend, and a revenue figure that is really an estimate multiplied out
- * cannot be reconciled against anything. `poolCents` keeps the ceiling the live ledger states, so the two
- * surfaces can be read side by side; `earnedCents` is what this month's own spent credits came to, `sweptCents`
- * is expired unclaimed money folded back in, and `distributedCents` is the sum of the statements below.
- *
- * The shares are frozen alongside the money. If the split ever changes, a closed month must keep paying by the
- * number that was published while it was open — otherwise the promise is retroactive, which is the one thing
- * this whole design exists to prevent. */
-model PoolMonth {
-    id                String             @id @default(cuid())
-    month             String             @unique
-    closedAt          DateTime           @default(now())
-    members           Int
-    grossCents        Int
-    feeCents          Int
-    // What running the platform for this month's members cost, taken off the top before the shares — frozen
-    // here alongside the gross it was subtracted from, so a reader of a closed month can check the pool
-    // figure rather than take it. Distinct from feeCents, which is the payment processor's, not ours.
-    infraCents        Int
-    poolCents         Int
-    earnedCents       Int
-    sweptCents        Int
-    distributedCents  Int
-    creatorShare      Float
-    serviceShare      Float
-    // The date this month's statements become payable — stated at close so a creator reads a date, not "soon".
-    payableAt         DateTime
-    statements        CreatorStatement[]
-
-    @@map("pool_month")
-}
-
-/* ONE PUBLISHER'S EARNINGS FOR ONE CLOSED MONTH — the unit a payout is later made against, and after the raw
- * ledger is swept, the only surviving record that the money was ever owed.
- *
- * Deliberately NOT bound to a user. Who a publisher name belongs to is answered by the claim table, which can
- * change after a close: a creator who claims in October must be paid for July, and binding a user here would
- * mean rewriting frozen rows to make that true. Payability is therefore derived — a claim exists and this row
- * has not expired — and the frozen row stays frozen.
- *
- * `expiresAt` is the published twelve-month window. `expiredAt` is set only when the amount has actually been
- * swept back into a later month's distribution, so the two together answer "is this still claimable" and "where
- * did it go" without a status string that could disagree with either. */
-model CreatorStatement {
-    id          String         @id @default(cuid())
-    month       String
-    poolMonth   PoolMonth      @relation(fields: [month], references: [month], onDelete: Cascade)
-    publisher   String
-    amountCents Int
-    credits     Int
-    expiresAt   DateTime
-    expiredAt   DateTime?
-    createdAt   DateTime       @default(now())
-    // The payment this line was settled by. Null means still owed — and it is the ONLY thing that means that,
-    // so claiming a statement into a payout is what makes paying it twice impossible.
-    payoutId    String?
-    payout      CreatorPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
-
-    @@unique([month, publisher])
-    // A creator's own statements are read by publisher; the unique above leads with month.
-    @@index([publisher])
-    // The payout run scans for unclaimed lines.
-    @@index([payoutId])
-    @@map("creator_statement")
-}
-
-/* ONE PAYMENT TO ONE CREATOR — the receipt, and the thing that makes the run safe to retry.
- *
- * A payout is RESERVED before any money moves: the row is created and the statements it covers are claimed by
- * it in the same transaction, while nothing has been sent. Only then is the transfer attempted, under an
- * idempotency key that is this row's own id. That ordering is the whole guarantee. A crash after the reserve
- * and before the transfer leaves a `pending` row that the next run finishes — with the same key, so if the
- * transfer had in fact reached Stripe, Stripe returns the original instead of making a second one.
- *
- * A failing transfer therefore NEVER releases its statements. Releasing them would mean the next run builds a
- * different payout with a different key, which is precisely how a payment that silently succeeded gets sent
- * twice. It stays pending and visible instead, with the last error on the row, because money stuck in the open
- * is a problem someone can fix and money sent twice is one they cannot. */
-model CreatorPayout {
-    id               String             @id @default(cuid())
-    userId           String
-    user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-    amountCents      Int
-    currency         String
-    // "pending" until the transfer is confirmed, then "paid". No "failed": a failure is a pending payment that
-    // has not succeeded yet, and calling it finished would strand the money it still holds.
-    status           String             @default("pending")
-    stripeTransferId String?
-    attempts         Int                @default(0)
-    lastError        String?
-    createdAt        DateTime           @default(now())
-    paidAt           DateTime?
-    statements       CreatorStatement[]
-
-    @@index([userId])
-    // The run resumes every unfinished payment before it builds any new ones.
-    @@index([status])
-    @@map("creator_payout")
-}
-
 /* ONE UTC DAY OF PLATFORM HISTORY, written by the daily rollup (api admin/admin-rollup.ts) so the admin
- * panel's trend lines survive the retention sweeps that take the raw rows (ledgers at 13 months, trial days
- * sooner). Two kinds of column, told apart in the comments: WINDOW counts are exact facts about that day
+ * panel's trend lines survive the retention sweeps that take the raw rows (the hour meter at 13 months, trial
+ * days sooner). Two kinds of column, told apart in the comments: WINDOW counts are exact facts about that day
  * (immutable timestamps), SNAPSHOT counts are the platform as it stood when the rollup ran (typically the
  * morning after), kept because the raw signal (lastSeenAt) moves and cannot be re-asked later.
  *
@@ -949,15 +497,13 @@ model AdminDailyStat {
     day                String   @unique
     // WINDOW: accounts created during this day.
     newUsers           Int
-    // WINDOW: metered service runs during this day.
-    serviceRuns        Int
     // WINDOW: trial messages metered on this day's rows.
     trialMessages      Int
     // SNAPSHOT: totals as of the rollup.
     totalUsers         Int
     connectedUsers     Int
     activeSandboxes24h Int
-    membershipsActive  Int
+    plansActive        Int
     hostedMachines     Int
     // When the day's operator digest went out (admin/admin-digest.ts) — the "once per day" latch, on this
     // row because the rollup's create is already the day's first-run signal.

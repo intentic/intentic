@@ -1,7 +1,6 @@
 ---
 import { REGISTRY_TOPIC } from "@intentic/registry";
 import { developersHref, extensionLifecycle } from "@intentic/site-content/developers";
-import { creatorSharePct, pool } from "@intentic/site-content/pool";
 import { APP_URL } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
@@ -15,7 +14,7 @@ import { loadGallery, markArtUrl, markInitials, markLogoUrl, sourceHref } from "
  *
  * A DISCOVERY SURFACE, and the layout now says so: the listings come first. This page used to open with the
  * site's heaviest economics: the spend diamond, two spend cards, the revenue ring: before showing a single
- * listing, which put the marketplace below the fold of its own page. The whole economy lives at /earn/ now;
+ * listing, which put the marketplace below the fold of its own page. Nothing here is priced;
  * what stays here is one band of headline figures and the lifecycle strip, each linking out, and both sit at
  * the foot: the hero hands straight over to the gallery, so the listings and the diagram share one screen.
  *
@@ -62,21 +61,11 @@ const scannedNote =
               stale ? ", from a vendored snapshot, because the registry was unreachable at build time" : ""
           }.`;
 
-const n = (value: number) => value.toLocaleString(`en-GB`);
 
 const publishSteps = [
     { title: "Build an extension", body: "Create a directory with an intentic-extension.json at its root." },
     { title: "Add the topic" },
     { title: "Get listed", body: "The registry bot opens a listing pull request for you." },
-];
-
-/* The three headline figures of the economy: the WHOLE of the money story this page tells. Everything they
- * summarize (the spend cards, the diamond, the revenue ring, the fine print) is /earn/'s job; a band that
- * grew past one row would be the old page growing back. */
-const moneyFigures = [
-    { term: `$${pool.priceUsd}/mo`, detail: "one membership, every premium extension" },
-    { term: `${n(pool.dailyCredits)}/day`, detail: "credits: installs donate them, service runs spend them" },
-    { term: `${creatorSharePct}%`, detail: "of every spent credit reaches its creator" },
 ];
 
 /* The lead figure: what an extension actually is, and how it meets the core. Drawn as a vertical architecture
@@ -115,8 +104,7 @@ const CORE = { x: 12, y: 170, w: 496, h: 68 };
 const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90, y: CORE.y + 36 }));
 
 /* THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here: the same list
- * drives this strip and the API overview's, so the two cannot drift. The Earn chip wears the accent because it
- * is the one that leaves the developer's track for the economy's own page; Update after it is what makes the
+ * drives this strip and the API overview's, so the two cannot drift. Maintain at the end is what makes the
  * strip a cycle rather than a line. */
 ---
 
@@ -217,14 +205,6 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                                         </span>
                                         <div class="flex min-w-0 flex-1 items-baseline gap-2">
                                             <h3 class="min-w-0 truncate font-mono text-sm font-medium text-content">{entry.name}</h3>
-                                            {entry.tier === "premium" && (
-                                                <span
-                                                    class="shrink-0 bg-overlay/40 px-1 text-2xs font-medium text-primary-400"
-                                                    title="Needs an intentic membership; installing donates credits to its creator"
-                                                >
-                                                    Premium
-                                                </span>
-                                            )}
                                             {entry.version && <span class="shrink-0 text-2xs text-subtle">{entry.version}</span>}
                                             {entry.stars !== undefined && <span class="ml-auto shrink-0 text-2xs text-subtle">★ {entry.stars}</span>}
                                         </div>
@@ -332,10 +312,9 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
             </section>
 
             <section aria-labelledby="lifecycle-heading">
-                <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout, and around again</h2>
+                <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to an install, and around again</h2>
 
-                {/* The whole cycle as chips. Every chip goes to the page that explains it, and the Earn chip
-                    leaves this track for the economy's own page. */}
+                {/* The whole cycle as chips. Every chip goes to the page that explains it. */}
                 <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
                     {
                         extensionLifecycle.map((stage, i) => (
@@ -344,11 +323,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                                 <a
                                     href={stage.href}
                                     title={stage.what}
-                                    class={
-                                        stage.step === "Earn"
-                                            ? "rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline transition-colors hover:border-primary-600/70"
-                                            : "rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline transition-colors hover:border-primary-600/40 hover:text-link"
-                                    }
+                                    class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline transition-colors hover:border-primary-600/40 hover:text-link"
                                 >
                                     {stage.step}
                                 </a>
@@ -361,29 +336,9 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                 <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
                     <a class="text-link hover:underline" href={developersHref("publish")}>Listing &amp; ranking</a>
                     <a class="text-link hover:underline" href={developersHref("maintain")}>Maintain &amp; grow</a>
-                    <a class="text-link hover:underline" href="/earn/">The pool &amp; the ledger</a>
                 </div>
             </section>
         </div>
-
-        {/* The money, in one row: almost everything above installs free, and the whole economy behind the
-            Premium badges is /earn/'s page to tell. It sits at the foot rather than under the hero, where it
-            cost the gallery and the diagram their shared screen; the lifecycle strip directly above it is
-            where a reader is already looking at Earn, so the figures land next to the question. Still the
-            ONLY economics on the page. */}
-        <section class="plinth" aria-label="How premium extensions are paid for">
-            <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
-                {
-                    moneyFigures.map((stat) => (
-                        <div class="flex items-baseline gap-2">
-                            <span class="font-mono text-sm font-semibold tracking-tight text-content">{stat.term}</span>
-                            <span class="text-2xs text-subtle">{stat.detail}</span>
-                        </div>
-                    ))
-                }
-                <a class="text-xs text-link hover:underline sm:ml-auto" href="/earn/">How the pool works →</a>
-            </div>
-        </section>
 
         <section class="border-t band-rule">
             <div class="mx-auto max-w-7xl px-6 py-14 text-center">
