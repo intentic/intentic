@@ -1,5 +1,5 @@
 import type { lookup } from "node:dns/promises";
-import { apiContract, type ClaimChallenge, type CreatorState, type PublisherClaim } from "@intentic-app/api-contract";
+import { apiContract, type ClaimChallenge, type CreatorState, type PublisherClaim } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";

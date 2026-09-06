@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/example-provider",
+    "name": "@intentic/example-provider",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -9,7 +9,7 @@
         ".": {
             "types": "./dist/provider.d.ts",
             "import": {
-                "@intentic-app/src": "./src/provider.ts",
+                "@intentic/src": "./src/provider.ts",
                 "types": "./dist/provider.d.ts",
                 "default": "./dist/provider.js"
             },

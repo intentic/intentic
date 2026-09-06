@@ -4,13 +4,13 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { agentsBadge, agentsScopeNote } from "../composables/agents/agentsTile";
+import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useApprovalsTile } from "./mobileTabs";
-import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
-import { pushBadge } from "../composables/workspace/pushBadge";
-import { useChanges } from "../composables/workspace/useChanges";
-import { usePushFlow } from "../composables/workspace/usePushFlow";
-import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
+import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
+import { pushBadge } from "../features/workspace/push/pushBadge";
+import { useChanges } from "../features/workspace/changes/useChanges";
+import { usePushFlow } from "../features/workspace/push/usePushFlow";
+import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 
 /* The mobile shell's bottom navigation: four fixed thumb-size tabs. Agents is the primary on-the-go surface:
  * glance at the fleet, tap in to drive one, and carries the "agents need you" badge; Review carries the

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch, usageMonth } from "./hosted-usage.js";
 

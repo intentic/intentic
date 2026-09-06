@@ -16,7 +16,7 @@ export default {
     datasource: {
         url: env(`DATABASE_URL`),
     },
-    // Explicit so `prisma migrate deploy --config ./node_modules/@intentic-app/prisma/prisma.config.ts`
+    // Explicit so `prisma migrate deploy --config ./node_modules/@intentic/prisma/prisma.config.ts`
     // resolves migrations relative to this file (next to the bundled schema) regardless of cwd.
     migrations: {
         path: "./migrations",

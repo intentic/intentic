@@ -5,7 +5,7 @@
 # task (dependsOn build → workspace deps' dist exist, warm cache; then `pnpm deploy --prod ./deploy` flattens
 # the api + its deps — see _tools/scripts/platform/docker-release.sh). The pruned tree IS the build context, so there
 # is no .dockerignore and nothing else can leak in:
-#   pnpm --filter=@intentic-app/api deploy --prod ./deploy && docker build -f Dockerfile -t …/api ./deploy
+#   pnpm --filter=@intentic/api deploy --prod ./deploy && docker build -f Dockerfile -t …/api ./deploy
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
@@ -38,8 +38,8 @@ EXPOSE 6480
 # a container that refuses to start is visible in minutes, which is the entire difference from what happened.
 # CI holds the other end (the `migrations` job in ci.yml): a build whose migrations do not replay into
 # schema.prisma never becomes an image, so anything this finds is drift in the DATABASE, not in the release.
-CMD bun node_modules/prisma/build/index.js migrate deploy --config node_modules/@intentic-app/prisma/prisma.config.ts \
+CMD bun node_modules/prisma/build/index.js migrate deploy --config node_modules/@intentic/prisma/prisma.config.ts \
     && bun node_modules/prisma/build/index.js migrate diff --from-config-datasource \
-        --to-schema node_modules/@intentic-app/prisma/schema.prisma --exit-code \
-        --config node_modules/@intentic-app/prisma/prisma.config.ts \
+        --to-schema node_modules/@intentic/prisma/schema.prisma --exit-code \
+        --config node_modules/@intentic/prisma/prisma.config.ts \
     && exec bun src/main.ts

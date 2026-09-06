@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";

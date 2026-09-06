@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { sendMail } from "../mail.js";
 import { adminAttention } from "./admin-attention.js";

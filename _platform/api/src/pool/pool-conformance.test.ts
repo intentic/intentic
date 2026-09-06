@@ -1,4 +1,4 @@
-import { createProvider } from "@intentic-app/example-provider";
+import { createProvider } from "@intentic/example-provider";
 import { describe, expect, it } from "vitest";
 import { probeService } from "./pool-admission.js";
 import { forwardToService } from "./pool-services.js";

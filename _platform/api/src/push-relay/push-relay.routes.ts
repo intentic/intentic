@@ -1,4 +1,4 @@
-import { API_BASE_PATH, apiContract } from "@intentic-app/api-contract";
+import { API_BASE_PATH, apiContract } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Config } from "../config.js";

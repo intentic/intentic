@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { apiContract, type InviteDelivery } from "@intentic-app/api-contract";
+import { apiContract, type InviteDelivery } from "@intentic/api-contract";
 import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";

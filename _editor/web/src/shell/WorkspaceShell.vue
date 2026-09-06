@@ -2,10 +2,10 @@
 import { useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { watchAgentsScope } from "../composables/agents/agentsTile";
+import { watchAgentsScope } from "../features/agents/board/agentsTile";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
-import { useMainWindow } from "../composables/mainWindow";
-import { openWorkspaceRef } from "../composables/workspace/openFileRef";
+import { useMainWindow } from "./window/mainWindow";
+import { openWorkspaceRef } from "../features/workspace/files/openFileRef";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 
 /* The persistent post-login CHROME, split by form factor: ShellDesktop (rail + docked chat column + terminal

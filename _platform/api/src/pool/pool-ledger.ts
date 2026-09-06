@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { isPremium } from "./pool-membership.js";
 import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./pool-share.js";

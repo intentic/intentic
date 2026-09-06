@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../config.js";
 import { encryptSecret } from "../crypto.js";

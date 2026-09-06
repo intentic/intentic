@@ -1,4 +1,4 @@
-import { ImageDataUrlSchema } from "@intentic-app/api-contract";
+import { ImageDataUrlSchema } from "@intentic/api-contract";
 import { LEGAL_VERSION } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -6,7 +6,7 @@ import { APIError } from "better-auth/api";
 import { mcp, oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 
 export type Auth = ReturnType<typeof createAuth>;
 
@@ -27,7 +27,7 @@ const encryptAccountTokens = (config: Config, account: { accessToken?: string | 
 // directly at the API origin (apiUrl), so baseURL is the API origin. The SPA (webOrigin) is a
 // trusted origin so post-sign-in redirects back to it are allowed. localhost:47145 and the API's
 // :6480 are same-site, so the SameSite=Lax session cookie still rides cross-port. Both are https in dev
-// (the @intentic-app/localhost-https cert), which the Secure attribute on that cookie requires.
+// (the @intentic/localhost-https cert), which the Secure attribute on that cookie requires.
 export const createAuth = (config: Config, prisma: PrismaClient) =>
     betterAuth({
         secret: config.betterAuth.secret,

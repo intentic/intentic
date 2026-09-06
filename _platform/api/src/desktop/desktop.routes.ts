@@ -1,4 +1,4 @@
-import { apiContract } from "@intentic-app/api-contract";
+import { apiContract } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { OrpcContext } from "../context.js";

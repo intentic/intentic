@@ -9,7 +9,7 @@ import { shikiLangDeps } from "../../_tools/code-read/src/langs.ts";
 import { sourceAliases } from "./source-aliases.ts";
 
 /* Everything about building THIS SOURCE that holds whichever entry is being served, the app's own
- * (vite.config.ts), or the interactive demo's (`@intentic-dev/demo`, which reaches this through the package's
+ * (vite.config.ts), or the interactive demo's (`@intentic/demo`, which reaches this through the package's
  * `./vite-shared` export). Only the entry, the base, the outDir and the dev server differ between them.
  *
  * Its own module rather than an export off vite.config.ts, because the demo importing that would pull the app's

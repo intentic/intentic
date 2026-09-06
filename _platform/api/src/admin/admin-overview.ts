@@ -1,5 +1,5 @@
-import type { AdminOverview } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminOverview } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { poolEnabled } from "../pool/pool-membership.js";
 import { trialEnabled } from "../trial/trial-pool.js";

@@ -1,4 +1,4 @@
-import { Prisma } from "@intentic-app/prisma";
+import { Prisma } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../../context.js";

@@ -31,7 +31,7 @@
  * than imported by <MarkdownDocumentSurface> itself, so the two halves of one surface are turned on in one
  * place instead of one of them arriving invisibly with a component. */
 @import "../../../_editor/ui/src/styles/opt-in/markdown-editing.css";
-@import "./chat/chat.css";
+@import "./features/chat/panel/chat.css";
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one
  * is selected in Appearance. Late on purpose: a skin restates the design system's own tokens (the surface ramp,
@@ -57,7 +57,7 @@
 
 /* And this app's own — named rather than left to auto-detection, which is rooted at the BUILD's root, not at
  * this stylesheet. That is the app's directory when the app builds itself and the demo package's directory when
- * @intentic-dev/demo builds the same source, so relying on it produced a demo with most of its utilities
+ * @intentic/demo builds the same source, so relying on it produced a demo with most of its utilities
  * missing: real markup, three-quarters of a design system. Naming it makes one stylesheet true for both. */
 @source "./**/*.{ts,html,vue}";
 @source "../index.html";

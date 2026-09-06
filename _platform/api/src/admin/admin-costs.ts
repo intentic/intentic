@@ -1,5 +1,5 @@
-import type { AdminCosts } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminCosts } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
 

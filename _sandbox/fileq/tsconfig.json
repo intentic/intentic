@@ -12,7 +12,7 @@
         { "path": "../../_tools/base" },
         { "path": "../../_tools/constants" },
         { "path": "../webq" },
-        { "path": "../workspace-ignore" }
+        { "path": "../../_shared/workspace-ignore" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

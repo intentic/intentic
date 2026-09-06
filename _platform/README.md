@@ -15,7 +15,7 @@ A third door, and the only one an agent outside a sandbox comes through: the **M
 services catalogue. It rides the same pool switch as the membership it spends, and it is authenticated by an
 OAuth bearer this platform issues rather than by a sandbox's connect token: which is what lets a person buy
 and spend a membership without owning a machine, as was always the intent
-([docs/services-in-claude-code.md](../docs/services-in-claude-code.md)). The spend gate travels with it: an
+([docs/services-in-claude-code.md](../docs/ops/services-in-claude-code.md)). The spend gate travels with it: an
 agent may ask, but only a click in the owner's own browser releases a run.
 
 The [Claude Code plugin](claude-plugin/) is the client half: a manifest, one MCP server URL and a skill. It

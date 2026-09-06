@@ -7,7 +7,7 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandb
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson } from "./sandbox/hosted/hosted-build-script.js";
 import { hostedInstanceId } from "./sandbox/hosted/hosted.js";
 
-/* `pnpm --filter @intentic-app/api spike:build`, the spike §4 of docs/hosted-overlay-rebuild-plan.md owes,
+/* `pnpm --filter @intentic/api spike:build`, the spike §4 of docs/hosted-overlay-rebuild-plan.md owes,
  * run instead of remembered. The design was written against Fly's DOCUMENTED shapes: the token mutation, a
  * machine booting its own app's registry path, `files` plus an entrypoint override on moby/buildkit, the exit
  * event on a stopped machine, and what a registry does with a moving tag. Every one of those is a guess until
@@ -21,7 +21,7 @@ import { hostedInstanceId } from "./sandbox/hosted/hosted.js";
  * nothing to the database. Read the summary it prints into §4 of the plan, replacing the questions with the
  * answers.
  *
- *   pnpm --filter @intentic-app/api spike:build [--keep] [--rootless] [--region iad] [--report-url URL]
+ *   pnpm --filter @intentic/api spike:build [--keep] [--rootless] [--region iad] [--report-url URL]
  *
  *   --keep        leave the app standing at the end (to poke at it by hand). It is yours to delete.
  *   --rootless    also build with `<builderImage>-rootless`, question 6, roughly doubling the run.

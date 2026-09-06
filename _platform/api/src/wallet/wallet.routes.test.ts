@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { expect, it, vi } from "vitest";
 import { type Config, configSchema } from "../config.js";

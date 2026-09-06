@@ -18,7 +18,7 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
  * ON EACH PROJECT, not at the top level: a project is its own Vite config, and a `resolve` stated once above
  * `projects` is silently ignored, which puts the import back on the bridge. Same reasoning as
  * _search/iq/vitest.config.ts. */
-const resolve = { alias: { "@intentic/extension-ui/format": here(`../../_editor/extension-ui/src/format.ts`) } };
+const resolve = { alias: { "@intentic/extension-ui/format": here(`../../_shared/extension-ui/src/format.ts`) } };
 
 export default defineConfig({
     test: {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
+import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { defineConfig, type Plugin } from "vite";
 import { BUILD_ID, shared } from "./vite.shared.ts";
 

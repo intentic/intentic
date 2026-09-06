@@ -194,7 +194,7 @@ before the presence map had answered.
 
 This rides on `api.route` in the public extension API, added for this view because `/ext/:ext/:key?` has exactly one
 free path segment and it already means "which activation": a view with internal navigation has nowhere else to put
-it. See `_sandbox/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
+it. See `_shared/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
 patching your own key never disturbs another view's.
 
 ## Gotchas

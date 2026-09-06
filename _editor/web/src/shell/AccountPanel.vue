@@ -2,10 +2,10 @@
 import { AnchoredOverlay, Avatar, browserOwnsClick, vAction } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { creditSummary } from "../composables/membership/creditMeter";
-import { useMembership } from "../composables/membership/useMembership";
-import { useAuth } from "../composables/useAuth";
-import { environment } from "../environments/environment";
+import { creditSummary } from "../features/settings/membership/creditMeter";
+import { useMembership } from "../features/settings/membership/useMembership";
+import { useAuth } from "../features/auth/useAuth";
+import { environment } from "../app/environments/environment";
 import AccountCredits from "./AccountCredits.vue";
 
 /* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name), the

@@ -176,7 +176,7 @@ Component rules sit in `@layer components`, one layer below Tailwind's utilities
 file is the section-label rule, which is unlayered because the treatment it restates is spelled out by utilities.
 
 The attribute lives on the `<html>` of every window the app runs in, and each window sets its own: a floating
-panel is a real window booting its own copy of the app ([`composables/floating.ts`](../composables/floating.ts)),
+panel is a real window booting its own copy of the app ([`composables/floating.ts`](../shell/window/floating.ts)),
 so it reads the stored skin at load exactly as the first window does. This used to be a hazard worth a paragraph:
 a floating panel's DOM was teleported in from another window, whose realm mirrored a fixed list of root
 attributes onto it, and `data-skin` was missing from that list for as long as skins existed, so a floating chat

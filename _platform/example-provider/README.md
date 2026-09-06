@@ -1,4 +1,4 @@
-# @intentic-app/example-provider
+# @intentic/example-provider
 
 A complete, working paid service in one dependency-free file: the reference a third-party provider copies,
 and the endpoint the platform's own conformance suite is driven against. A service on intentic is not an
@@ -26,7 +26,7 @@ streams NDJSON, and this package is exactly that and nothing more.
 ## Running it
 
 ```sh
-SERVICE_SECRET=whatever-your-listing-answered pnpm --filter @intentic-app/example-provider dev
+SERVICE_SECRET=whatever-your-listing-answered pnpm --filter @intentic/example-provider dev
 ```
 
 `GET /healthz` answers unsigned (for your own uptime checks); every `POST` is a metered run and must carry

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import type { ConnectAccount, StripeGateway } from "../pool/pool-stripe.js";
 

@@ -1,4 +1,4 @@
-import type { PrismaClient, Service } from "@intentic-app/prisma";
+import type { PrismaClient, Service } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { LIVE_STATUSES, type ServiceStatus } from "./pool-admission.js";

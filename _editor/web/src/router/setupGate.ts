@@ -1,4 +1,4 @@
-import type { SandboxSummary } from "@intentic-app/api-contract";
+import type { SandboxSummary } from "@intentic/api-contract";
 import type { RouteLocationRaw } from "vue-router";
 
 /* Does this account have a WORKSPACE to open, or an unfinished setup to go back to?

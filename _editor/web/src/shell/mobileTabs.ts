@@ -1,7 +1,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed, type ComputedRef } from "vue";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { usePanels } from "../composables/extensions/usePanels";
+import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
+import { usePanels } from "../features/extensions/usePanels";
 import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath } from "../core-views/registry";
 
 /* WHERE THE MOBILE TAB BAR POINTS, as one statement two components read.

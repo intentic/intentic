@@ -4,7 +4,7 @@ import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
 import { testIngressConfig } from "./testing.js";
 import type { Logger } from "pino";
-import { Prisma, type PrismaClient } from "@intentic-app/prisma";
+import { Prisma, type PrismaClient } from "@intentic/prisma";
 
 // Full config with the intentic-provided path enabled; secrets.key empty so encrypt/decrypt pass through as
 // plaintext (the stored payload is plain JSON, tokens are plain strings).

@@ -1,5 +1,5 @@
-import type { AdminTrends } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminTrends } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 
 // The panel's read of the rollup rows: newest 90 days, served oldest-first so a chart draws left to right.
 const TREND_DAYS = 90;

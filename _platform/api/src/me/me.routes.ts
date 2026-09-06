@@ -1,4 +1,4 @@
-import { apiContract } from "@intentic-app/api-contract";
+import { apiContract } from "@intentic/api-contract";
 import { implement } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";

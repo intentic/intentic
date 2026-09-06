@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
 import { computed } from "vue";
-import { creditSummary, formatCredits, resetsAtLocal } from "../composables/membership/creditMeter";
-import { useMembership } from "../composables/membership/useMembership";
+import { creditSummary, formatCredits, resetsAtLocal } from "../features/settings/membership/creditMeter";
+import { useMembership } from "../features/settings/membership/useMembership";
 
 /* TODAY'S CREDITS, WHERE THE ACCOUNT LIVES: the rail's avatar menu and the phone's Account section, which are
  * the same menu in two form factors and so share this row rather than two copies of it.

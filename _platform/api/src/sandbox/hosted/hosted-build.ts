@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import type { HostedBuildState, HostedBuildStatus } from "@intentic-app/api-contract";
-import type { HostedBuild, PrismaClient } from "@intentic-app/prisma";
+import type { HostedBuildState, HostedBuildStatus } from "@intentic/api-contract";
+import type { HostedBuild, PrismaClient } from "@intentic/prisma";
 import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";

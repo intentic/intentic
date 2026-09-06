@@ -1,5 +1,5 @@
-import type { AdminMarket } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminMarket } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 
 /* THE MARKETPLACE READ — demand beside supply. The wants aggregate is the platform's only demand signal

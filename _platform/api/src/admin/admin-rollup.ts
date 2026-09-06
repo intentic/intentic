@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 
 /* THE DAILY ROLLUP — one admin_daily_stat row per closed UTC day, written by the retention sweep, so the
  * panel's trend lines survive the sweeps that take the raw rows. WINDOW columns are exact facts about

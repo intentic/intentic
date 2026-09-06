@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 
 /* THE SPEND GATE, OFF-SANDBOX, the same wall as the daemon's approval card (sandbox
  * platform/service-offer.ts), rebuilt for a caller that has no daemon, no conversation and no held connection.

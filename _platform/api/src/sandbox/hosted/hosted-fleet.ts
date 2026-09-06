@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { listAppNames } from "./fly.js";
 import { hostedEnabled } from "./hosted.js";
@@ -102,7 +102,7 @@ export const renderHostedFleet = (entries: HostedFleetEntry[]): string => {
     ].join(`\n`);
 };
 
-/* Run it: `pnpm --filter @intentic-app/api fleet`. A read-only script against the live platform's config and
+/* Run it: `pnpm --filter @intentic/api fleet`. A read-only script against the live platform's config and
  * database, it starts nothing, changes nothing, and is safe to point at production, which is the whole
  * reason it exists rather than a set of remembered curl commands. */
 export const printHostedFleet = async (prisma: PrismaClient, config: Config): Promise<string> =>

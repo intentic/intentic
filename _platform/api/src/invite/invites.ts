@@ -1,4 +1,4 @@
-import type { InviteRecord } from "@intentic-app/api-contract";
+import type { InviteRecord } from "@intentic/api-contract";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 
 // How long an emailed invite link stays valid. Long enough for the invitee to get around to it; short enough

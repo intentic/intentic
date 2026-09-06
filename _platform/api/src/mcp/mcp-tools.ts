@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { UrlElicitationRequiredError } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";

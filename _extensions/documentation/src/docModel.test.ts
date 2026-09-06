@@ -13,20 +13,20 @@ describe(`parseRepoDoc`, () => {
         const doc = parseRepoDoc(
             withProvenance({
                 repo: `intentic`,
-                components: [{ id: `wire`, name: `The wire`, oneLiner: `One sentence.`, packages: [`_sandbox/sandbox-contract`], accent: `1` }],
+                components: [{ id: `wire`, name: `The wire`, oneLiner: `One sentence.`, packages: [`_shared/sandbox-contract`], accent: `1` }],
                 glossary: [{ term: `panel`, means: `A repo's dev server.` }],
-                reading: [`_sandbox/sandbox-contract`, `_sandbox/sandbox`],
+                reading: [`_shared/sandbox-contract`, `_sandbox/sandbox`],
             }),
         );
         expect(doc?.components[0]).toEqual({
             id: `wire`,
             name: `The wire`,
             oneLiner: `One sentence.`,
-            packages: [`_sandbox/sandbox-contract`],
+            packages: [`_shared/sandbox-contract`],
             accent: `1`,
         });
         expect(doc?.glossary).toEqual([{ term: `panel`, means: `A repo's dev server.` }]);
-        expect(doc?.reading).toEqual([`_sandbox/sandbox-contract`, `_sandbox/sandbox`]);
+        expect(doc?.reading).toEqual([`_shared/sandbox-contract`, `_sandbox/sandbox`]);
     });
 
     it(`accepts the workspace root repo, whose name is legitimately empty`, () => {

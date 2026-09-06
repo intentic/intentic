@@ -1,13 +1,13 @@
-import type { User } from "@intentic-app/api-contract";
+import type { User } from "@intentic/api-contract";
 import { useDevice } from "@intentic/ui";
 import { type FunctionalComponent, h } from "vue";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
-import { restorePersistedQueries } from "../composables/queryPersistence";
-import { useAuth } from "../composables/useAuth";
-import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { useSandbox } from "../composables/sandbox/useSandbox";
+import { restorePersistedQueries } from "../lib/queryPersistence";
+import { useAuth } from "../features/auth/useAuth";
+import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
+import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
@@ -99,13 +99,13 @@ const routes: RouteRecordRaw[] = [
         path: `/login`,
         name: `login`,
         meta: { title: `Login` },
-        component: () => import(`../pages/Login.vue`),
+        component: () => import(`../features/auth/Login.vue`),
     },
     {
         path: `/platform-unavailable`,
         name: `platform-unavailable`,
         meta: { title: `Can't reach Intentic` },
-        component: () => import(`../pages/PlatformUnavailable.vue`),
+        component: () => import(`../features/setup/PlatformUnavailable.vue`),
     },
     {
         /* The desktop app's sign-in, in the user's REAL browser. The app can't run Google's flow in its own
@@ -126,7 +126,7 @@ const routes: RouteRecordRaw[] = [
         name: `desktop-auth`,
         meta: { title: `Sign in to Intentic` },
         beforeEnter: [startGoogleMint],
-        component: () => import(`../pages/DesktopAuth.vue`),
+        component: () => import(`../features/auth/DesktopAuth.vue`),
     },
     {
         // …and the other end, opened INSIDE the app's webview: redeem the handoff, which is what puts the
@@ -135,7 +135,7 @@ const routes: RouteRecordRaw[] = [
         path: `/desktop-auth/complete`,
         name: `desktop-auth-complete`,
         meta: { title: `Signing in…` },
-        component: () => import(`../pages/DesktopAuthComplete.vue`),
+        component: () => import(`../features/auth/DesktopAuthComplete.vue`),
     },
     {
         // Initial-setup / recovery view. Outside the shell; signed-in but bounced back to the workspace once the
@@ -146,7 +146,7 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth],
         // Wrapped although it is outside the shell: "Add sandbox" reaches it FROM the shell, and that click
         // deserves the same instant flip as any other. Full-screen wizard, so no outline to promise.
-        component: asyncView(() => import(`../pages/Setup.vue`)),
+        component: asyncView(() => import(`../features/setup/Setup.vue`)),
     },
     {
         /* A FLOATING PANEL'S OWN WINDOW: the chat, the terminal or the preview filling a real window of the app,
@@ -160,7 +160,7 @@ const routes: RouteRecordRaw[] = [
         path: `/floating/:panel(chat|terminal|preview)`,
         name: `floating`,
         beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../pages/FloatingArea.vue`),
+        component: () => import(`../features/chat/panel/FloatingArea.vue`),
     },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in AND sandbox
@@ -186,7 +186,7 @@ const routes: RouteRecordRaw[] = [
                 name: `chat`,
                 meta: { title: `Chat` },
                 beforeEnter: [desktopOnly],
-                component: asyncView(() => import(`../pages/ChatArea.vue`)),
+                component: asyncView(() => import(`../features/chat/panel/ChatArea.vue`)),
             },
             // The live app preview: the preview panel's full-window home (pages/PreviewArea.vue lends it the
             // slot, exactly the chat area's arrangement). Desktop only, the mobile shell mounts no poppable
@@ -196,25 +196,25 @@ const routes: RouteRecordRaw[] = [
                 name: `preview`,
                 meta: { title: `Preview` },
                 beforeEnter: [desktopOnly],
-                component: asyncView(() => import(`../pages/PreviewArea.vue`)),
+                component: asyncView(() => import(`../features/preview/PreviewArea.vue`)),
             },
-            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../pages/Agents.vue`)) },
+            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).
-            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../agents/AgentDetail.vue`)) },
+            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`)) },
             {
                 path: `menu`,
                 name: `menu`,
                 meta: { title: `Menu` },
                 beforeEnter: [mobileOnly],
-                component: asyncView(() => import(`../pages/MobileMenu.vue`)),
+                component: asyncView(() => import(`../shell/MobileMenu.vue`)),
             },
             {
                 path: `terminal`,
                 name: `terminal`,
                 meta: { title: `Terminal` },
                 beforeEnter: [mobileOnly],
-                component: asyncView(() => import(`../pages/MobileTerminal.vue`)),
+                component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
             },
             {
                 path: `capabilities/:card?`,
@@ -223,7 +223,7 @@ const routes: RouteRecordRaw[] = [
                 // The title and description mirror the page's own (pages/Capabilities.vue, its catalog copy),
                 // static strings, so the outline wears the real heading in the first frame.
                 component: asyncView(
-                    () => import(`../pages/Capabilities.vue`),
+                    () => import(`../features/capabilities/Capabilities.vue`),
                     hubOutline(
                         `Capabilities`,
                         `Grow your sandbox: each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`,
@@ -237,7 +237,7 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: `Sandbox` },
                 // The hub titles itself with the active sandbox's NAME once mounted; the outline says what the
                 // page is rather than guessing which box, and the description is the hub's own (SandboxHub.vue).
-                component: asyncView(() => import(`../pages/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
+                component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
             },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`) so a reload or a
             // shared link reopens it. Optional/repeatable, so bare `/workspace` still matches (path === "").
@@ -245,7 +245,7 @@ const routes: RouteRecordRaw[] = [
                 path: `workspace/:path(.*)*`,
                 name: `workspace`,
                 meta: { title: `Workspace` },
-                component: asyncView(() => import(`../pages/workspace/Workspace.vue`)),
+                component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
             },
             // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
             // links to the bare path and the view picks the most recently active one.
@@ -253,18 +253,18 @@ const routes: RouteRecordRaw[] = [
                 path: `browsers/:session?`,
                 name: `browsers`,
                 meta: { title: `Browsers` },
-                component: asyncView(() => import(`../pages/Browsers.vue`)),
+                component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
             },
             // Same shape and same reason as the browsers above: the id is in the URL so a reload, or the chat
             // card's link, reopens the same agent, and the bare path shows whichever is most recently active.
-            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../pages/Subagents.vue`)) },
-            { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../pages/ExtensionHost.vue`)) },
+            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../features/chat/subagents/Subagents.vue`)) },
+            { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,
                 name: `settings`,
                 meta: { title: `Settings` },
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
-                component: asyncView(() => import(`../pages/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
+                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
             },
         ],
     },
@@ -274,7 +274,7 @@ const routes: RouteRecordRaw[] = [
         path: `/invite/:token`,
         name: `invite`,
         meta: { title: `Accept invite` },
-        component: () => import(`../pages/AcceptInvite.vue`),
+        component: () => import(`../features/setup/AcceptInvite.vue`),
     },
 
     /* ══ THE THREE SANDBOX-FREE SURFACES ══════════════════════════════════════════════════════════════════
@@ -296,14 +296,14 @@ const routes: RouteRecordRaw[] = [
         path: `/connect`,
         name: `connect`,
         meta: { title: `Connect to intentic` },
-        component: () => import(`../pages/Connect.vue`),
+        component: () => import(`../features/setup/Connect.vue`),
     },
     {
         // Buying a membership with no sandbox anywhere in the story. Stripe returns here, not to settings.
         path: `/join`,
         name: `join`,
         meta: { title: `Join intentic` },
-        component: () => import(`../pages/Join.vue`),
+        component: () => import(`../features/setup/Join.vue`),
     },
     {
         /* The spend gate's wall. The ONLY place a parked service run becomes an approved one, and the reason
@@ -312,7 +312,7 @@ const routes: RouteRecordRaw[] = [
         path: `/approve/:id`,
         name: `approve`,
         meta: { title: `Approve a run` },
-        component: () => import(`../pages/ApproveRun.vue`),
+        component: () => import(`../features/setup/ApproveRun.vue`),
     },
     /* THE KIT, ON ONE PAGE, dev only, and unguarded on purpose: it needs no session, no sandbox and no
      * repository, so it opens in any state the app can be in. `import.meta.env.DEV` is a compile-time constant,
@@ -320,7 +320,7 @@ const routes: RouteRecordRaw[] = [
      * check. It exists because the drift this app kept growing, thirteen dialog widths, two red boxes, four
      * captions off the type scale, is invisible in a file and obvious the moment the variants are in a row. */
     ...(import.meta.env.DEV
-        ? [{ path: `/kit`, name: `kit`, meta: { title: `Design kit` }, component: () => import(`../pages/DesignKit.vue`) } satisfies RouteRecordRaw]
+        ? [{ path: `/kit`, name: `kit`, meta: { title: `Design kit` }, component: () => import(`../features/settings/DesignKit.vue`) } satisfies RouteRecordRaw]
         : []),
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
@@ -329,7 +329,7 @@ export const router = createRouter({
     /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/`, it never
      * looks at Vite's, so an app built under a path prefix routed as if it were at the root: every path resolved
      * one level up from where its own bundle lives. `/` for this app, which is why nothing here changes; the
-     * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
+     * interactive demo (@intentic/demo) builds the same source under `/demo/` and is what surfaced it. */
     history: createWebHistory(import.meta.env.BASE_URL),
     routes,
     /* DEEP LINKS INTO A SETTINGS PAGE ACTUALLY LAND, and that is ALL this does. Without it vue-router does

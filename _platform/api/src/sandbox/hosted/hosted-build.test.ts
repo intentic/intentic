@@ -1,5 +1,5 @@
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
 import { testIngressConfig } from "../../testing.js";

@@ -2,14 +2,14 @@
 import { useDevice } from "@intentic/ui";
 import { onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useChat } from "../composables/chat/useChat";
-import { floatingWindowPanel } from "../composables/floating";
-import { onScreen } from "../composables/onScreen";
-import { startBackgroundLoader, stopBackgroundLoader } from "../composables/prefetch/useBackgroundLoader";
-import { startDraftingReceipts } from "../composables/workspace/draftingReceipts";
-import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
-import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
-import PoppablePanels from "./PoppablePanels.vue";
+import { useChat } from "../features/chat/run/useChat";
+import { floatingWindowPanel } from "./window/floating";
+import { onScreen } from "./window/onScreen";
+import { startBackgroundLoader, stopBackgroundLoader } from "../router/prefetch/useBackgroundLoader";
+import { startDraftingReceipts } from "../features/workspace/changes/draftingReceipts";
+import { reportIdle, reportSessionId, reportView } from "./presence/usePresence";
+import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
+import PoppablePanels from "./window/PoppablePanels.vue";
 
 /* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds: mounted by
  * App.vue for as long as an account has a sandbox selected, and therefore ABOVE every route rather than inside

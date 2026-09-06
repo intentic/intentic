@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
+import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { createApp } from "./app.js";
 import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";

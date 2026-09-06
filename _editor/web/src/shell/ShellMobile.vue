@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
 import { onTabRoot, useTabRootPaths } from "./mobileTabs";
-import SandboxGate from "../sandbox-gates/SandboxGate.vue";
+import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 
 /* The mobile chrome: full-screen views over a bottom tab bar. h-dvh (not h-screen) tracks the browser UI
  * chrome; the tab bar yields to the on-screen keyboard so composers keep the room. The desktop grid's rail,

@@ -1,5 +1,5 @@
-import type { AdminAttention, AdminAttentionItem, BootReport, SetupReport } from "@intentic-app/api-contract";
-import { Prisma, type PrismaClient } from "@intentic-app/prisma";
+import type { AdminAttention, AdminAttentionItem, BootReport, SetupReport } from "@intentic/api-contract";
+import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { LIVE_STATUSES } from "../pool/pool-admission.js";
 

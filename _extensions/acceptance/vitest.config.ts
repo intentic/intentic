@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { packageSourceAliases } from "@intentic/testing/aliases";
 import { defineConfig } from "vitest/config";
 import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 
@@ -20,9 +21,9 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
  * _search/iq/vitest.config.ts. */
 const resolve = {
     alias: {
-        "@intentic/extension-api": here(`../../_sandbox/extension-api/src`),
-        "@intentic/registry": here(`../../_sandbox/registry/src`),
-        "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src`),
+        "@intentic/extension-api": here(`../../_shared/extension-api/src`),
+        "@intentic/registry": here(`../../_shared/registry/src`),
+        ...packageSourceAliases(here(`../../_shared/sandbox-contract`)),
     },
 };
 

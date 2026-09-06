@@ -1,8 +1,8 @@
-import type { User } from "@intentic-app/api-contract";
+import type { User } from "@intentic/api-contract";
 import type { Auth } from "./auth.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 
 // Per-request context handed to every oRPC handler: the shared PrismaClient client, the loaded config, the resolved
 // session user (null when unauthenticated), and the request-scoped logger (correlated by requestId).

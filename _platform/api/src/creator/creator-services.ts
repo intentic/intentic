@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { lookup } from "node:dns/promises";
-import type { AdmissionRules, ProviderService, ServiceListingInput, ServiceProbeResult } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdmissionRules, ProviderService, ServiceListingInput, ServiceProbeResult } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 import { ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import { decryptSecret, encryptSecret } from "../crypto.js";

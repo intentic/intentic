@@ -4,7 +4,7 @@
 // prints in each state: an untouched allowance, a spent one, and the two cases where it must not appear at all
 //, because each of those is a decision about what the reader is told, and each was got wrong by the surface
 // this replaces (which said nothing anywhere). Mounted with plain Vue, as ReviewStat.test does.
-import type { MembershipState } from "@intentic-app/api-contract";
+import type { MembershipState } from "@intentic/api-contract";
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h, type VNode } from "vue";
 
@@ -16,9 +16,9 @@ const shared = vi.hoisted(() => ({ current: undefined as MembershipState | undef
 
 // The component reads the app's ONE membership entry, which is a live query; what this file exercises is the
 // rendering, so the query is replaced by the same shape over a value each test sets.
-vi.mock(`../composables/membership/useMembership`, async () => {
+vi.mock(`../features/settings/membership/useMembership`, async () => {
     const { computed } = await import(`vue`);
-    const { creditMeter } = await import(`../composables/membership/creditMeter`);
+    const { creditMeter } = await import(`../features/settings/membership/creditMeter`);
     return {
         useMembership: () => ({
             state: computed(() => shared.current),

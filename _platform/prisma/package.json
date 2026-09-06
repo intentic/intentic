@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/prisma",
+    "name": "@intentic/prisma",
     "version": "0.0.0",
     "private": true,
     "type": "module",

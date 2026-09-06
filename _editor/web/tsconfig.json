@@ -6,24 +6,26 @@
         // the live contract/UI code, so a change in _libs reflects here with no rebuild.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/icon": ["../../_editor/ui/src/components/primitives/Icon.vue"],
+            "@intentic/ui/markdown-view": ["../../_editor/ui/src/components/markdown/Markdown.vue"],
             "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],
             "@intentic/ui/loading-reveal": ["../../_editor/ui/src/composables/loadingReveal.ts"],
             "@intentic/ui/brand-color": ["../../_editor/ui/src/lib/brandColor.ts"],
-            "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brandMark.ts"],
-            "@intentic/ui/dag": ["../../_editor/ui/src/components/dagLayout.ts"],
+            "@intentic/ui/brand-mark": ["../ui/src/components/brand/brandMark.ts"],
+            "@intentic/ui/dag": ["../ui/src/components/charts/dagLayout.ts"],
             "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/icons": ["../../_editor/ui/src/icons/iconSets.ts"],
             "@intentic/code-read": ["../../_tools/code-read/src/index.ts"],
             "@intentic/code-read/langs": ["../../_tools/code-read/src/langs.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
-            "@intentic/ui/notice": ["../../_editor/ui/src/components/notice.ts"],
+            "@intentic/ui/notice": ["../ui/src/components/feedback/notice.ts"],
             "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
-            "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
+            "@intentic/ui/series": ["../ui/src/components/charts/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
             "@intentic/ui/theme": ["../../_editor/ui/src/composables/useTheme.ts"],
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
-            "@intentic-app/api-contract": ["../../_platform/api-contract/src/index.ts"]
+            "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json"

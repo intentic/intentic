@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 
 /* WHOSE ALLOWANCE A TRIAL MESSAGE SPENDS, and whether there is any left.

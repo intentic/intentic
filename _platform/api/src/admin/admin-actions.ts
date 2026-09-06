@@ -1,7 +1,7 @@
-import type { AdminActionResult } from "@intentic-app/api-contract";
+import type { AdminActionResult } from "@intentic/api-contract";
 import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { stopMachine } from "../sandbox/hosted/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";

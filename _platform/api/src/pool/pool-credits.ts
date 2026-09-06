@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 
 /* THE CREDIT METER, what a member's daily allowance has left, and the one statement that spends from it.

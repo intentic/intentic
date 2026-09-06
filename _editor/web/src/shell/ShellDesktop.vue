@@ -7,15 +7,15 @@ import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, init
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
-import { agentsBadge, agentsScopeNote } from "../composables/agents/agentsTile";
-import { useBrowsersQuery } from "../composables/browser/browsersQuery";
-import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { useRole } from "../composables/sandbox/useRole";
-import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
-import { useAreaCommands } from "../composables/commands/useAreaCommands";
-import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
+import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
+import { useBrowsersQuery } from "../features/browsers/browsersQuery";
+import { useSubagentsQuery } from "../features/chat/subagents/subagentsQuery";
+import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
+import { useRole } from "../features/sandbox/secrets/useRole";
+import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
+import { useTerminalActivity } from "../features/terminal/useTerminalActivity";
+import { useAreaCommands } from "./commands/useAreaCommands";
+import { commandShortcut, registerCommand } from "./commands/useCommands";
 import {
     type ActiveExtension,
     activationBadge,
@@ -28,34 +28,34 @@ import {
     seatedOnlyByVisit,
 } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
-import { useChatFloating } from "../composables/chat/chatFloating";
-import { useShellCommands } from "../composables/commands/useShellCommands";
-import { useKeybindings } from "../composables/commands/useKeybindings";
-import { useLayout } from "../composables/useLayout";
-import { uiLength } from "../composables/uiScale";
-import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "../composables/useIconRailSize";
-import { presenceOthers } from "../composables/usePresence";
-import { usePanels } from "../composables/extensions/usePanels";
-import { appTargetId, previewEvidence, previewHealthyCount } from "../composables/preview/previewModel";
-import { openPreviewOnFirstVisit } from "../composables/preview/previewSurface";
-import { usePublicOutbox } from "../composables/workspace/usePublicOutbox";
-import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
-import { useChanges } from "../composables/workspace/useChanges";
-import { pushBadge } from "../composables/workspace/pushBadge";
-import { usePushFlow } from "../composables/workspace/usePushFlow";
-import { usePorts } from "../composables/sandbox/usePorts";
-import { useSandbox } from "../composables/sandbox/useSandbox";
-import { useVpn } from "../composables/sandbox/useVpn";
+import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
+import { useChatFloating } from "../features/chat/panel/chatFloating";
+import { useShellCommands } from "./commands/useShellCommands";
+import { useKeybindings } from "./commands/useKeybindings";
+import { useLayout } from "./window/useLayout";
+import { uiLength } from "./window/uiScale";
+import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "./rail/useIconRailSize";
+import { presenceOthers } from "./presence/usePresence";
+import { usePanels } from "../features/extensions/usePanels";
+import { appTargetId, previewEvidence, previewHealthyCount } from "../features/preview/previewModel";
+import { openPreviewOnFirstVisit } from "../features/preview/previewSurface";
+import { usePublicOutbox } from "../features/workspace/push/usePublicOutbox";
+import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
+import { useChanges } from "../features/workspace/changes/useChanges";
+import { pushBadge } from "../features/workspace/push/pushBadge";
+import { usePushFlow } from "../features/workspace/push/usePushFlow";
+import { usePorts } from "../features/sandbox/environment/usePorts";
+import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { useVpn } from "../features/sandbox/devices/useVpn";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
-import { chatDock, terminalDock } from "./dockSlots";
-import { type RailSeat, useRailMemory } from "./railMemory";
-import { useRailPins } from "./railPins";
-import PresenceAvatars from "../presence/PresenceAvatars.vue";
-import QuickOpen from "./QuickOpen.vue";
-import SandboxGate from "../sandbox-gates/SandboxGate.vue";
-import SandboxSwitcher from "../sandbox-gates/SandboxSwitcher.vue";
+import { chatDock, terminalDock } from "./window/dockSlots";
+import { type RailSeat, useRailMemory } from "./rail/railMemory";
+import { useRailPins } from "./rail/railPins";
+import PresenceAvatars from "./presence/PresenceAvatars.vue";
+import QuickOpen from "./commands/QuickOpen.vue";
+import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
+import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 
 /* A rail element. The identity half (id, route, label, icon) is `RailSeat`, which is also the shape the rail's
  * memory keeps, so a remembered seat and a live tile are the same thing to everything downstream of here: one
@@ -528,7 +528,7 @@ const showBesideRail = (menu: { show: (event: Event) => void } | undefined, even
  * THE CHAT'S is where the chat goes next, asked of the thing that holds it. While the rail is the chat's home,
  * the tile IS the chat's presence in this window, so a right-click on it is the natural place to ask for one of
  * the other homes: back to the side column, or out into a window of its own. Rows share the one toggle each verb
- * already runs everywhere else (chatSurface.ts), and each carries its command's chord when one is bound.
+ * already runs everywhere else (chatPanelLayout.ts), and each carries its command's chord when one is bound.
  *
  * EVERY OTHER SEATED AREA'S is the pin, and only where a pin means something. A `signal` tile is on the rail
  * because it is badging and will leave when it stops; "Keep on the rail" is the reader saying that for this

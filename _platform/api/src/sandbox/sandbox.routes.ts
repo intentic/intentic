@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic-app/api-contract";
-import { Prisma } from "@intentic-app/prisma";
+import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic/api-contract";
+import { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";

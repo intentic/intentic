@@ -2,8 +2,8 @@
 
 The intentic app is a **lean core + an extension system** (the VSCode bet). This directory holds the
 first-party extensions: real, in-repo extension packages that dogfood the same public
-[`@intentic/extension-api`](../_sandbox/extension-api) a third-party bundle would use. See the extension system
-in [ARCHITECTURE.md](../ARCHITECTURE.md) for how the host loads and gates them.
+[`@intentic/extension-api`](../_shared/extension-api) a third-party bundle would use. See
+[docs/architecture/extensions.md](../docs/architecture/extensions.md) for how the host loads and gates them.
 
 ## What an extension is
 
@@ -32,7 +32,7 @@ glyph names are real.
 Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/**`) to
 `@intentic/extension-api`, `@intentic/extension-manifest`, `@intentic/extension-ui`,
 `@intentic/connector-runtime` (the gateway-process half of the SDK, for the messaging connectors), and
-`@intentic/sandbox-contract`. Reaching into `@intentic-app/*` or the app internals is a boundary violation and
+`@intentic/sandbox-contract`. Reaching into `@intentic/*` or the app internals is a boundary violation and
 fails the build.
 
 **Reach the daemon through `api.sandbox.rpc`**, the contract as a typed client: `rpc.git.stashApply({ repo, ref,
@@ -89,6 +89,36 @@ This is not a convention: `sandboxScope.guard.test.ts` in the web app walks each
 own imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassignable module binding, and any
 repeating clock in what it reaches. Six packs here had the same omission at once, which is how a Maintenance
 tile came to read `21` over a workspace that had two.
+
+## The three layouts, and which of the 27 wears each
+
+A first-party extension is one of three shapes. Nothing enforces the choice — the manifest does — but knowing
+which shape a directory is saves opening it:
+
+| layout | what is in `src/` | who wears it |
+| --- | --- | --- |
+| **UI extension** | `manifest.ts`, `host.ts` (the singleton the views and the API impl share), `extension.ts` and the `.vue` views | `acceptance`, `activity`, `approvals`, `automations`, `deployments`, `documentation`, `git-history`, `issues`, `knowledge`, `maintenance`, `pipelines`, `preview`, `repo-apps`, `workflows` |
+| **gateway pack** | `gateway.ts`, `client.ts`, `listener.ts` — a connector to somebody else's service, no `host.ts` because there is no view | `discord`, `google-workspace`, `imap`, `slack`, `telegram`, `whatsapp` |
+| **manifest-only pack** | nothing but the manifest: capabilities, skills, agent definitions or bin entries the daemon reads directly | `acp-agents`, `browsers`, `connectors`, `devices`, `pi-agent`, `social` |
+
+`viewers` is the fourth case and the only one: a backend bundle with no host and no gateway, because what it
+contributes is file viewers the editor loads.
+
+## Names: the directory, the package, and the extension id
+
+Three names, and they are deliberately not all the same string:
+
+- the **directory** is `_extensions/<name>` — what a listing shows and what the image copies by path;
+- the **npm package** is `@intentic/ext-<name>` — the `ext-` prefix is what carries the lint boundary
+  (`.oxlintrc.json` scopes the allowed-dependency rule to it) and what the extension host's builtin list reads;
+- the **extension id** is `publisher.name` out of the manifest, which is what an install is keyed by.
+
+Two directory names look like parts of the repository and are not: **`_extensions/devices`** is the extension
+that contributes device capabilities, while `_devices/` is the part holding the code that runs on a user's own
+machine; **`_extensions/browsers`** is the extension, while `_devices/browser` is the library that drives one.
+Neither extension is renamed, because the image copies extension directories BY PATH (`_sandbox/sandbox/Dockerfile`)
+and an extension id is a stored key: renaming either would orphan every install of it to save a moment's
+confusion that this paragraph fixes.
 
 ## The extensions
 

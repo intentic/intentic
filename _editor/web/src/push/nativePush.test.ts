@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { PushNotificationsPlugin } from "../shell/capacitor";
+import type { PushNotificationsPlugin } from "../shell/window/capacitor";
 import { nativePushDriver } from "./nativePush";
 
 /* The native driver's own seams: the APNs token arrives as an EVENT the register() call does not answer, and
@@ -26,14 +26,14 @@ const plugin = (overrides?: Partial<PushNotificationsPlugin>): PushNotifications
     }) as PushNotificationsPlugin;
 
 const shell = { current: undefined as PushNotificationsPlugin | undefined };
-vi.mock(`../shell/capacitor`, () => ({
+vi.mock(`../shell/window/capacitor`, () => ({
     inNativeShell: () => shell.current !== undefined,
     pushPlugin: () => shell.current,
 }));
 
 const register = vi.fn();
 const unregister = vi.fn();
-vi.mock(`../composables/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
+vi.mock(`../lib/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
 
 const storage = new Map<string, string>();
 

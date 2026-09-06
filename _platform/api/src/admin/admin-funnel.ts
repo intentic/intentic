@@ -1,5 +1,5 @@
-import type { AdminFunnel } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminFunnel } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 
 /* THE ACTIVATION FUNNEL — where the product loses people, stage by stage. Every stage counts DISTINCT
  * ACCOUNTS through Prisma relation filters (`sandboxes: { some: … }`), so each is a superset of the next by

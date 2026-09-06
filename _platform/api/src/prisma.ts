@@ -1,4 +1,4 @@
-import { PrismaClient } from "@intentic-app/prisma";
+import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { Config } from "./config.js";
 

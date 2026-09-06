@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic-app/api-contract";
+import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
@@ -25,7 +25,7 @@ import { mcpHttpRoutes } from "./mcp/mcp.routes.js";
 import { poolHttpRoutes } from "./pool/pool.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
-import { Prisma, type PrismaClient } from "@intentic-app/prisma";
+import { Prisma, type PrismaClient } from "@intentic/prisma";
 
 type AppEnv = { Variables: { logger: Logger } };
 

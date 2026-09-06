@@ -9,7 +9,7 @@ import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import { settleHostedStretches } from "./sandbox/hosted/hosted-usage.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 
 // Data-retention sweep (GDPR storage limitation): expired sessions, verifications and desktop sign-in
 // handoffs, plus sandbox-share invites older than 90 days whose email never became an account

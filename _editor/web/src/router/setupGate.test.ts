@@ -1,4 +1,4 @@
-import type { SandboxSummary } from "@intentic-app/api-contract";
+import type { SandboxSummary } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { setupRedirect } from "./setupGate";
 

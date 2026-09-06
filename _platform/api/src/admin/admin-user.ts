@@ -1,5 +1,5 @@
-import type { AdminUserDetail, AnnounceRefusal, BootReport, SetupReport } from "@intentic-app/api-contract";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { AdminUserDetail, AnnounceRefusal, BootReport, SetupReport } from "@intentic/api-contract";
+import type { PrismaClient } from "@intentic/prisma";
 
 /* THE SUPPORT PAGE — one account, everything operational the platform knows, assembled so "it doesn't work"
  * is answerable without psql. Reads only rows the account's own GDPR export already shows the subject, plus

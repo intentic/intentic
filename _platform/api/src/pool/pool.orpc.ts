@@ -1,4 +1,4 @@
-import { apiContract, type MembershipState, type ServiceOfferCard, type ServiceOfferSettled } from "@intentic-app/api-contract";
+import { apiContract, type MembershipState, type ServiceOfferCard, type ServiceOfferSettled } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";

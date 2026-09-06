@@ -1,5 +1,5 @@
-import type { AdminUserList } from "@intentic-app/api-contract";
-import type { Prisma, PrismaClient } from "@intentic-app/prisma";
+import type { AdminUserList } from "@intentic/api-contract";
+import type { Prisma, PrismaClient } from "@intentic/prisma";
 
 export interface AdminUsersInput {
     readonly query?: string;

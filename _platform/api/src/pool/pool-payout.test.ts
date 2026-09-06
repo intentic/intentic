@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import { runPayouts } from "./pool-payout.js";

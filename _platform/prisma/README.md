@@ -1,6 +1,6 @@
-# @intentic-app/prisma
+# @intentic/prisma
 
-The **database layer**: the Prisma schema, the generated client, and the migrations. Owns the Postgres data model and exposes the typed `PrismaClient` that [`@intentic-app/api`](../../_platform/api) imports. Prisma 7 with the `prisma-client` generator (output to `./generated`).
+The **database layer**: the Prisma schema, the generated client, and the migrations. Owns the Postgres data model and exposes the typed `PrismaClient` that [`@intentic/api`](../../_platform/api) imports. Prisma 7 with the `prisma-client` generator (output to `./generated`).
 
 ## Responsibilities
 
@@ -53,7 +53,7 @@ The **database layer**: the Prisma schema, the generated client, and the migrati
   WHERE … IS NULL`) so it is a no-op on every database where the original succeeded, then, once that image is
   built, tell the live database to stop waiting on the name it will never run:
   `docker compose exec api bun node_modules/prisma/build/index.js migrate resolve --applied <migration_name>
-  --config node_modules/@intentic-app/prisma/prisma.config.ts`, and redeploy. The name is recorded as done, the
+  --config node_modules/@intentic/prisma/prisma.config.ts`, and redeploy. The name is recorded as done, the
   repair supplies what the name promised, and the boot-time schema diff is what proves the result before the api
   serves a request. `20260901190000_tunnel_id_backfill` is the worked example.
 - Run the CI check locally before pushing a schema change: it is the same script:

@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { PrismaClient } from "@intentic-app/prisma";
+import type { PrismaClient } from "@intentic/prisma";
 import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import type { StripeGateway } from "../pool/pool-stripe.js";

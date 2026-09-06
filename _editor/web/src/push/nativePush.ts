@@ -1,11 +1,11 @@
 import type { PushChannel } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
-import { pushPlugin, type PushNotificationsPlugin } from "../shell/capacitor.js";
+import { pushPlugin, type PushNotificationsPlugin } from "../shell/window/capacitor.js";
 import type { Minted, PushDriver } from "./driver.js";
 
 // Loaded on use, not at module load: the platform client evaluates window.env on import, which only exists in
 // a real page, and this module rides the composable's import graph into every environment, shell or not.
-const platformApi = async () => (await import("../composables/useApi.js")).apiClient;
+const platformApi = async () => (await import("../lib/useApi.js")).apiClient;
 
 /* Push inside the native iOS shell. WKWebView has no web push, so the transport is APNs, and Apple only
  * accepts sends from the app's vendor, which is why this driver registers with the PLATFORM's push relay

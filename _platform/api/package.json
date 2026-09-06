@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/api",
+    "name": "@intentic/api",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -15,9 +15,9 @@
     },
     "dependencies": {
         "@hono/otel": "catalog:",
-        "@intentic-app/api-contract": "workspace:*",
-        "@intentic-app/localhost-https": "workspace:*",
-        "@intentic-app/prisma": "workspace:*",
+        "@intentic/api-contract": "workspace:*",
+        "@intentic/localhost-https": "workspace:*",
+        "@intentic/prisma": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
@@ -45,7 +45,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@intentic-app/example-provider": "workspace:*",
+        "@intentic/example-provider": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
