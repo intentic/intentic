@@ -2,7 +2,7 @@ import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../settings/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
-import { stateRelPath } from "../workspace/state-paths.js";
+import { stateRelPath } from "../workspace/layout/state-paths.js";
 
 // The workspace-relative home the skill text below teaches the agent, the table's spelling, so the prompt
 // can never name a directory the store stopped reading.

@@ -10,8 +10,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 // The PRODUCTION classifiers, not a copy of them: `walksTreeWithGrep` is the same predicate the search-hygiene
 // hook fires on, so the figure quoted for SEARCH_GUIDANCE cannot drift away from the notice it argues for.
-import { agentCommand } from "../src/agent/agent-installs.js";
-import { walksTreeWithGrep } from "../src/agent/agent-search.js";
+import { agentCommand } from "../src/agent/providers/agent-installs.js";
+import { walksTreeWithGrep } from "../src/agent/verification/agent-search.js";
 
 /* ---- the corpus ------------------------------------------------------------------------------------------
  *
@@ -219,7 +219,7 @@ const deferredMissKind = (call: Call): string => {
 
 /* THE FIGURES THAT TELL THE TWO ZEROS APART. A checklist the model declined to keep and a checklist the CLI
  * stopped shipping both read as three zeros in the block below; only these separate them, and the second is the
- * one that happened (see CHECKLIST_ENV in src/agent/agent.ts). Anything but 0 on the first line means turns are
+ * one that happened (see CHECKLIST_ENV in src/agent/run/agent.ts). Anything but 0 on the first line means turns are
  * being sent after tools that do not exist, whatever the call counts beside it say. The second line is the model
  * guessing at a name, mostly an MCP server that is loaded rather than deferred: noise, and here so a rise in the
  * first cannot be waved away as more of it. */

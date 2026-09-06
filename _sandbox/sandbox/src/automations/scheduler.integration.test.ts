@@ -7,7 +7,7 @@ import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
-import { fileTurnJournal } from "../agent/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";

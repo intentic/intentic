@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-import { fileTurnJournal } from "../agent/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";

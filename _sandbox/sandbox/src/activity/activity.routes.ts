@@ -1,7 +1,7 @@
 import { activityContract, type ActivityStatus } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { listenerProvidersOf } from "../extensions/installed-extensions.js";
 import { listenerState } from "../extensions/listener-state.js";
 import { listenerStatus } from "../extensions/listener-status.js";

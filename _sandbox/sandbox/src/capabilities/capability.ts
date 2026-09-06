@@ -4,7 +4,7 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
 import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { donateForExtension, type DonationOutcome } from "../platform/pool-donate.js";
+import { donateForExtension, type DonationOutcome } from "../platform/pool/pool-donate.js";
 import { relayWalletEnsure, type WalletPolicyMirror } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";

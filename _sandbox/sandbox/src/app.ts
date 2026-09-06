@@ -18,18 +18,18 @@ import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";
 import { createCapabilityAskRoutes } from "./capabilities/ask.routes.js";
 import type { Services } from "./composition.js";
-import { type AppEnv, buildOrpcContext } from "./context.js";
-import { createDiffRawRoute } from "./git/diff-raw.js";
+import { type AppEnv, buildOrpcContext } from "./app-env.js";
+import { createDiffRawRoute } from "./git/changes/diff-raw.js";
 import { createSpeechRoute } from "./speech/speech.routes.js";
 import { createEnrollRoute } from "./inventory/enroll.routes.js";
 import { createRouter } from "./router.js";
 import { verifySyncToken } from "./platform/sync.js";
 import { createSyncRoutes } from "./platform/sync.routes.js";
 import { createSyncSshRoute } from "./platform/sync-ssh.js";
-import { createPoolRoutes } from "./platform/pool.routes.js";
+import { createPoolRoutes } from "./platform/pool/pool.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
-import { createFleetRoutes } from "./agents/fleet.routes.js";
-import { createChildrenRoutes } from "./children/children.routes.js";
+import { createFleetRoutes } from "./agents/recall/fleet.routes.js";
+import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { createEnvironmentRoutes } from "./environment/environment.routes.js";
 import { createEnginesRoutes } from "./engines/engines.routes.js";
 import { createBundleRoutes } from "./portability/bundle.routes.js";
@@ -39,7 +39,7 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
-import { createBrowserProfileRoute } from "./browser/browser-profile.js";
+import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
 import { createDevicesRoute } from "./hosts/devices.routes.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { peerConnectPath, peerEnrollPath, peerMcpPath } from "./peers/peer.js";
@@ -54,16 +54,16 @@ import {
     createRunnerTranslatorProxyRoute,
 } from "./runners/runner-credentials.routes.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
-import { createBrowserViewRoute } from "./browser/browser-view.js";
+import { createBrowserViewRoute } from "./browser/cast/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
 import { createWidgetRoute } from "./webchat/webchat-widget.js";
 import { createIntakeRoutes } from "./issues/intake.routes.js";
 import { createSdkRoute } from "./issues/issue-sdk.js";
 import { createGateRoute } from "./workflows/gate.routes.js";
-import { createWorkspaceBytesRoutes } from "./workspace/workspace-bytes.routes.js";
-import { reachPosture } from "./platform/ingress-tunnel.js";
-import { profileTraits } from "./platform/profile.js";
+import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.routes.js";
+import { reachPosture } from "./platform/listeners/ingress-tunnel.js";
+import { profileTraits } from "./platform/boot/profile.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
 // normal control flow and would be noise.

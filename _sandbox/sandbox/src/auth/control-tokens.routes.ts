@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { CONTROL_SCOPES, type ControlScope } from "./control-tokens.js";
 import { ownerDenied } from "./owner-gates.js";
 

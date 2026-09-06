@@ -5,7 +5,7 @@ import { type Capability, capabilitiesContract, CapabilitySchema, isVaulted } fr
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";

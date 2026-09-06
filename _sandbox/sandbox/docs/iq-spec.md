@@ -92,7 +92,7 @@ iq: def — 1 definition · showing 1/1
 $ iq refs createIgnoreScope --kind call
 iq: refs createIgnoreScope --kind call — 18 refs in 5 files · showing 12/18
 answer: src/workspace/workspace-tree.ts:48 · walkTree (fn) · [call]
-candidates: src/workspace/search.ts:212 · src/agent/context.ts:77
+candidates: src/workspace/search.ts:212 · src/portability/bundle.ts:77
 more: 6 refs in 2 files — iq refs createIgnoreScope --kind call --after h3x1
 ════ src/workspace/workspace-tree.ts (4) ════
   48:   const scope = createIgnoreScope(root);
@@ -106,10 +106,10 @@ more: 6 refs in 2 files — iq refs createIgnoreScope --kind call --after h3x1
 ```
 $ iq sym 'WorkspaceSearch*Schema' --kind type
 iq: sym — 7 symbols · showing 4/7
-  WorkspaceSearchQuerySchema   const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:7
-  WorkspaceSearchTagSchema     const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:38
-  WorkspaceSearchSpanSchema    const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:47
-  WorkspaceSearchHitSchema     const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:52
+  WorkspaceSearchQuerySchema   const   _shared/sandbox-contract/src/schemas/workspace-search.ts:7
+  WorkspaceSearchTagSchema     const   _shared/sandbox-contract/src/schemas/workspace-search.ts:38
+  WorkspaceSearchSpanSchema    const   _shared/sandbox-contract/src/schemas/workspace-search.ts:47
+  WorkspaceSearchHitSchema     const   _shared/sandbox-contract/src/schemas/workspace-search.ts:52
 ```
 
 ### `iq ast '<pattern>'`: structural AST pattern
@@ -139,7 +139,7 @@ The response opens with the capsule, then the top hits' full enclosing bodies as
 $ iq "how does the daemon expose tools to Claude agents?"
 iq: "how does the daemon expose tools…" — 8 hits in 4 files · index fresh (2.1s) · reranked · showing 5/8
 answer: src/workspace/tools.ts:12 · agentToolSchema (const) · confident · [sem 0.90] [rerank 0.93]
-candidates: src/agent/agent.ts:341 · src/mcp/registry.ts:19
+candidates: src/agent/agent.ts:341 · src/agent/agent-tools.ts:19
 more: 3 hits in 2 files — iq "how does the daemon expose tools…" --after p2m9
 ════ src/workspace/tools.ts ════
   12: export const agentToolSchema = z.object({                     [sem 0.90]
@@ -290,7 +290,7 @@ Every stage toggles for benchmarking via `--features` / `IQ_FEATURES`:
 
 ## Intentic integration
 
-1. **Package:** `@intentic/iq` (new `_apps/` or `_tools/` package), CLI on `@stricli/core`; `--json/--ndjson` honor `INTENTIC_OUTPUT` with secret masking.
+1. **Package:** `@intentic/iq` (a `_search/` package), CLI on `@stricli/core`; `--json/--ndjson` honor `INTENTIC_OUTPUT` with secret masking.
 2. **Reuse:** `createIgnoreScope`/`isDeniedWorkspacePath` from `workspace-ignore.ts`; extend `WorkspaceSearch*` zod schemas in `@intentic/sandbox-contract` for JSON output; retire `workspace-search.ts`: the daemon shells into `iq --json`.
 3. **Agent exposure:** the binary is on the sandbox image `PATH`, called via Bash (all agent backends inherit it); the agent is taught to prefer it by the baked iq Claude Code plugin (`_search/iq/plugin` → `IQ_PLUGIN_DIR`, prepended to the SDK `plugins` option), whose skill + SessionStart nudge are the single source shared with the benchmark and external users. No in-process MCP tool in v1: it would duplicate the Bash path and cost tool-list tokens every turn; revisit if agents keep reaching for grep.
 4. **Engine candidates (later):** ripgrep (lexical), tree-sitter/ast-grep (structural), tantivy/zoekt-style trigram index, local or API embeddings, `git log -S/-G` (history).

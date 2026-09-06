@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { AgentsRegistry } from "./agents-registry.js";
+import type { AgentsRegistry } from "./registry/agents-registry.js";
 import { checks } from "./invariant.js";
 
 /* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's

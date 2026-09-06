@@ -1,6 +1,6 @@
 import { roleAtLeast } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 
 /* IS THE PERSON BEHIND THIS REQUEST ONE WHO MAY SEE A CREDENTIAL, the question every route that attaches a
  * door token, a webhook secret or an ingest key to its answer has to ask, and asks the same way.

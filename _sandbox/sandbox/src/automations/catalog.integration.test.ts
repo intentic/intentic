@@ -10,11 +10,11 @@ import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
-import { postJson } from "../route-client.testing.js";
-import { services as routeServices } from "../route-services.testing.js";
-import { memoryAutomationsStore } from "../route-stores.testing.js";
+import { postJson } from "../harness/route-client.testing.js";
+import { services as routeServices } from "../harness/route-services.testing.js";
+import { memoryAutomationsStore } from "../harness/route-stores.testing.js";
 import { testConfig } from "../testing.js";
-import { readWorkspaceFile } from "../workspace/workspace-files.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { automationCatalog, CORE_AUTOMATION_TEMPLATES, CORE_TRIGGER_SOURCES, triggerSourceEvents } from "./catalog.js";
 
 const execFileAsync = promisify(execFile);

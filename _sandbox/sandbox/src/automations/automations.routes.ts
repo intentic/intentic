@@ -1,11 +1,11 @@
 import { type Automation, type AutomationSummary, automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { DoorKind } from "../auth/door-tokens.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { ensureFrontDeskPersona } from "../personas/front-desk.js";

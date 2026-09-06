@@ -9,24 +9,24 @@ import {
     type TurnEnding,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
-import { opt } from "../agent/opt.js";
-import { pendingLimitFailure } from "../agent/turn-resume.js";
-import { cancelWatchersFor } from "../agent/watchers.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
+import { opt } from "../agent/run/opt.js";
+import { pendingLimitFailure } from "../agent/run/turn-resume.js";
+import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
+import type { OrpcContext } from "../app-env.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
-import { resolveWithin } from "../workspace/workspace-files-paths.js";
-import { headSha } from "../git/changes.js";
-import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./agent-changes.js";
-import { commitsCarrying, historySpanStart } from "./landed-history.js";
-import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
-import { archivable, archiveAgents, purgeArchived } from "./archive.js";
-import { landAgent, outstandingConflicts } from "./land.js";
-import { syncBeforeLand } from "./sync.js";
-import { describeLandingInBackground } from "./landed-subject.js";
+import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { headSha } from "../git/changes/changes.js";
+import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./land/agent-changes.js";
+import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
+import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
+import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
+import { landAgent, outstandingConflicts } from "./land/land.js";
+import { syncBeforeLand } from "./land/sync.js";
+import { describeLandingInBackground } from "./land/landed-subject.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,

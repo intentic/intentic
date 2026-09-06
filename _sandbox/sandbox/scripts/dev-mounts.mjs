@@ -26,7 +26,7 @@ const SANDBOX_ROOT = "/opt/sandbox";
 const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
 
 // Every workspace package in the repo, by its declared name: the mapping from `@intentic/sandbox-contract` to
-// `_sandbox/sandbox-contract` is read, never assumed (`@intentic/lsp` lives in `_search/lsp`, not `_sandbox/lsp`).
+// `_shared/sandbox-contract` is read, never assumed (`@intentic/lsp` lives in `_search/lsp`, not `_sandbox/lsp`).
 // Groups are discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml).
 const workspacePackages = () => {
     const found = new Map();

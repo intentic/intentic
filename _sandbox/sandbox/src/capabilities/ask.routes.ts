@@ -1,9 +1,9 @@
-import { instancesOf } from "@intentic-app/capability-catalog";
+import { instancesOf } from "@intentic/capability-catalog";
 import type { CapabilityStatus } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { liveCardRun } from "../agent/offer-card.js";
+import { liveCardRun } from "../agent/run/offer-card.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { capabilityCtx } from "./capability.js";
 import { type AskInstance, createCapabilityGate } from "./capability-offer.js";
 import { connectableCards } from "./connectable.js";

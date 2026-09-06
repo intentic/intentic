@@ -2,7 +2,7 @@ import type { PowChallenge } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { antiBotAccepted, mintChallenge, type AntiBotAnswer } from "../auth/antibot.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";

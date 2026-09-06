@@ -16,17 +16,17 @@ import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
 
-import { createBootTracker } from "./platform/boot.js";
+import { createBootTracker } from "./platform/boot/boot.js";
 
-import type { AgentTool } from "./agent/agent-tools.js";
+import type { AgentTool } from "./agent/tools/agent-tools.js";
 
 import { testConfig } from "./testing.js";
 
-import { clientFor, collect, errorCode, postJson, rejectAuth, rejectForbidden } from "./route-client.testing.js";
-import { fakeFiles, fakeHistory } from "./route-fakes.testing.js";
-import { codexConnectedProxy, services, withTranslator } from "./route-services.testing.js";
-import { memoryAutomationsStore, memoryCapabilitiesStore } from "./route-stores.testing.js";
-import { runAgentTurn } from "./route-turns.testing.js";
+import { clientFor, collect, errorCode, postJson, rejectAuth, rejectForbidden } from "./harness/route-client.testing.js";
+import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
+import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
+import { memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
+import { runAgentTurn } from "./harness/route-turns.testing.js";
 import { windowOf } from "./sessions/transcript-record.js";
 
 test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {

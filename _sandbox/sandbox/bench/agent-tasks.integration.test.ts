@@ -69,9 +69,9 @@ test("sweep's fixture is a copy that carries no test files and no answer", async
         const entries = await readdir(join(dir, `daemon`));
         expect(entries).toEqual(expect.arrayContaining([`src`, `contract`]));
         // The agent must not be able to read the answer off disk, and tests would skew the count it is asked for.
-        const agentRoutes = await readFile(join(dir, `daemon`, `src`, `agent`, `agent.routes.ts`), `utf8`);
+        const agentRoutes = await readFile(join(dir, `daemon`, `src`, `agent`, `routes`, `agent.routes.ts`), `utf8`);
         expect(agentRoutes.length).toBeGreaterThan(0);
-        await expect(readFile(join(dir, `daemon`, `src`, `agent`, `agent.test.ts`), `utf8`)).rejects.toThrow();
+        await expect(readFile(join(dir, `daemon`, `src`, `agent`, `run`, `agent.test.ts`), `utf8`)).rejects.toThrow();
         await expect(readFile(join(dir, `answer.json`), `utf8`)).rejects.toThrow();
     } finally {
         await rm(dir, { recursive: true, force: true });
@@ -157,11 +157,11 @@ test("defects plants every anchor it grades against, and padding the answer is p
         expect(scoped).toBe((await sourceFiles(join(dir, `daemon`, `src`, `agent`))).length);
         expect(scoped).toBeLessThan((await sourceFiles(join(dir, `daemon`))).length / 4);
         // The mutations really are in the copy the agent reads.
-        expect(await readFile(join(dir, `daemon`, `src`, `agent`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 0)`);
+        expect(await readFile(join(dir, `daemon`, `src`, `agent`, `tools`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 0)`);
 
         const found = [
-            { file: `daemon/src/agent/agent-terminals.ts`, line: 26 },
-            { file: `daemon/src/agent/turn-usage.ts`, line: 8 },
+            { file: `daemon/src/agent/tools/agent-terminals.ts`, line: 26 },
+            { file: `daemon/src/agent/run/turn-usage.ts`, line: 8 },
         ];
         await writeFile(join(dir, `answer.json`), JSON.stringify({ defects: found }));
         const half = await prepared.grade();

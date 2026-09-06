@@ -1,9 +1,9 @@
 import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import { presentedDoorToken } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
 import { remoteIpOf } from "./public-door.js";

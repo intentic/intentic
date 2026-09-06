@@ -1,7 +1,7 @@
 # The CORE sandbox image — the floor: what the daemon and its web workspace need to function, nothing else.
 # Everything heavier (Chromium, Docker Engine, provider CLIs, semantic-search models, messaging gateways) is a
 # FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/image/compose-image-dockerfile.mjs splices at
-# the two marker lines below to build a published profile (packs/profiles.json — `standard` is what
+# the two marker lines below to build a published profile (image-packs/profiles.json — `standard` is what
 # ghcr.io/intentic/sandbox:stable ships), and that the daemon composes into the environment overlay when a
 # capability needs it on demand (src/environment/packs.ts). Same fragment files both ways, so the baked and
 # on-demand paths cannot drift; a splice stamps /opt/packs/<name> so the daemon knows what its base carries.
@@ -374,14 +374,14 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
 RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
-# packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
+# image-packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
 # daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client
 # image fragments) so they copy straight from context. The gateway extensions (discord, imap, slack, telegram,
 # whatsapp, google-workspace) bake their MANIFESTS here — the cards exist in every image — while their deployed
-# runtime trees are the bake-only `messaging` feature pack (packs/messaging.Dockerfile, in the standard
+# runtime trees are the bake-only `messaging` feature pack (image-packs/messaging.Dockerfile, in the standard
 # profile); on a core image the daemon surfaces "not included in this image" instead of spawning a runtime that
 # isn't there. google-workspace is in that group for its `bin` as much as its watcher: the manifest promises
 # both, and extensionRuntimeAbsent is all-or-nothing per extension, so shipping the CLI from context here would
@@ -413,7 +413,7 @@ COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google
 # --chmod=755 ON EVERY `contributes.bin` DIRECTORY, and it is not cosmetic. The daemon prepends these directories
 # to the agent's PATH each turn, and PATH resolution skips a file without the execute bit — so `intentic-docs`
 # shipped as mode 644, sat on PATH in every sandbox, and could not be run by the skill that announces it. The
-# same was true of `discord-voice` and `whatsapp` (see packs/messaging.Dockerfile). A tool the agent is told it
+# same was true of `discord-voice` and `whatsapp` (see image-packs/messaging.Dockerfile). A tool the agent is told it
 # has and cannot invoke is worse than one it was never given.
 COPY _extensions/documentation/intentic-extension.json /opt/extensions/documentation/
 COPY --chmod=755 _extensions/documentation/bin /opt/extensions/documentation/bin
@@ -467,7 +467,7 @@ COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
     && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
 # The memory half of the same queue, symlinked the same way and for the same reason: it is the daemon's OWN
-# admission policy (src/platform/memory-admission.ts, the numbers that refuse a turn) run as a command, so
+# admission policy (src/platform/resources/memory-admission.ts, the numbers that refuse a turn) run as a command, so
 # queue-run can hold a suite off a pinned box without the policy being written down twice. Fails open on every
 # path, including this binary being absent.
 RUN chmod +x /opt/sandbox/dist/platform/memory-gate.js \
@@ -475,15 +475,15 @@ RUN chmod +x /opt/sandbox/dist/platform/memory-gate.js \
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
 # environment skill teaches the agent to extend this very image via an approved overlay Dockerfile; the
 # intentic skill is the product's own reference, what the agent reads before it answers for the product.
-COPY _sandbox/sandbox/skills /root/.claude/skills
-# The tmux command runner — the agent's PreToolUse hook (src/agent/agent-terminals.ts) wraps every Bash tool
+COPY _sandbox/sandbox/seed-skills /root/.claude/skills
+# The tmux command runner — the agent's PreToolUse hook (src/agent/tools/agent-terminals.ts) wraps every Bash tool
 # command through it, and the daemon's terminal runner (src/terminal/terminal-run.ts) executes user-triggered
 # flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
 # strips noise from what the model sees.
 COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 # The heavy-command queue the same hook splices in front of a command matching a rule in
 # .intentic/config/heavy-commands.json, so several sessions' test/typecheck fan-outs take turns instead of
-# pinning the cgroup together (src/platform/heavy-commands.ts carries the measurement). It holds an flock, so
+# pinning the cgroup together (src/platform/resources/heavy-commands.ts carries the measurement). It holds an flock, so
 # `flock` (util-linux, already in the base) is its one dependency; a missing one degrades to running the
 # command plainly. Not on PATH ⇒ the daemon never inserts it at all (terminal-run.ts queueRunEnabled).
 COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
@@ -530,7 +530,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
 # it relays through the daemon, which owns the policy, the card and the identity check. It reads NAMES and
 # approver addresses only; no route it can reach returns a credential.
 COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
-# The child-agent command the spawn note teaches (src/children/spawn-note.ts): start a full agent on any
+# The child-agent command the spawn note teaches (src/agent/subagents/spawn-note.ts): start a full agent on any
 # connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
 # spawns nothing itself and reads no credential.

@@ -1,4 +1,4 @@
-import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionCard } from "@intentic-app/capability-catalog";
+import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionCard } from "@intentic/capability-catalog";
 import { contributionRegistry } from "./contributions.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
 

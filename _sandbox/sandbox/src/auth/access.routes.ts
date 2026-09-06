@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../context.js";
+import type { AppEnv } from "../app-env.js";
 import { bearerFrom, ForbiddenError } from "./auth.js";
 import { ownerDenied } from "./owner-gates.js";
 

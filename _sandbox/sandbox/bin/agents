@@ -2,7 +2,7 @@
 // The in-sandbox FLEET command, and it does two things: it looks conversations up, and it starts and
 // supervises new ones.
 //
-// LOOKING UP (src/agents/fleet.routes.ts) is the half added last and the half most turns want. An agent that
+// LOOKING UP (src/agents/recall/fleet.routes.ts) is the half added last and the half most turns want. An agent that
 // needs to know what another conversation did used to go looking for it by hand — `ls /history`, `find`, a
 // throwaway `node -e` reducer over a three-megabyte agents.json, then a raw read of a transcript file the
 // size of a small book. Measured across this workspace's own sessions: one in seven did it, a median of three
@@ -10,7 +10,7 @@
 // known. `ls`, `show` and `find` are that hunt, answered once, from the registry, the per-conversation
 // records and the phrase index the daemon already maintains. They only ever READ.
 //
-// SPAWNING (src/children/children.routes.ts) is the SHELL door onto the child-agent service, which is what
+// SPAWNING (src/agent/subagents/children.routes.ts) is the SHELL door onto the child-agent service, which is what
 // lets an agent on ANY runtime with a shell — a native Codex, OpenCode, Kimi, Pi or ACP turn, or a person in
 // a terminal — start a full agent on any connected provider and supervise it, exactly as the Claude loop's
 // `spawn`/`wait` MCP tools and Cursor's custom tools do in-process. Same engine, same budgets, same roster: a

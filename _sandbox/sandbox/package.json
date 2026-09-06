@@ -30,7 +30,7 @@
         "@cursor/sdk": "catalog:",
         "@hono/node-server": "catalog:",
         "@huggingface/hub": "catalog:",
-        "@intentic-app/capability-catalog": "workspace:*",
+        "@intentic/capability-catalog": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/code-read": "workspace:*",
         "@intentic/constants": "workspace:*",
@@ -78,7 +78,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@intentic-app/localhost-https": "workspace:*",
+        "@intentic/localhost-https": "workspace:*",
         "@intentic/fake-model": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",

@@ -1,6 +1,6 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
-import type { TurnJournal } from "./turn-journal.js";
-import { liveTurnConversations } from "./turn-runs.js";
+import type { TurnJournal } from "./run/turn-journal.js";
+import { liveTurnConversations } from "./run/turn-runs.js";
 
 /* EVERY LIVE TURN IS WRITTEN DOWN, or it dies with the container and nobody finds out until it has.
  *

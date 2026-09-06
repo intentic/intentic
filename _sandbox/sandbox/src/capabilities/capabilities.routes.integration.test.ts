@@ -7,12 +7,12 @@ import { VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
-import { hasSession, markConnected, sessionDir } from "../browser/session-store.js";
+import { hasSession, markConnected, sessionDir } from "../browser/sessions/session-store.js";
 
-import { clientFor, collect, errorCode } from "../route-client.testing.js";
-import { fakeFiles, tempWorkspace } from "../route-fakes.testing.js";
-import { services } from "../route-services.testing.js";
-import { memoryCapabilitiesStore, memoryDismissalsStore, memoryPersonasStore } from "../route-stores.testing.js";
+import { clientFor, collect, errorCode } from "../harness/route-client.testing.js";
+import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore, memoryDismissalsStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 
 /* The capabilities routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
@@ -131,7 +131,7 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
             disk.delete(path);
         },
     });
-    // The vpn handler writes ~/.wireguard on the real fs: point HOME at a temp dir like vpn.integration.test.ts.
+    // The vpn handler writes ~/.wireguard on the real fs: point HOME at a temp dir like vpn.handler.integration.test.ts.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 

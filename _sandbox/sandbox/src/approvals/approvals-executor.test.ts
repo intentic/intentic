@@ -10,8 +10,8 @@ import type { Services } from "../composition.js";
 const startTurn = vi.fn(async () => undefined);
 const sendDiscord = vi.fn(async () => ({ url: "https://discord.com/channels/1/2/3" }));
 
-vi.mock("../agent/agent.routes.js", () => ({ streamAgent: vi.fn() }));
-vi.mock("../agent/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
+vi.mock("../agent/routes/agent.routes.js", () => ({ streamAgent: vi.fn() }));
+vi.mock("../agent/run/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
 vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: vi.fn() }));
 vi.mock("./discord-post.js", async (importOriginal) => ({
     // The real predicate, whether a post can go the fast way is part of what is under test: with only the

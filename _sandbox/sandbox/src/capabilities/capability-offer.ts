@@ -1,8 +1,8 @@
-import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
-import { instancesOf } from "@intentic-app/capability-catalog";
+import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
+import { instancesOf } from "@intentic/capability-catalog";
 import { sleep } from "@intentic/base/async";
 import type { CapabilityOffer, CapabilityStatus } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, whyOf } from "../agent/offer-card.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, whyOf } from "../agent/run/offer-card.js";
 
 /* THE SETUP GATE, how an agent asks the owner to connect a capability it is missing, mid-task, in chat.
  *

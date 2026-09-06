@@ -1,7 +1,7 @@
-import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
+import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, it } from "vitest";
-import { resolveRequest } from "../agent/agent-requests.js";
+import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { type AskDeps, type AskedCapability, type AskInstance, createCapabilityGate } from "./capability-offer.js";
 
 /* The setup gate, driven end to end with a fake catalog and a fake live turn: what these prove is the ONE

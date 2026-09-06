@@ -47,7 +47,7 @@ const SHIMS: readonly (readonly [string, string])[] = [
     ["_site/site/public/scripts/connect.ps1", "'sandbox', 'connect'"],
     ["_site/site/public/scripts/recreate.ps1", "sandbox rebuild"],
 ];
-const CONTRACT_IMPORTERS = ["_deploy/providers/src/host/workspace.ts", "_editor/web/src/pages/setupCompose.ts"];
+const CONTRACT_IMPORTERS = ["_deploy/providers/src/host/workspace.ts", "_editor/web/src/features/setup/setupCompose.ts"];
 
 // .rs is scanned like the script dialects: ic executes what the image emits, so a Rust file that states the
 // run shape itself is exactly the drift this test exists to catch.
@@ -69,7 +69,7 @@ const walk = async (dir: string): Promise<string[]> => {
 
 test("no file in the repo hand-rolls a sandbox container run: TS composes from the contract, scripts use the verb", async () => {
     // Test files describe the shape in order to assert it; the contract lib is the shape.
-    const files = (await walk(REPO_ROOT)).filter((file) => !file.endsWith(".test.ts") && !file.includes("_sandbox/sandbox-run/"));
+    const files = (await walk(REPO_ROOT)).filter((file) => !file.endsWith(".test.ts") && !file.includes("_shared/sandbox-run/"));
     // One batch, not one await per file: this scan timed out beside comment-refs.test.ts, on the same runner
     // and for the same reason, and that file's read carries the measurements.
     const sources = await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8").catch(() => "")] as const));

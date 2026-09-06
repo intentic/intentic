@@ -25,9 +25,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { displayNameOf, toolCategoryOf, toolLocations, toolTarget } from "../src/agent/tool-calls.js";
-import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/turn-metrics.js";
-import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/workspace-map.js";
+import { displayNameOf, toolCategoryOf, toolLocations, toolTarget } from "../src/agent/tools/tool-calls.js";
+import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/turn-metrics.js";
+import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/prompt/workspace-map.js";
 
 /* The workspace root as the AGENT saw it, which is what the paths in these transcripts are written against and
  * what decides which listings were orientation. A corpus captured from another sandbox passes its own. */

@@ -25,7 +25,7 @@ import { dirname, join, relative, resolve } from "node:path";
 
 const HERE = import.meta.dirname;
 const SANDBOX_SRC = resolve(HERE, "../src");
-const CONTRACT_SRC = resolve(HERE, "../../../_sandbox/sandbox-contract/src");
+const CONTRACT_SRC = resolve(HERE, "../../../_shared/sandbox-contract/src");
 
 interface Graded {
     // The headline pass/fail the solved-rate is computed from.
@@ -235,7 +235,7 @@ const copyDaemonFixture = async (dir: string): Promise<string> => {
 
 // The entry point whose transitive closure is the answer. Chosen because it sits at the top of the daemon's
 // deepest subsystem: reaching every file it pulls in means opening roughly half the tree.
-const DEPS_ENTRY = "src/agent/agent.routes.ts";
+const DEPS_ENTRY = "src/agent/routes/agent.routes.ts";
 
 // Relative import specifiers in a source file: `from "./x.js"` and `await import("../y/z.js")`. Bare
 // specifiers (`@intentic/…`, `node:fs`) are deliberately not followed, the graph is this tree's own.
@@ -332,26 +332,26 @@ interface Defect {
 
 const DEFECTS: readonly Defect[] = [
     {
-        file: "src/agent/agent-terminals.ts",
+        file: "src/agent/tools/agent-terminals.ts",
         find: "        .slice(0, 24);",
         replace: "        .slice(0, 0);",
         why: "windowSlug is meant to derive a meaningful tmux window name from the description; taking zero characters makes every description fall back to `run`",
     },
     {
-        file: "src/agent/turn-usage.ts",
+        file: "src/agent/run/turn-usage.ts",
         find: "const add = (a: number | undefined, b: number | undefined): number | undefined => (a === undefined ? b : b === undefined ? a : a + b);",
         replace:
             "const add = (a: number | undefined, b: number | undefined): number | undefined => (a === undefined ? b : b === undefined ? a : a - b);",
         why: "sumUsage must ADD two accounting frames; this subtracts, so totals shrink as a turn spends more",
     },
     {
-        file: "src/agent/event-queue.ts",
+        file: "src/agent/run/event-queue.ts",
         find: "            if (this.ended) {\n                return;\n            }",
         replace: "            if (!this.ended) {\n                return;\n            }",
         why: "the queue must finish iteration once ended; inverted, it returns while still open and hangs when closed",
     },
     {
-        file: "src/agent/agent-steering.ts",
+        file: "src/agent/anchors/agent-steering.ts",
         find: "        this.delivered += 1;",
         replace: "        this.delivered = 1;",
         why: "`delivered` counts how many messages were accepted (see its comment); assignment makes it a flag stuck at 1",

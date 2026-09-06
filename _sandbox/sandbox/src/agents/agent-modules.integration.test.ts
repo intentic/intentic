@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { agentRepoModules } from "./agent-changes.js";
-import type { IsolatedAgent } from "./agents-store.js";
-import type { AgentWorktrees } from "./worktrees.js";
+import { agentRepoModules } from "./land/agent-changes.js";
+import type { IsolatedAgent } from "./registry/agents-store.js";
+import type { AgentWorktrees } from "./worktrees/worktrees.js";
 
 /* WHICH TREE NAMES AN AGENT'S PACKAGES: the whole subject here, because getting it wrong is invisible until
  * the moment it matters most. The review groups an agent's changed files under the package each one lives in;

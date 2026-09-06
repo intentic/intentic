@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createApp } from "../app.js";
-import { services } from "../route-services.testing.js";
-import { memoryCapabilitiesStore } from "../route-stores.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
 /* The connection route: the extension BACKENDS' credential read. Two boundaries, each pinned:
  *   • WHO reaches it: only the daemon's header grants. A signed-in member (the OWNER included) is refused

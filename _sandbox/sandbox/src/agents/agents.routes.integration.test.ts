@@ -14,10 +14,10 @@ import { extensionProcessKey } from "../extensions/extension-processes.js";
 
 import { windowOf } from "../sessions/transcript-record.js";
 
-import { clientFor, collect, errorCode } from "../route-client.testing.js";
-import { fakeHistory, fakeServiceProcesses } from "../route-fakes.testing.js";
-import { codexConnectedProxy, services, withTranslator } from "../route-services.testing.js";
-import { runAgentTurn } from "../route-turns.testing.js";
+import { clientFor, collect, errorCode } from "../harness/route-client.testing.js";
+import { fakeHistory, fakeServiceProcesses } from "../harness/route-fakes.testing.js";
+import { codexConnectedProxy, services, withTranslator } from "../harness/route-services.testing.js";
+import { runAgentTurn } from "../harness/route-turns.testing.js";
 
 /* The agents routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:

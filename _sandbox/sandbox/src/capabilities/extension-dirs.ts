@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 // Where GIT-INSTALLED extension checkouts live: .intentic/local/extensions/<id>, daemon-owned state beside
 // capabilities.json (outside the three repos, outside .claude/). Baked extensions live at EXTENSIONS_DIR

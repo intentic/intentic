@@ -4,8 +4,8 @@
 # Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
 # it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
 # output to its own stdout and exits with the command's real exit code. Two callers: the agent's PreToolUse
-# hook (src/agent/agent-terminals.ts) rewrites every Bash tool command through it, and the daemon's terminal
-# runner (src/system/terminal-run.ts) executes user-triggered flows (capabilities, infra check) through it.
+# hook (src/agent/tools/agent-terminals.ts) rewrites every Bash tool command through it, and the daemon's terminal
+# runner (src/terminal/terminal-run.ts) executes user-triggered flows (capabilities, infra check) through it.
 #
 # -e NAME forwards NAME from this wrapper's OWN environment onto the new window (tmux new-window -e). The
 # pane's shell otherwise inherits the tmux SERVER's env snapshot from whenever the server first started, so
@@ -70,7 +70,7 @@ fallback() {
 }
 
 # EVERY tmux call below is made from the mount namespace named by $INTENTIC_TMUX_NS (set per turn by
-# src/agent/agent.ts, and only for an isolated one).
+# src/agent/run/agent.ts, and only for an isolated one).
 #
 # A tmux client that finds no server running FORKS one, and that server keeps the mounts of whoever forked it
 # — forever, for every pane it ever creates. This wrapper is such a client and the agent's Bash hook runs it
@@ -82,7 +82,7 @@ fallback() {
 #
 # So the client hops OUT to the daemon's namespace first and the server is pinned there for good. The turn's
 # own namespace is re-entered one level in, by the nsenter inside the pane's command line
-# (src/agent/agent-terminals.ts) — the pane still runs the command in the worktree. Unset var (the daemon's
+# (src/agent/tools/agent-terminals.ts) — the pane still runs the command in the worktree. Unset var (the daemon's
 # own runner, an unisolated turn) means this process is already where the server belongs, so there is no hop.
 # Resolved to a path once because the wrapper below calls the FUNCTION, which must not find itself by name.
 tmuxbin="$(command -v tmux)" || fallback "no tmux on PATH"

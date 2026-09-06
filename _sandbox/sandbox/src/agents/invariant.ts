@@ -1,6 +1,6 @@
-import { liveTurnConversations } from "../agent/turn-runs.js";
+import { liveTurnConversations } from "../agent/run/turn-runs.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
-import type { AgentsRegistry } from "./agents-registry.js";
+import type { AgentsRegistry } from "./registry/agents-registry.js";
 
 /* TWO RECORDS OF "IS THIS CONVERSATION RUNNING", AND THEY MUST AGREE.
  *

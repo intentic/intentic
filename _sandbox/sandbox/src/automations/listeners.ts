@@ -1,5 +1,5 @@
 import type { AgentOrigin, ListenerMessage } from "@intentic/sandbox-contract";
-import { streamAgent } from "../agent/agent.routes.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
 import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";

@@ -3,7 +3,7 @@
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
-# once. The agent's PreToolUse hook (src/agent/agent-terminals.ts) inserts this in front of any Bash command
+# once. The agent's PreToolUse hook (src/agent/tools/agent-terminals.ts) inserts this in front of any Bash command
 # matching a rule in .intentic/config/heavy-commands.json; every other command is untouched and never sees it.
 #
 # WHY A LOCK AND NOT A COUNTER IN THE DAEMON. The slot has to be released by a command that is killed, that
