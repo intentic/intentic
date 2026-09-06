@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/environments/environment.default.ts
+  // src/app/environments/environment.default.ts
   var defaultEnv = {
     production: false,
     // Browser-facing origin of the API the SPA calls directly (no dev-server proxy).
@@ -14,7 +14,7 @@
     afterSignOut: `/login`
   };
 
-  // src/environments/environment.local.ts
+  // src/app/environments/environment.local.ts
   window.env = {
     ...defaultEnv,
     api: { url: "https://localhost:6480" },

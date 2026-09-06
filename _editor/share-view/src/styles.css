@@ -10,7 +10,7 @@
 
 @import "../../ui/src/styles/index.css";
 @import "../../ui/src/styles/opt-in/prose.css";
-@import "../../web/src/chat/chat.css";
+@import "../../web/src/features/chat/panel/chat.css";
 
 /* WHAT TAILWIND SCANS. Named rather than left to auto-detection, which is rooted at the BUILD's root — this
  * package's directory — and would therefore see this page's own markup and none of the components it draws it
@@ -19,6 +19,6 @@
  * Three sources, and each is a place a class this page renders can come from: the design system, the app's chat
  * components (the tool card and everything under it), and this package. */
 @source "../../ui/src/**/*.{ts,html,vue}";
-@source "../../web/src/chat/**/*.{ts,vue}";
+@source "../../web/src/features/chat/**/*.{ts,vue}";
 @source "./**/*.{ts,vue}";
 @source "../index.html";
