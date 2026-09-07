@@ -5,9 +5,19 @@ import { z } from "zod";
  * portal, one subscription read, a cancel, a quantity change, and webhook signature verification. Hand-rolled
  * over fetch rather than the Stripe SDK, the stripe-api.ts precedent in the deploy engine: the platform's
  * CLAUDE.md model is "as few dependencies as the job allows", and the job here is six endpoints with stable
- * shapes. Injectable fetch for tests, like the trial pool's upstream. */
+ * shapes. Injectable fetch for tests, like the trial pool's upstream.
+ *
+ * THE ADDRESS IS CONFIG TOO (`hostedPlan.stripeApiUrl`), and that is what lets the money path be tested as a
+ * whole rather than module by module: the hermetic and browser tiers point this very client at a stand-in
+ * that speaks Stripe's shapes (@intentic/testing/stripe-fake), so what runs under test is the request
+ * encoding below, the parsing, the webhook, the mirror row and the page, with nothing swapped out but the
+ * host. Production never sets it. */
 
-const API_BASE = `https://api.stripe.com/v1`;
+// What the client needs of the plan's config: the key it signs with and the host it talks to.
+export interface StripeClientConfig {
+    readonly stripeSecretKey: string;
+    readonly stripeApiUrl: string;
+}
 
 /* WHY A REFUSAL HAPPENED, NOT MERELY THAT ONE DID. Every non-2xx from Stripe carries `{ error: { message } }`,
  * and that message is written for a person to act on; a dump of the response body names nothing. */
@@ -29,10 +39,16 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
 
 // Stripe's request encoding is application/x-www-form-urlencoded with bracketed nesting; the plan only ever
 // needs one level of it, spelled literally at the call sites below.
-const send = async (fetchFn: typeof fetch, secretKey: string, method: `POST` | `DELETE`, path: string, params: Record<string, string>): Promise<unknown> => {
-    const response = await fetchFn(`${API_BASE}${path}`, {
+const send = async (
+    fetchFn: typeof fetch,
+    client: StripeClientConfig,
+    method: `POST` | `DELETE`,
+    path: string,
+    params: Record<string, string>,
+): Promise<unknown> => {
+    const response = await fetchFn(`${client.stripeApiUrl}${path}`, {
         method,
-        headers: { authorization: `Bearer ${secretKey}`, "content-type": `application/x-www-form-urlencoded` },
+        headers: { authorization: `Bearer ${client.stripeSecretKey}`, "content-type": `application/x-www-form-urlencoded` },
         body: new URLSearchParams(params).toString(),
         signal: AbortSignal.timeout(30_000),
     });
@@ -42,12 +58,12 @@ const send = async (fetchFn: typeof fetch, secretKey: string, method: `POST` | `
     return response.json();
 };
 
-const post = (fetchFn: typeof fetch, secretKey: string, path: string, params: Record<string, string>): Promise<unknown> =>
-    send(fetchFn, secretKey, `POST`, path, params);
+const post = (fetchFn: typeof fetch, client: StripeClientConfig, path: string, params: Record<string, string>): Promise<unknown> =>
+    send(fetchFn, client, `POST`, path, params);
 
-const get = async (fetchFn: typeof fetch, secretKey: string, path: string): Promise<unknown> => {
-    const response = await fetchFn(`${API_BASE}${path}`, {
-        headers: { authorization: `Bearer ${secretKey}` },
+const get = async (fetchFn: typeof fetch, client: StripeClientConfig, path: string): Promise<unknown> => {
+    const response = await fetchFn(`${client.stripeApiUrl}${path}`, {
+        headers: { authorization: `Bearer ${client.stripeSecretKey}` },
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
@@ -105,10 +121,15 @@ const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
     };
 };
 
-// A subscription as a webhook event carries it (data.object), or undefined for an object of some other
-// shape, the webhook route treats that as "not for us" rather than an error.
-export const subscriptionFromEvent = (raw: unknown, now: () => Date = () => new Date()): StripeSubscription | undefined =>
-    SubscriptionSchema.safeParse(raw).success ? toSubscription(raw, now) : undefined;
+// The subscription a webhook event is about (data.object), by id alone: its state is read fresh rather than
+// taken off the event (hosted-plan.routes.ts says why). Undefined for an object of some other shape, which
+// the route treats as "not for us" rather than an error.
+const EventSubscriptionSchema = z.object({ id: z.string(), object: z.literal(`subscription`) });
+
+export const subscriptionIdOfEvent = (raw: unknown): string | undefined => {
+    const parsed = EventSubscriptionSchema.safeParse(raw);
+    return parsed.success ? parsed.data.id : undefined;
+};
 
 export interface StripeGateway {
     /* A subscription-mode Checkout Session; the answer is the URL to send the browser to.
@@ -137,10 +158,10 @@ export interface StripeGateway {
     readonly setQuantity: (id: string, itemId: string, quantity: number) => Promise<StripeSubscription>;
 }
 
-export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
+export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
     checkoutSession: async ({ priceId, clientReferenceId, customerEmail, customer, successUrl, cancelUrl }) =>
         SessionSchema.parse(
-            await post(fetchFn, secretKey, `/checkout/sessions`, {
+            await post(fetchFn, client, `/checkout/sessions`, {
                 mode: `subscription`,
                 "line_items[0][price]": priceId,
                 "line_items[0][quantity]": `1`,
@@ -152,12 +173,12 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
             }),
         ),
     portalSession: async (customerId, returnUrl) =>
-        SessionSchema.parse(await post(fetchFn, secretKey, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
-    subscription: async (id) => toSubscription(await get(fetchFn, secretKey, `/subscriptions/${id}`), now),
-    cancelSubscription: async (id) => toSubscription(await send(fetchFn, secretKey, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
+        SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
+    subscription: async (id) => toSubscription(await get(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`), now),
+    cancelSubscription: async (id) => toSubscription(await send(fetchFn, client, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
     setQuantity: async (id, itemId, quantity) =>
         toSubscription(
-            await post(fetchFn, secretKey, `/subscriptions/${encodeURIComponent(id)}`, {
+            await post(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`, {
                 "items[0][id]": itemId,
                 "items[0][quantity]": String(quantity),
                 proration_behavior: `create_prorations`,

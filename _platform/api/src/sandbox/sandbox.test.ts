@@ -302,3 +302,54 @@ describe(`sandbox routes`, () => {
         expect(unflagged.every((sandbox) => !sandbox.providedAddress)).toBe(true);
     });
 });
+
+/* THE FREE LANE'S REFUSAL IS A 402, not a 500. `PAYMENT_REQUIRED` is the platform's own code rather than one
+ * of oRPC's, and an unknown code takes oRPC's fallback status, which is 500 (`fallbackORPCErrorStatus`). So
+ * every user who reached their monthly hour ceiling was answered "internal server error": the code still rode
+ * the response body, so the editor's gate offered the plan and nothing on screen was wrong, which is exactly
+ * why nobody saw it. What it cost was the operator's own reading of the platform, the expected refusal that
+ * is the moment the plan is deserved arriving in the logs and in error monitoring as a fault.
+ *
+ * Pinned here rather than only in the hermetic tier (e2e/hosted-plan.e2e.test.ts, which asserts the same
+ * 402 over real HTTP) because that tier needs Docker and a switch, and this is the assertion that must hold
+ * on an ordinary `pnpm test`. */
+describe(`a metered owner whose month is spent`, () => {
+    const hostedConfig = {
+        webOrigin: `https://app.test`,
+        intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true },
+        ingress: { ...testIngressConfig },
+        secrets: { key: `` },
+        email: { apiKey: ``, from: `` },
+        hosted: { flyApiToken: `fly`, flyOrg: `org`, monthlyHours: 40, perUser: 1 },
+        hostedPlan: { compEmails: `` },
+    } as unknown as OrpcContext[`config`];
+
+    /* The owner's month, fully spent: no plan row, the settled row at the ceiling, and no machine awake, so
+     * settling the previous stretch is a no-op and Fly is never asked. `hostedMachine.findUnique` answers null
+     * for the provision path's idempotence check (this sandbox has no machine yet), `count` zero so the slot
+     * gate passes and the HOURS are what refuses. */
+    const spent = () =>
+        fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+            hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+        });
+
+    it(`is refused the wake with PAYMENT_REQUIRED, carrying HTTP 402`, async () => {
+        const error = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma: spent(), config: hostedConfig }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+        expect(error).toBeInstanceOf(ORPCError);
+        expect(error).toMatchObject({ code: `PAYMENT_REQUIRED`, status: 402 });
+    });
+
+    it(`is refused a new hosted machine the same way`, async () => {
+        const error = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: context({ prisma: spent(), config: hostedConfig }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+        expect(error).toMatchObject({ code: `PAYMENT_REQUIRED`, status: 402 });
+    });
+});

@@ -63,6 +63,10 @@ jobs:
   #   cloudflare      cli.e2e       CLOUDFLARE_API_TOKEN, scoped DNS-edit + tunnel-edit on a zone you own.
   #   discord         discord.e2e   DISCORD_E2E_BOT_TOKEN + _SENDER_TOKEN + _CHANNEL_ID. ANTHROPIC_API_KEY
   #                                 additionally unlocks the one spec that spends a real agent turn.
+  #   stripe          hosted-plan-stripe.e2e   HOSTED_PLAN_E2E_STRIPE_SECRET_KEY (a TEST-mode key) +
+  #                                 HOSTED_PLAN_E2E_STRIPE_PRICE_ID (the hosted plan's test-mode price): the
+  #                                 platform's own Stripe client against Stripe, the one tier that sees an
+  #                                 API version move a field under it.
   #
   # A tier this job has no credentials for stands down and names the variable it wanted, in the suite title
   # vitest prints beside the ↓. So green here means the UNLOCKED tiers passed and the log says which those
@@ -91,6 +95,8 @@ jobs:
       DISCORD_E2E_SENDER_TOKEN: ${{ secrets.DISCORD_E2E_SENDER_TOKEN }}
       DISCORD_E2E_CHANNEL_ID: ${{ secrets.DISCORD_E2E_CHANNEL_ID }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      HOSTED_PLAN_E2E_STRIPE_SECRET_KEY: ${{ secrets.HOSTED_PLAN_E2E_STRIPE_SECRET_KEY }}
+      HOSTED_PLAN_E2E_STRIPE_PRICE_ID: ${{ secrets.HOSTED_PLAN_E2E_STRIPE_PRICE_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

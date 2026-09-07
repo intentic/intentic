@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../../config.js";
 import { applySubscription, hostedPlanEnabled } from "./hosted-plan.js";
-import { type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./hosted-plan-stripe.js";
+import { type StripeGateway, stripeGateway, subscriptionIdOfEvent, verifyStripeSignature } from "./hosted-plan-stripe.js";
 
 /* The hosted plan's one non-browser route: Stripe's webhook, authenticated by its signature. The browser
  * half (state, checkout, portal) rides the oRPC contract (hosted-plan.orpc.ts). 404s entirely while the plan
@@ -22,7 +22,7 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
     const app = new Hono<{ Variables: { logger: Logger } }>();
     // Lazy: built on the first webhook that needs it, so mounting the sub-app on a platform without a plan
     // (every test config, most self-hosted ones) constructs nothing Stripe-shaped.
-    const stripe = (): StripeGateway => gateway ?? stripeGateway(config.hostedPlan.stripeSecretKey, fetch, now);
+    const stripe = (): StripeGateway => gateway ?? stripeGateway(config.hostedPlan, fetch, now);
 
     /* A completed subscription checkout names the buyer (client_reference_id) and the subscription, which is
      * read fresh from Stripe rather than trusted off the event. Anything else shaped is not for us. */
@@ -31,16 +31,20 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
             .object({ mode: z.literal(`subscription`), client_reference_id: z.string(), subscription: z.string() })
             .safeParse(object);
         if (session.success) {
-            await applySubscription(prisma, await stripe().subscription(session.data.subscription), { userId: session.data.client_reference_id });
+            const at = now();
+            await applySubscription(prisma, await stripe().subscription(session.data.subscription), { userId: session.data.client_reference_id, at });
         }
     };
 
-    // `eventAt` is the event's own `created`, the ordering guard in applySubscription; an event without one
-    // (a hand-sent test event) is taken as now.
-    const onSubscriptionChanged = async (object: unknown, eventAt: Date): Promise<void> => {
-        const subscription = subscriptionFromEvent(object, now);
-        if (subscription !== undefined) {
-            await applySubscription(prisma, subscription, { eventAt });
+    /* A subscription that changed. The event's own copy of it is NOT what gets mirrored: Stripe delivers
+     * events in no particular order and says so, so a row that took whatever landed last could be rolled back
+     * to a state Stripe had already left. The event names the subscription, its state is read fresh, and the
+     * read's own moment is what the ordering guard compares (applySubscription). */
+    const onSubscriptionChanged = async (object: unknown): Promise<void> => {
+        const id = subscriptionIdOfEvent(object);
+        if (id !== undefined) {
+            const at = now();
+            await applySubscription(prisma, await stripe().subscription(id), { at });
         }
     };
 
@@ -55,17 +59,15 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
         if (!verifyStripeSignature(payload, c.req.header(`stripe-signature`), config.hostedPlan.stripeWebhookSecret, now)) {
             return c.json({ error: `bad signature` }, 400);
         }
-        const event = z
-            .object({ type: z.string(), created: z.number().optional(), data: z.object({ object: z.unknown() }) })
-            .safeParse(JSON.parse(payload));
+        const event = z.object({ type: z.string(), data: z.object({ object: z.unknown() }) }).safeParse(JSON.parse(payload));
         if (!event.success) {
             return c.json({ error: `malformed event` }, 400);
         }
-        const { type, created, data } = event.data;
+        const { type, data } = event.data;
         if (type === `checkout.session.completed`) {
             await onCheckoutCompleted(data.object);
         } else if (type === `customer.subscription.updated` || type === `customer.subscription.deleted`) {
-            await onSubscriptionChanged(data.object, created === undefined ? now() : new Date(created * 1000));
+            await onSubscriptionChanged(data.object);
         }
         return c.json({ received: true });
     });

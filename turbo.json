@@ -172,6 +172,10 @@
                 "DISCORD_E2E_CHANNEL_ID",
                 "ANTHROPIC_API_KEY",
                 "CLAUDE_CODE_OAUTH_TOKEN",
+                // The Stripe tier (hosted-plan-stripe.e2e, @intentic/api): a TEST-mode key and the hosted
+                // plan's test-mode price. The one tier that meets Stripe itself.
+                "HOSTED_PLAN_E2E_STRIPE_SECRET_KEY",
+                "HOSTED_PLAN_E2E_STRIPE_PRICE_ID",
                 // Points the sandbox-daemon tier at a published image instead of a source build (e2e:browser
                 // passes the same variable through for the same reason).
                 "SANDBOX_E2E_IMAGE"

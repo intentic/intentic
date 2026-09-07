@@ -68,16 +68,20 @@ export const hostedSlotsOf = async (prisma: PrismaClient, config: Config, userId
  * lifecycle events, where the customer id is the only join, an event for a customer the table has never seen
  * is dropped, which is exactly right for events belonging to some other product on the same Stripe account.
  *
- * `eventAt` is Stripe's `created` on the event that carried this state. Stripe delivers webhooks in no
- * particular order, and a row that takes whatever lands last can be rolled back to a state Stripe has already
- * left; the customer-join write therefore refuses an event older than the one it last applied. The platform's
- * own writes read the subscription fresh and stamp now. */
+ * `at` is the platform's own clock at the moment the subscription was READ from Stripe. Stripe delivers
+ * webhooks in no particular order and says so, and a row that takes whatever lands last can be rolled back to
+ * a state Stripe has already left; so no write here trusts an event's copy of the subscription: the webhook,
+ * the checkout and a slot change all read it fresh and stamp the read, and the customer-join write refuses a
+ * read older than the one it last applied. ONE CLOCK, OURS, ON EVERY STAMP. The guard used to compare our
+ * millisecond stamps against Stripe's whole-second `created`, which dropped for good every event Stripe
+ * emitted in the same second as a write of ours, a cancel made right after a slot change among them; the
+ * hermetic tier (hosted-plan.e2e.test.ts) is where that showed. */
 export const applySubscription = async (
     prisma: PrismaClient,
     subscription: StripeSubscription,
-    by: { userId?: string; eventAt?: Date } = {},
+    by: { userId?: string; at?: Date } = {},
 ): Promise<void> => {
-    const syncedAt = by.eventAt ?? new Date();
+    const syncedAt = by.at ?? new Date();
     const state = {
         stripeCustomerId: subscription.customer,
         stripeSubscriptionId: subscription.id,
@@ -86,7 +90,7 @@ export const applySubscription = async (
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         quantity: subscription.quantity,
         syncedAt,
-        // A trimmed webhook object may carry no item; keep the id the row already has rather than blanking it.
+        // A subscription answered with no item (none should be) keeps the id the row already has rather than blanking it.
         ...(subscription.itemId === `` ? {} : { stripeItemId: subscription.itemId }),
     };
     if (by.userId !== undefined) {
@@ -125,7 +129,7 @@ export const cancelHostedPlan = async (prisma: PrismaClient, config: Config, log
         return;
     }
     try {
-        await (gateway ?? stripeGateway(config.hostedPlan.stripeSecretKey)).cancelSubscription(plan.stripeSubscriptionId);
+        await (gateway ?? stripeGateway(config.hostedPlan)).cancelSubscription(plan.stripeSubscriptionId);
         logger.info({ userId, subscription: plan.stripeSubscriptionId }, `hosted plan: subscription cancelled with its account`);
     } catch (error) {
         logger.error(

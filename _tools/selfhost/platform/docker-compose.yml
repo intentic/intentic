@@ -172,6 +172,8 @@ services:
             HOSTED_PLAN_PRICE_USD: ${HOSTED_PLAN_PRICE_USD:-}
             # Comma-separated emails that count as on the plan WITHOUT a subscription (comped).
             HOSTED_PLAN_COMP_EMAILS: ${HOSTED_PLAN_COMP_EMAILS:-}
+            # Where the Stripe client sends its calls: Stripe itself unless a test points it at a stand-in.
+            HOSTED_PLAN_STRIPE_API_URL: ${HOSTED_PLAN_STRIPE_API_URL:-}
             # The agent wallet's signer: the credential authenticating this platform to the custody provider
             # that holds a member's wallet. Both empty → /wallet routes 404 and the capability stays pending.
             WALLET_CUSTODY_URL: ${WALLET_CUSTODY_URL:-}

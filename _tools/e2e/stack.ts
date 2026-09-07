@@ -35,6 +35,37 @@ export const DAEMON_IMAGE = process.env[`SANDBOX_E2E_IMAGE`] ?? `ghcr.io/intenti
 export const DAEMON_URL = `http://localhost:18787`;
 export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;
 
+/* STRIPE, STOOD IN FOR (@intentic/testing/stripe-fake): the plan the API is put on sale with when THIS run boots
+ * it, and where the stand-in listens. A fixed port like the daemon's, so the API's env can name it before either
+ * is up. Only an API global-setup started is pointed here; a reused dev API sells whatever its .env says, and
+ * the billing spec stands down on it rather than send a Subscribe to real Stripe. */
+export const FAKE_STRIPE = {
+    origin: `http://127.0.0.1:18789`,
+    port: 18789,
+    secretKey: `sk_test_e2e_browser`,
+    webhookSecret: `whsec_e2e_browser`,
+    priceId: `price_e2e_hosted`,
+};
+
+// What global-setup started, for the teardown and for the specs that only make sense against a stack this run
+// booted (the billing journey).
+export interface StackState {
+    apiPid?: number;
+    webPid?: number;
+    daemonStarted?: boolean;
+    fakeStripe?: boolean;
+}
+
+export const STACK_STATE_FILE = join(import.meta.dirname, `.cache`, `stack-state.json`);
+
+export const readStackState = (): StackState => {
+    try {
+        return JSON.parse(readFileSync(STACK_STATE_FILE, `utf8`)) as StackState;
+    } catch {
+        return {};
+    }
+};
+
 // The public web client id, must match _editor/web/src/environments/environment.local.ts (it keys the cached
 // Google ID token's localStorage slot). Drift shows up as the sign-in gate in every spec's trace.
 const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;

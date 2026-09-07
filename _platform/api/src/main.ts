@@ -9,6 +9,7 @@ import { startHostedBuilds } from "./sandbox/hosted/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
+import { hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
@@ -31,6 +32,13 @@ if (!config.secrets.key) {
 }
 if (!config.email.apiKey || !config.email.from) {
     logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: sandbox invite links will be logged instead of emailed`);
+}
+/* A plan that can take money but cannot hear back from Stripe. Every completed checkout would be charged and
+ * then refused at the webhook (400, bad signature), so nobody who paid would ever be on the plan, and Stripe
+ * would disable the endpoint after three days of retries. Said once at boot, where it can be acted on before
+ * the first buyer meets it. */
+if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
+    logger.error(`HOSTED_PLAN_STRIPE_WEBHOOK_SECRET unset while the hosted plan is on sale: every payment will be taken and no plan will ever activate`);
 }
 
 const prisma = createPrisma(config);

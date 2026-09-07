@@ -26,6 +26,10 @@
         "./e2e": {
             "types": "./src/e2e.ts",
             "default": "./src/e2e.ts"
+        },
+        "./stripe-fake": {
+            "types": "./src/stripe-fake.ts",
+            "default": "./src/stripe-fake.ts"
         }
     },
     "scripts": {

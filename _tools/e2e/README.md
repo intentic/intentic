@@ -14,6 +14,14 @@ hand-mirrored `api-contract` schema that drifts from the daemon fails here.
 - **Workspace upload journey**: picker → upload-diff → XHR upload → tree refetch → daemon disk read-back.
 - **Automations journey**: create-dialog form → daemon manifest → listed back (the mirrored-schema drift guard).
 - **Desktop-sync journey**: Enable → `/system/sync/pair` → the agent one-liner renders.
+- **Billing journey** ([hosted-plan-billing.spec.ts](specs/hosted-plan-billing.spec.ts)): Subscribe → the
+  api's real Stripe client mints a checkout on a **Stripe stand-in** this run starts
+  ([_tools/testing/src/stripe-fake.ts](../testing/src/stripe-fake.ts), pointed at by
+  `HOSTED_PLAN_STRIPE_API_URL`) → Pay → back on `/settings/billing?plan=welcome` before the signed webhook
+  lands → the page polls into "always on"; then the avatar row, a cancel in the portal said as "ends" rather
+  than "renews", a failed charge asking for a card, and an ended plan offering a resubscription. It stands down
+  on a reused dev API (only a stack global-setup booted has the stand-in behind it); the same stand-in drives
+  the api's hermetic tier ([docs/architecture/testing.md](../../docs/architecture/testing.md)).
 
 ## Run
 

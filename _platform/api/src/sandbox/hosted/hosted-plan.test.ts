@@ -127,21 +127,23 @@ describe(`the hosted plan`, () => {
         expect((await app.request(`/webhook`, { method: `POST`, body: `{}` })).status).toBe(404);
     });
 
-    it(`refuses an unsigned webhook and honours a signed subscription lapse`, async () => {
+    it(`refuses an unsigned webhook and honours a signed subscription lapse, read fresh off Stripe`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
-        const gateway = { subscription: vi.fn() } as unknown as StripeGateway;
+        const gateway = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `customer.subscription.deleted`,
-            data: { object: { id: `sub_1`, customer: `cus_1`, status: `canceled`, current_period_end: Math.floor(NOW.getTime() / 1000) } },
+            data: { object: { id: `sub_1`, object: `subscription`, customer: `cus_1`, status: `canceled` } },
         });
 
         const unsigned = await app.request(`/webhook`, { method: `POST`, body: payload });
         expect(unsigned.status).toBe(400);
         expect(plans[0]?.status).toBe(`active`);
+        expect(gateway.subscription).not.toHaveBeenCalled();
 
         const accepted = await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) });
         expect(accepted.status).toBe(200);
+        expect(gateway.subscription).toHaveBeenCalledExactlyOnceWith(`sub_1`);
         expect(plans[0]?.status).toBe(`canceled`);
     });
 
@@ -175,37 +177,50 @@ describe(`the hosted plan`, () => {
      * renew. */
     it(`mirrors a cancellation that has not ended yet`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`, { syncedAt: new Date(NOW.getTime() - 60_000) })] });
-        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, now: () => NOW });
-        const payload = JSON.stringify({
-            type: `customer.subscription.updated`,
-            created: Math.floor(NOW.getTime() / 1000),
-            data: {
-                object: {
-                    id: `sub_1`,
-                    customer: `cus_1`,
-                    status: `active`,
-                    cancel_at_period_end: true,
-                    current_period_end: Math.floor(NOW.getTime() / 1000),
-                    items: { data: [{ id: `si_1`, quantity: 3 }] },
-                },
-            },
-        });
+        const gateway = {
+            subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active`, cancelAtPeriodEnd: true, itemId: `si_1`, quantity: 3 })),
+        } as unknown as StripeGateway;
+        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
+        // The event's own copy is a trimmed one with nothing in it; the state comes from the read.
+        const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription` } } });
         expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
-        expect(plans[0]).toMatchObject({ status: `active`, cancelAtPeriodEnd: true, quantity: 3, stripeItemId: `si_1` });
+        expect(plans[0]).toMatchObject({ status: `active`, cancelAtPeriodEnd: true, quantity: 3, stripeItemId: `si_1`, syncedAt: NOW });
     });
 
-    /* WEBHOOKS ARRIVE IN NO PARTICULAR ORDER. A cancel that landed a minute ago must not be undone by the
-     * "active" event Stripe emitted a minute before it and delivered late. */
-    it(`drops an event older than the state it last applied`, async () => {
+    /* WEBHOOKS ARRIVE IN NO PARTICULAR ORDER, so no event's copy of the subscription is ever mirrored: the
+     * row follows what Stripe says when asked. A cancel that landed a minute ago is therefore not undone by
+     * the "active" event delivered late (the read says canceled), and two deliveries racing each other end on
+     * the newer read, never the one that happened to land last. */
+    it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`canceled`, { syncedAt: NOW })] });
-        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, now: () => NOW });
-        const payload = JSON.stringify({
-            type: `customer.subscription.updated`,
-            created: Math.floor(NOW.getTime() / 1000) - 120,
-            data: { object: { id: `sub_1`, customer: `cus_1`, status: `active`, current_period_end: Math.floor(NOW.getTime() / 1000) } },
-        });
-        expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
+        const gateway = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
+        // The late event still says "active"; what Stripe says now is what gets written.
+        const late = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription`, status: `active` } } });
+        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
+        expect((await app.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
+
+        // A delivery whose read happened two minutes before the row's last write (two handlers racing, this
+        // one slower): its state is stale by construction and is dropped, whatever it says.
+        const active = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })) } as unknown as StripeGateway;
+        const slower = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() - 120_000) });
+        expect((await slower.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
+        expect(plans[0]?.status).toBe(`canceled`);
+
+        // The same read a moment later than the row: applied.
+        const newer = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() + 1) });
+        expect((await newer.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
+        expect(plans[0]?.status).toBe(`active`);
+    });
+
+    it(`acknowledges an event whose object is not a subscription without asking Stripe anything`, async () => {
+        const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
+        const gateway = { subscription: vi.fn() } as unknown as StripeGateway;
+        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
+        const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `in_1`, object: `invoice` } } });
+        expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
+        expect(gateway.subscription).not.toHaveBeenCalled();
+        expect(plans[0]?.status).toBe(`active`);
     });
 });
 

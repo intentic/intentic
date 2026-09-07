@@ -88,7 +88,7 @@ const requirePlanEnabled = (context: OrpcContext): void => {
  * (hosted-plan.routes.ts) is what turns the completed payment into a plan row, so a checkout the user abandons
  * leaves nothing behind. */
 export const hostedPlanRoutes = (gateway?: StripeGateway) => {
-    const stripe = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.hostedPlan.stripeSecretKey);
+    const stripe = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.hostedPlan);
     return {
         state: os.hostedPlan.state.handler(({ context }) => hostedPlanStateOf(context)),
         checkout: os.hostedPlan.checkout.handler(async ({ context }) => {

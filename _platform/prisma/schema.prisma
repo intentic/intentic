@@ -425,8 +425,9 @@ model HostedPlan {
     cancelAtPeriodEnd    Boolean  @default(false)
     // How many hosted sandboxes the plan covers: the item's quantity, one slot each (docs/design/billing-view.md).
     quantity             Int      @default(1)
-    // Stripe's `created` of the event that last wrote this row. Webhooks arrive out of order; an event older
-    // than the last one applied is dropped rather than rolling the mirror back (hosted-plan.ts).
+    // The platform's own clock at the moment the subscription state in this row was read from Stripe. Every
+    // write reads fresh (webhooks arrive out of order and are never trusted for state); a read older than
+    // the last one applied is dropped rather than rolling the mirror back (hosted-plan.ts).
     syncedAt             DateTime @default(now())
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt

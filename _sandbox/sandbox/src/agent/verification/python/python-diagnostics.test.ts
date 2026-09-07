@@ -111,6 +111,34 @@ test("what the ruff gate already said, pyright does not say again — and says w
     ]);
 });
 
+/* AND THE SILENCE IS NARROW. The tests above prove the gate's rule is dropped and that it comes back when the
+ * gate did not run; neither would notice a `dropped` set that had grown to swallow the type half's own
+ * findings along with it, which is the shape this file exists to prevent — a check that reports nothing reads
+ * exactly like a file with nothing wrong. So: the same payload, both findings, one of them the gate's. */
+test("dropping the gate's rule takes nothing else with it", () => {
+    const both = JSON.stringify({
+        generalDiagnostics: [
+            {
+                file: `${WORKSPACE_ROOT}/app/main.py`,
+                severity: "error",
+                message: '"missing_helper" is not defined',
+                range: { start: { line: 1, character: 11 }, end: { line: 1, character: 25 } },
+                rule: "reportUndefinedVariable",
+            },
+            {
+                file: `${WORKSPACE_ROOT}/app/main.py`,
+                severity: "error",
+                message: 'Cannot access attribute "titel" for class "str"',
+                range: { start: { line: 4, character: 4 }, end: { line: 4, character: 9 } },
+                rule: "reportAttributeAccessIssue",
+            },
+        ],
+    });
+    expect(pyrightErrors(both, asIs, droppedRules({ environment: true, gated: true }))).toEqual([
+        '/work/app/main.py:5:5: error reportAttributeAccessIssue: Cannot access attribute "titel" for class "str"',
+    ]);
+});
+
 test("a payload this cannot read is not a clean file", () => {
     // Each of these is a real way the run can end: a tool that printed something else, a version that renamed
     // the field, a process killed mid-write. Every one must answer "could not read" so the caller says the file

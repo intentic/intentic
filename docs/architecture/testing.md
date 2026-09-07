@@ -72,6 +72,7 @@ is useless without:
 | sandbox-daemon | [sandbox.e2e.test.ts](../../_sandbox/sandbox/src/e2e/sandbox.e2e.test.ts) | nothing |
 | cloudflare | [cli.e2e.test.ts](../../_deploy/cli/src/cli.e2e.test.ts) | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ZONE` to pick the zone) |
 | discord | [discord.e2e.test.ts](../../_sandbox/sandbox/src/e2e/discord.e2e.test.ts) | `DISCORD_E2E_BOT_TOKEN` + `_SENDER_TOKEN` + `_CHANNEL_ID`; `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` unlocks the real-agent-turn spec |
+| stripe | [hosted-plan-stripe.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan-stripe.e2e.test.ts) | `HOSTED_PLAN_E2E_STRIPE_SECRET_KEY` (a **test-mode** key; a live one is refused) + `HOSTED_PLAN_E2E_STRIPE_PRICE_ID` (the hosted plan's test-mode price). No Docker: it is the platform's own Stripe client against Stripe |
 
 A tier that is asked to run and finds a credential missing puts the variable's name in its own suite title,
 which is what vitest prints beside the `↓`: so the nightly's log states which tiers ran without anything
@@ -82,9 +83,19 @@ variable absent from `turbo.json` never reaches the suite, however CI is configu
 Two tiers deliberately sit outside that command, each under its own turbo task, and neither declares
 credentials because neither needs any:
 
-- **hermetic** ([hermetic.e2e.test.ts](../../_deploy/cli/src/hermetic.e2e.test.ts), `pnpm e2e:hermetic`): needing no
-  secrets at all is exactly what earns it a run on every merge request rather than nightly, so it reads its
-  own switch and must not wake with the gated ones.
+- **hermetic** (`pnpm e2e:hermetic`): needing no secrets at all is exactly what earns it a run on every merge
+  request rather than nightly, so it reads its own switch and must not wake with the gated ones. Two suites
+  answer to it: the CLI's ([hermetic.e2e.test.ts](../../_deploy/cli/src/hermetic.e2e.test.ts), above) and the
+  hosted plan's ([hosted-plan.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan.e2e.test.ts)),
+  which is the money path as one system: the real api (`createApp`, the real router, Better Auth's real
+  session and deletion hook) on a Postgres testcontainer, with Stripe stood in for by
+  [stripe-fake.ts](../../_tools/testing/src/stripe-fake.ts) at the client's one seam (`HOSTED_PLAN_STRIPE_API_URL`).
+  A checkout the real client encoded, completed on "Stripe", delivered as a signed webhook to the real route,
+  mirrored by the real `updateMany` ordering guard into a real row, and read back as the entitlement the rest
+  of the platform acts on (the wake that was refused is allowed, the offer says "on your plan", the meter comes
+  off); then slots with proration, a cancel in the portal, a failed charge, an ended plan, the same customer
+  buying again, and the account deleted with its subscription. [billing-e2e.md](../design/billing-e2e.md) is
+  the coverage map and the Stripe go-live checklist.
 - **browser** ([_tools/e2e](../../_tools/e2e), `pnpm e2e:browser`): a dev-machine tier. Its whole stack answers on
   `localhost`, and every CI job here drives a docker-in-docker *service* that publishes ports on its own
   namespace, so sharing the `e2e` name only ever swept it into a nightly it could not pass.

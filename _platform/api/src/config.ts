@@ -333,6 +333,11 @@ export const configSchema = z.object({
         .object({
             // The Stripe secret key (sk_… / rk_…). HOSTED_PLAN_STRIPE_SECRET_KEY.
             stripeSecretKey: z.string().default(``).meta({ secret: true }),
+            /* Where the Stripe client sends its calls. Stripe itself by default and in every deployment; the
+             * hermetic and browser e2e tiers point it at a stand-in that speaks Stripe's shapes
+             * (@intentic/testing/stripe-fake), which is what lets the REAL client, webhook, mirror row and
+             * Billing page be driven end to end with no account and no network. HOSTED_PLAN_STRIPE_API_URL. */
+            stripeApiUrl: z.url().default(`https://api.stripe.com/v1`),
             // The signing secret of the /hosted-plan/webhook endpoint (whsec_…), without it subscription
             // events are refused, so a plan that takes money must set it. HOSTED_PLAN_STRIPE_WEBHOOK_SECRET.
             stripeWebhookSecret: z.string().default(``).meta({ secret: true }),

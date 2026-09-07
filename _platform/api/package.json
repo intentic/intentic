@@ -11,7 +11,9 @@
         "spike:build": "bun --env-file=../../.env ./src/spike-hosted-build.ts",
         "typecheck": "tsgo --noEmit",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh api --prune",
-        "test": "vitest run"
+        "test": "vitest run",
+        "e2e": "INTENTIC_E2E=1 vitest run --project integration hosted-plan-stripe.e2e",
+        "e2e:hermetic": "INTENTIC_E2E_HERMETIC=1 vitest run --project integration hosted-plan.e2e"
     },
     "dependencies": {
         "@hono/otel": "catalog:",
@@ -50,6 +52,7 @@
         "@types/pg": "catalog:",
         "@typescript/native-preview": "catalog:",
         "bun": "catalog:",
+        "testcontainers": "catalog:",
         "vitest": "catalog:"
     }
 }

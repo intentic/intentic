@@ -55,6 +55,19 @@ const REFUSAL_CODES = {
     capacity: `SERVICE_UNAVAILABLE`,
 } as const satisfies Record<HostedBuildRefusal, string>;
 
+/* THE FREE LANE'S MONTH IS SPENT, said on the wire. `PAYMENT_REQUIRED` is the platform's own code, not one of
+ * oRPC's, so the status has to be stated: oRPC maps a code it does not know to 500
+ * (`fallbackORPCErrorStatus`), and every user who reached their hour ceiling was therefore answered "internal
+ * server error" — the code still rode the body, so the editor's gate offered the plan correctly and nothing
+ * on screen was wrong, which is why it went unseen. What it cost was the operator's reading of their own
+ * platform: an ordinary, expected refusal, which is the moment the plan is deserved, arrived in the logs and
+ * in any error monitoring as a fault. 402 is what it always meant. */
+const paymentRequired = (message: string): ORPCError<`PAYMENT_REQUIRED`, undefined> => new ORPCError(`PAYMENT_REQUIRED`, { status: 402, message });
+
+// A build's refusal, with the one code above given the status it means.
+const buildRefusal = (code: HostedBuildRefusal, message: string): ORPCError<string, undefined> =>
+    REFUSAL_CODES[code] === `PAYMENT_REQUIRED` ? paymentRequired(message) : new ORPCError(REFUSAL_CODES[code], { message });
+
 // The machine states the browser knows how to narrate, taken FROM the contract so the two can never drift.
 // Anything Fly answers that isn't in here (a state they add, a shape we don't model) becomes `unknown`, which
 // the wait renders as the plain spinner it has always had.
@@ -132,9 +145,9 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
     }
     const budget = await hostedBudgetOf(context.prisma, context.config, userId);
     if (budget.metered && budget.remainingMinutes === 0) {
-        throw new ORPCError(`PAYMENT_REQUIRED`, {
-            message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, the hosted plan lifts the limit, or run it on a machine of your own and it never applies`,
-        });
+        throw paymentRequired(
+            `your ${budget.allowanceMinutes / 60} free hours are used up for this month, the hosted plan lifts the limit, or run it on a machine of your own and it never applies`,
+        );
     }
 };
 
@@ -516,9 +529,7 @@ export const sandboxRoutes = {
         await settleHostedStretch(context.prisma, context.config, context.logger, hosted, sandbox.ownerId);
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
         if (budget.metered && budget.remainingMinutes === 0) {
-            throw new ORPCError(`PAYMENT_REQUIRED`, {
-                message: `your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
-            });
+            throw paymentRequired(`your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
         }
         try {
             const args = {
@@ -578,7 +589,7 @@ export const sandboxRoutes = {
                     // busy day or somebody farming, and an operator wants to know which.
                     context.logger.error({ sandboxId: sandbox.id, ownerId: user.id }, `hosted build: the platform's daily build ceiling was reached`);
                 }
-                throw new ORPCError(REFUSAL_CODES[error.code], { message: error.message });
+                throw buildRefusal(error.code, error.message);
             }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `starting the build failed` });
         }
@@ -618,9 +629,7 @@ export const sandboxRoutes = {
             // Addressed to the person reading it, which on a shared sandbox may not be the account that spent
             // the hours, hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
             // the hosted plan without string-matching a message.
-            throw new ORPCError(`PAYMENT_REQUIRED`, {
-                message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
-            });
+            throw paymentRequired(`this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
         }
         try {
             await wakeHosted(context.config, sandbox.hosted);

@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { repoRoot } from "@intentic/constants/node";
+import { type FakeStripe, startFakeStripe } from "@intentic/testing/stripe-fake";
 import {
     API_URL,
     BETTER_AUTH_SECRET,
@@ -12,12 +13,15 @@ import {
     DAEMON_IMAGE,
     DAEMON_URL,
     DATABASE_URL,
+    FAKE_STRIPE,
     fakeGoogleIdToken,
     GOOGLE_TOKEN_STORAGE_KEY,
     SEED,
     SESSION_COOKIE_NAME,
     seed,
     signedSessionCookie,
+    STACK_STATE_FILE,
+    type StackState,
     WEB_URL,
 } from "./stack.js";
 
@@ -66,7 +70,7 @@ const spawnServer = (name: string, command: string, args: string[], cwd: string,
 
 export default async (): Promise<void> => {
     mkdirSync(cacheDir, { recursive: true });
-    const state: { apiPid?: number; webPid?: number; daemonStarted?: boolean } = {};
+    const state: StackState = {};
 
     // Postgres + schema. Compose is idempotent; a CI-provided postgres just makes this a no-op that fails soft.
     await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: root }).catch(() => undefined);
@@ -101,6 +105,20 @@ export default async (): Promise<void> => {
 
     // The API (bun, https via the minted cert, the exact dev shape, so the session cookie is __Secure-).
     if (!(await up(`${API_URL}/api/auth/ok`))) {
+        /* Stripe, stood in for, in THIS process: it outlives global-setup because the runner does, and the
+         * teardown closes it. Webhooks go to the API's https port over the same loopback the browser uses; the
+         * checkout page holds `checkout.session.completed` back a few seconds after sending the browser home,
+         * which is the production shape (the redirect wins the race) and what the Billing page's polling is for. */
+        const fakeStripe = await startFakeStripe({
+            port: FAKE_STRIPE.port,
+            secretKey: FAKE_STRIPE.secretKey,
+            webhookSecret: FAKE_STRIPE.webhookSecret,
+            webhookUrl: `${API_URL}/hosted-plan/webhook`,
+            checkoutWebhookDelayMs: 5_000,
+        });
+        (globalThis as { intenticFakeStripe?: FakeStripe }).intenticFakeStripe = fakeStripe;
+        state.fakeStripe = true;
+
         state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(root, `_platform/api`), {
             DATABASE_URL,
             BETTER_AUTH_SECRET,
@@ -113,6 +131,11 @@ export default async (): Promise<void> => {
             API_HTTPS_KEY: LEAF_KEY,
             API_HTTPS_CERT: LEAF_CRT,
             LOG_PRETTY: `false`,
+            // The hosted plan on sale, against the stand-in above (stack.ts FAKE_STRIPE).
+            HOSTED_PLAN_STRIPE_SECRET_KEY: FAKE_STRIPE.secretKey,
+            HOSTED_PLAN_STRIPE_WEBHOOK_SECRET: FAKE_STRIPE.webhookSecret,
+            HOSTED_PLAN_STRIPE_PRICE_ID: FAKE_STRIPE.priceId,
+            HOSTED_PLAN_STRIPE_API_URL: fakeStripe.url,
         });
         await waitUp(`${API_URL}/api/auth/ok`, `api`, join(cacheDir, `api.log`), 60_000);
     }
@@ -123,7 +146,7 @@ export default async (): Promise<void> => {
         await waitUp(WEB_URL, `web`, join(cacheDir, `web.log`), 120_000);
     }
 
-    writeFileSync(join(cacheDir, `stack-state.json`), JSON.stringify(state));
+    writeFileSync(STACK_STATE_FILE, JSON.stringify(state));
 
     // Seed, then prove the cookie recipe against the real server BEFORE any spec runs, a Better Auth upgrade
     // that changes the signing fails here with a clear message, not as a blank login page in every spec.
