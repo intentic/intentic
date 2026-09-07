@@ -14,6 +14,7 @@ import {
     markSubjectBreaking,
     MAX_NOTE_LENGTH,
     MAX_SUBJECT_LENGTH,
+    parsableMessage,
     type RepoDiff,
 } from "./commit-message.js";
 
@@ -313,6 +314,39 @@ test("a breaking marker written ahead of the scope is moved rather than left for
     expect(cleanCommitSubject("feat(git): bulk verbs take a scope")).toBe("feat(git): bulk verbs take a scope");
 });
 
+/* THE SAME SPELLING, CAUGHT AT THE OTHER END. The repair above guards only what this daemon DRAFTS, and the
+ * commit box records whatever is in it: a message drafted before that repair existed and still sitting on an
+ * agent's card, an extension's, one a person typed around a marker they put on the wrong side of the scope.
+ * Each of those reached git unread and came back as "subject may not be empty; type may not be empty" — the
+ * verdict commitlint gives when its parser finds no header at all, about a line that plainly has one. */
+test("the commit seam repairs the header spellings a conventional parser cannot read, and nothing else", () => {
+    // The marker ahead of the scope, with everything under the subject carried through as written.
+    expect(parsableMessage("feat!(git): bulk verbs use GitTarget scope")).toBe("feat(git)!: bulk verbs use GitTarget scope");
+    expect(parsableMessage("feat!(git): bulk verbs\n\nRelease-Note: You can stage and commit in one step.")).toBe(
+        "feat(git)!: bulk verbs\n\nRelease-Note: You can stage and commit in one step.",
+    );
+    // A colon with no space after it: the other spelling that parses as no header at all, and earns the same
+    // unreadable pair of findings.
+    expect(parsableMessage("feat(git):bulk verbs take a scope")).toBe("feat(git): bulk verbs take a scope");
+    // A type outside the prescribed set is still a header when a scope or a marker says one was meant. Repairing
+    // it is what turns its refusal into `type-enum`, a verdict that names the actual problem.
+    expect(parsableMessage("update!(api): drop the legacy token route")).toBe("update(api)!: drop the legacy token route");
+
+    /* AND WHAT IT MUST NOT TOUCH. Every rule below earns an accurate, actionable verdict from the hook, so the
+     * message stays the author's: this daemon does not get to lower somebody's capital or strip their full stop,
+     * and it cannot know which of those rules a given repo even enforces (commitlint.config.ts). */
+    expect(parsableMessage("Feat(git): Bulk verbs take a scope.")).toBe("Feat(git): Bulk verbs take a scope.");
+    expect(parsableMessage("feat(git): bulk verbs take a scope")).toBe("feat(git): bulk verbs take a scope");
+    // Not a conventional header, however much it looks like a word in front of a colon. Rewriting this one to
+    // `http: //host is down again` would be the repair inventing a convention nobody asked for.
+    expect(parsableMessage("http://host is down again")).toBe("http://host is down again");
+    expect(parsableMessage("Merge branch 'main' into topic")).toBe("Merge branch 'main' into topic");
+    // An empty subject is not a spelling problem: `subject-empty` is then simply true, and being told so is the
+    // useful answer.
+    expect(parsableMessage("feat(git):")).toBe("feat(git):");
+    expect(parsableMessage("")).toBe("");
+});
+
 test("a name leading the subject keeps its spelling instead of being mangled to fit the case rule", () => {
     /* THE FAILURE THIS EXISTS FOR, verbatim: the prompt tells the drafter to name things as the code spells
      * them, and `subject-case` reads a capital first letter as sentence-case and refuses the commit. Lowering
@@ -461,6 +495,28 @@ test("reads the note off the reply, and says so when there isn't one", () => {
     expect(cleanReleaseNote('feat: x\n\nRelease-Note: "Your models stay put."')).toBe("Your models stay put.");
     // A model that leads with the note has still answered correctly, in the other order.
     expect(cleanReleaseNote("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("Your models stay put.");
+});
+
+test("a note past the ceiling is cut where a word ends, and says that it was cut", () => {
+    /* THE FAILURE, VERBATIM, off a real commit box: the store's ceiling is a hard slice (agents-registry.ts,
+     * sanitizeLine), so a breaking sentence the cheap rung wrote past the ask arrived ending "…, GitStageSchema,
+     * and numer" — half a word, in the one place where the sentence is everything a reader gets: a changelog
+     * bullet, and the warning on an update card. */
+    const long = `API clients must use GitTarget, GitIndexMoveSchema, and truncated staged/unstaged counts instead of RepoPaths, CommitSchema.all/paths, GitStageSchema, and numeric side totals.`;
+    const clipped = cleanBreakingNote(`feat(git)!: bulk verbs take a scope\n\nBreaking-Note: ${long}`);
+    expect(clipped.length).toBeLessThanOrEqual(MAX_NOTE_LENGTH);
+    // What survives is a prefix of the sentence ending on a whole word, with the mark that says there was more.
+    expect(clipped.endsWith("…")).toBe(true);
+    expect(long.startsWith(clipped.slice(0, -1))).toBe(true);
+    expect(long.slice(clipped.length - 1)).toMatch(/^[\s\p{P}]/u);
+    // Emphatically not where the hard slice landed, which is the whole point of the clip.
+    expect(clipped).not.toContain("numer");
+    expect(clipped).toContain("GitStageSchema");
+    // The release note answers to the same ceiling and the same cut.
+    expect(cleanReleaseNote(`feat: x\n\nRelease-Note: ${long}`).endsWith("…")).toBe(true);
+    // A sentence that fits is left exactly as it was written: no mark, nothing to explain.
+    const fits = `You can stage and commit every pending change in one step, including files not shown in the changes list.`;
+    expect(cleanReleaseNote(`feat: x\n\nRelease-Note: ${fits}`)).toBe(fits);
 });
 
 test("a note-first reply still yields the subject, not the note", () => {

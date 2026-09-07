@@ -257,10 +257,11 @@ const renderBlocks = (blocks: readonly PatchBlock[], budget: number): string => 
 // counts as a type.
 const TYPES = [`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`, `style`, `revert`] as const;
 
-/* HOW LONG A NOTE MAY BE, one number, read by both halves of the mechanism: the prompt below asks for a
- * sentence that fits it, and the store cuts anything that does not (agents/agents-registry.ts, sanitizeNote).
- * Sharing it is the whole point. A ceiling the model is never told about is one it cannot spend well, and the
- * two numbers disagreeing is what published notes ending mid-word.
+/* HOW LONG A NOTE MAY BE, one number, read by every part of the mechanism: the prompt below asks for a sentence
+ * that fits it, the reader clips a longer one on a word boundary (clipNote), and the store's own slice is the
+ * backstop behind that (agents/agents-registry.ts, sanitizeNote). Sharing it is the whole point. A ceiling the
+ * model is never told about is one it cannot spend well, and the two numbers disagreeing is what published notes
+ * ending mid-word.
  *
  * 160 characters is a full sentence in a changelog bullet and on an update card, and roughly half of what the
  * cheap rung writes when nothing bounds it, which is the shorter, plainer note this is for. */
@@ -541,11 +542,32 @@ const clipSubject = (subject: string): string => {
     return (boundary === -1 ? cut : cut.slice(0, boundary)).replace(/[\p{P}\s]+$/u, ``);
 };
 
+/* AND A NOTE CUT THE SAME WAY, which the subject has had and the two sentences beside it have not. The store's
+ * ceiling is a hard slice (agents-registry.ts, sanitizeLine), so a note that ran long arrived in the commit box
+ * severed at exactly 160 characters, mid-word: `…, GitStageSchema, and numer`. It then reads as a sentence
+ * somebody fumbled, in the one place a sentence is all there is — a changelog bullet, an update card's warning.
+ *
+ * The prompt asks for a sentence that fits (MAX_NOTE_LENGTH is stated in it); this is what happens when the
+ * cheap rung writes past the ask anyway, which it does. Clipped HERE, where the note is read off the reply, so
+ * the store's slice becomes the backstop it is for the subject rather than the working limit.
+ *
+ * WITH AN ELLIPSIS, unlike the subject, because these are different kinds of line: a subject that stops early
+ * still reads as a subject, while prose that simply stops reads as prose that was cut. The mark costs one
+ * character of the budget, so the cut is made one short of it and the result still fits what the store keeps. */
+const clipNote = (note: string): string => {
+    if (note.length <= MAX_NOTE_LENGTH) {
+        return note;
+    }
+    const cut = note.slice(0, MAX_NOTE_LENGTH - 1);
+    const boundary = cut.lastIndexOf(` `);
+    return `${(boundary === -1 ? cut : cut.slice(0, boundary)).replace(/[\p{P}\s]+$/u, ``)}…`;
+};
+
 /* The header taken apart so the repairs above land on the SUBJECT rather than on the `feat(scope):` in front of
- * it. Rebuilt with a lowercase type, the breaking marker in the one position git tooling reads it in, and
- * exactly one space after the colon, which is `type-case` and `header-trim` for free. A reply with no
- * conventional type has no parts to take apart and is only clipped: the hook refuses it whatever this did, and
- * half-fixing it would hide which rung wrote it.
+ * it — and taken apart ONCE, because this file now has two readers of a header (the drafter's repair below, and
+ * the commit seam's after it) and a second regex is how the two would come to disagree about what a header is.
+ * The type comes back spelled as it was written; what to do about a `Feat` is the reader's call, and only one of
+ * them is entitled to rewrite one.
  *
  * THE MARKER IS READ ON EITHER SIDE OF THE SCOPE, though only one side is legal. Conventional Commits puts the
  * `!` last, `feat(git)!:`, and the prompt's own example carries no scope to put it after (`feat!:`), so a model
@@ -557,17 +579,78 @@ const clipSubject = (subject: string): string => {
  *
  * So the marker is accepted where it was written and emitted where it belongs. Its MEANING was never in doubt
  * (this change breaks something), and that is the part a repair must not lose. */
-const HEADER = new RegExp(String.raw`^(${TYPES.join(`|`)})(!?)(\([^)]*\))?(!?):\s*(.*)$`, `iu`);
+const HEADER = /^(\w+)(!?)(\([^)]*\))?(!?)\s*:\s*(.*?)\s*$/u;
 
-export const conventionalSubject = (header: string): string => {
-    const parts = HEADER.exec(header);
+interface HeaderParts {
+    readonly type: string;
+    // The scope with its parentheses, `(git)`, or empty: this is only ever passed through, never read into.
+    readonly scope: string;
+    // `!` when the marker was written on either side of the scope, empty when there was none.
+    readonly breaking: string;
+    readonly text: string;
+}
+
+const headerParts = (header: string): HeaderParts | undefined => {
+    const parts = HEADER.exec(header.trim());
     if (parts === null) {
-        return clipSubject(header);
+        return undefined;
     }
     const [, type = ``, aheadOfScope = ``, scope = ``, afterScope = ``, text = ``] = parts;
-    const breaking = aheadOfScope === `` && afterScope === `` ? `` : `!`;
-    const cased = isShout(text) ? text.toLowerCase() : leadingCase(text);
-    return clipSubject(`${type.toLowerCase()}${scope}${breaking}: ${cased.replace(TRAILING_STOP, ``)}`);
+    return { type, scope, breaking: aheadOfScope === `` && afterScope === `` ? `` : `!`, text };
+};
+
+// One spelling out, whatever spelling came in: the marker after the scope, and exactly one space after the
+// colon. Those two are `header-trim` and, more to the point, the whole difference between a header a
+// conventional parser reads and one it does not see at all.
+const spellHeader = (parts: HeaderParts): string => `${parts.type}${parts.scope}${parts.breaking}: ${parts.text}`;
+
+// The prescribed set, matched case-insensitively: a capitalised type is a spelling of a known type, not an
+// unknown one, and reading it as unknown is what would leave `Feat!(api):` unrepaired.
+const isConventionalType = (type: string): boolean => TYPES.some((known) => known === type.toLowerCase());
+
+export const conventionalSubject = (header: string): string => {
+    const parts = headerParts(header);
+    // A reply with no conventional type has no parts worth taking apart and is only clipped: the hook refuses it
+    // whatever this did, and half-fixing it would hide which rung wrote it.
+    if (parts === undefined || !isConventionalType(parts.type)) {
+        return clipSubject(header);
+    }
+    const cased = isShout(parts.text) ? parts.text.toLowerCase() : leadingCase(parts.text);
+    // The drafter's own header, so the type is lowered and the sentence is put right: this is the one reader
+    // entitled to rewrite what a model wrote.
+    return clipSubject(spellHeader({ ...parts, type: parts.type.toLowerCase(), text: cased.replace(TRAILING_STOP, ``) }));
+};
+
+/* THE SAME REFUSAL, CAUGHT WHERE A MESSAGE BECOMES A COMMIT (git.routes.ts, the commit route), because the
+ * repair above only ever guards the messages this daemon DRAFTS and the commit box records whatever is in it: a
+ * message drafted before that repair existed and still sitting on an agent's card, one an extension filed, one
+ * the user typed by hand around a marker they put on the wrong side of the scope. Every one of those reached git
+ * unread, and came back as the verdict nobody can act on.
+ *
+ * WHAT IS REPAIRED HERE IS ONLY WHAT A PARSER CANNOT READ, a far narrower set than the drafter's: the `!` ahead
+ * of the scope, and a colon with no space after it (`feat:no space`). Both make conventional-commits-parser find
+ * no header at all, so commitlint answers "subject may not be empty; type may not be empty" about a line that
+ * plainly has both. Every other rule earns an ACCURATE verdict — `type must be lower-case`, `subject may not end
+ * with a full stop` — and those stay the message's author's to fix. This daemon does not get to lower a capital
+ * or strip a full stop out of a sentence a person typed, and it cannot know which of those rules the repo even
+ * enforces: a subject may lead with an identifier here and may not one directory over (commitlint.config.ts).
+ *
+ * A first line it cannot recognise as a conventional header comes back untouched, and the recognition is
+ * deliberately narrow — a known type, or a scope or a marker saying a header was meant. `http://host is down` is
+ * also a word, a colon and some text, and rewriting it to `http: //host is down` would be this repair inventing
+ * a convention for a repo that never asked for one. */
+export const parsableMessage = (message: string): string => {
+    const [header = ``, ...body] = message.split(`\n`);
+    const parts = headerParts(header);
+    if (parts === undefined || !(isConventionalType(parts.type) || parts.scope !== `` || parts.breaking !== ``)) {
+        return message;
+    }
+    // An empty subject is not a spelling problem, it is the message being unfinished, and `subject-empty` is then
+    // the truth: leave it to be told rather than rebuilding a header around nothing.
+    if (parts.text === ``) {
+        return message;
+    }
+    return [spellHeader(parts), ...body].join(`\n`);
 };
 
 // The subject: the first line of the message proper, unwrapped and then made committable. Skipping the note
@@ -596,14 +679,14 @@ export const cleanCommitSubject = (reply: string): string => {
 // three notes about one commit would reach the changelog as three entries.
 export const cleanReleaseNote = (reply: string): string => {
     const line = replyLines(reply).find((candidate) => startsWithTrailer(candidate, RELEASE_NOTE_TRAILER));
-    return line === undefined ? `` : unwrap(line.slice(RELEASE_NOTE_TRAILER.length));
+    return line === undefined ? `` : clipNote(unwrap(line.slice(RELEASE_NOTE_TRAILER.length)));
 };
 
 // The breaking sentence, if the model wrote one, empty for every change that takes nothing away, which is
 // nearly all of them. First only, same as the note: one landing breaks one way or the model has misread it.
 export const cleanBreakingNote = (reply: string): string => {
     const line = replyLines(reply).find((candidate) => startsWithTrailer(candidate, BREAKING_NOTE_TRAILER));
-    return line === undefined ? `` : unwrap(line.slice(BREAKING_NOTE_TRAILER.length));
+    return line === undefined ? `` : clipNote(unwrap(line.slice(BREAKING_NOTE_TRAILER.length)));
 };
 
 /* THE TWO ENFORCERS BEHIND THE FORCED CASE, what turns "the prompt demanded it" into "the draft carries it".
@@ -628,5 +711,7 @@ export const markSubjectBreaking = (subject: string): string => clipSubject(subj
 export const fallbackBreakingNote = (removedSurfaces: readonly string[]): string => {
     const names = [...new Set(removedSurfaces.map((surface) => surface.split(`.`)[0]))].join(`, `);
     const sentence = `The wire contract no longer offers what it did under ${names}. Anything reading those surfaces must stop relying on them.`;
-    return sentence.length <= MAX_NOTE_LENGTH ? sentence : `${sentence.slice(0, MAX_NOTE_LENGTH - 1)}…`;
+    // Through the same clip every written note answers to, so a shrink that names twenty schemas ends on a whole
+    // one rather than halfway through its name.
+    return clipNote(sentence);
 };

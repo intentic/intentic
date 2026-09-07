@@ -75,7 +75,11 @@ const cannotBeAName = (title: string): boolean => isFailureSentence(title) || is
  * ending mid-word ("…versus addin").
  *
  * The ceiling itself belongs to the prompt that writes these (git/commit-message.ts), which asks for a sentence
- * that fits it. One number, so a note is never cut at a length nothing asked it to respect. */
+ * that fits it. One number, so a note is never cut at a length nothing asked it to respect.
+ *
+ * A BACKSTOP rather than the working limit, exactly as it is for a subject below: the reader clips a long note
+ * on a word boundary before it is stored (clipNote), because THIS cut is a hard slice and a hard slice is what
+ * filed a breaking warning ending "…, GitStageSchema, and numer" into a commit box. */
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
 
 /* A DRAFTED SUBJECT IS NOT A TITLE, and giving it the title's ceiling is what cut one in half.

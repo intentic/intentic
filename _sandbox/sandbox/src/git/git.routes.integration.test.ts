@@ -231,6 +231,38 @@ test("git.commit records the index, staging the whole repo first when the target
     ]);
 });
 
+/* THE ONE REPAIR THE COMMIT ROUTE MAKES TO A MESSAGE, and the dead end it ends. `feat!(git): …` is not a
+ * conventional header — the `!` belongs after the scope — so a commit-msg hook answers "subject may not be
+ * empty; type may not be empty" about a line that visibly has both, and the panel prints that over a message
+ * nothing on screen says is wrong. The box takes messages this daemon never wrote (a draft stored before the
+ * drafter's own repair existed, an extension's, a hand-typed one), so the seam is where it has to be caught. */
+test("git.commit files a message a conventional parser can read, and leaves the rest of it alone", async () => {
+    const workspace = tempWorkspace([]);
+    const filed: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    commitIndex: async (_dir, message) => {
+                        filed.push(message);
+                        return true;
+                    },
+                },
+            }),
+        ),
+    );
+    await client.git.commit({ repo: "root", message: "feat!(git): bulk verbs take a scope\n\nRelease-Note: Commit everything in one step." });
+    await client.git.commit({ repo: "root", message: "Feat(git): Bulk verbs take a scope." });
+    expect(filed).toEqual([
+        "feat(git)!: bulk verbs take a scope\n\nRelease-Note: Commit everything in one step.",
+        // A capitalised type and a full stop earn verdicts that name themselves, so they travel to the hook as
+        // the user typed them: this route repairs what cannot be READ, never what it disagrees with.
+        "Feat(git): Bulk verbs take a scope.",
+    ]);
+});
+
 // Paths and a scope together is a caller that has not decided which it means; preferring either silently would
 // make the other a lie, so the contract refuses it before any git runs.
 test("git actions refuse a target that names both paths and a scope", async () => {

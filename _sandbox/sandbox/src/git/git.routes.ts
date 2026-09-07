@@ -23,6 +23,7 @@ import type { ActionResult } from "./changes/changes-commits.js";
 import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
+import { parsableMessage } from "./ops/commit-message.js";
 import { createPushRuns } from "./ops/push-run.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
@@ -680,7 +681,15 @@ export const createGitRoutes = (services: Services) => {
                         if (input.stage !== undefined) {
                             await stageTarget(input.repo, dir, input.stage);
                         }
-                        const committed = await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
+                        /* THE MESSAGE AS A HOOK CAN AT LEAST READ IT (ops/commit-message.ts, parsableMessage).
+                         * Only the spellings that stop a conventional parser finding a header at all are put
+                         * right here — a `!` ahead of the scope, a colon with no space after it — because those
+                         * are the ones whose refusal says "subject may not be empty; type may not be empty"
+                         * about a line that visibly has both, and no amount of retrying gets a user past a
+                         * verdict that describes nothing they can see. Every other rule this repo (or any other)
+                         * enforces earns an accurate verdict and reaches the panel unchanged: the message is the
+                         * user's, and this is the one class of defect where refusing it teaches them nothing. */
+                        const committed = await services.git.commitIndex(dir, parsableMessage(input.message), AGENT_GIT_AUTHOR);
                         invalidateScan();
                         /* AND WHAT THE REPO LOOKS LIKE NOW, still inside the lock, the panel's replacement for
                          * the workspace-wide rescan it used to fire the moment this returned. One repo's rows
