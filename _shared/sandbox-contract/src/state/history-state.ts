@@ -76,6 +76,17 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // Explicit first-time dependency setup requests. Carrying the worklist preserves the owner's decision when
     // an export interrupts the queue before its terminal starts; fulfilled entries remove themselves.
     { path: "dependency-requests.json", portability: "carry" },
+    /* WHICH SETUP-TIME DEVICE CARDS THIS SANDBOX HAS ALREADY OFFERED (hosts/host-seed.ts). Carried for
+     * capability-dismissals.json's reason: it records a decision, and the decision is usually "no". The file
+     * exists so that deleting the installer's device card sticks instead of coming back at the next boot, and an
+     * export that left it behind would put that card back on the target — the one outcome it is for. It travels
+     * beside the cards themselves, `.intentic/config/capabilities.json` being `carry` too, so the pair stays
+     * coherent either way the owner left it.
+     *
+     * Not `identity`, unlike host-pair-consumed.json below, and the difference is the point of both entries:
+     * that one is a burn list over pairing TOKENS, where carrying it would mark the target's own fresh pairing
+     * as already spent. This holds capability ids — machine names — and no token at all. */
+    { path: "host-setup-seeded.json", portability: "carry" },
     // The deploy engine's own ledgers, a run's events and the check results the Pipelines view reads back.
     { path: "apply-events.ndjson", portability: "carry" },
     { path: "check-events/", portability: "carry" },

@@ -52,13 +52,17 @@ beforeEach(() => {
     kept.length = 0;
 });
 
+/* The whole class list, not a substring of it. `italic` is six characters that `not-italic` also contains, and
+ * the slant is only readable because `pr-[0.2em]` gives the last glyph the room `truncate` would otherwise clip
+ * (FileTabs.vue says the same beside the span). Pinning the list is what makes a restyle that drops either one
+ * fail here instead of passing on a match inside some other utility. */
 it(`draws the peeked tab in italic and leaves the kept ones upright`, async () => {
     preview.value = `src/peeked.ts`;
 
     await mountStrip();
 
-    expect(labelOf(`peeked.ts`).className).toContain(`italic`);
-    expect(labelOf(`kept.ts`).className).not.toContain(`italic`);
+    expect(labelOf(`peeked.ts`).className).toBe(`max-w-40 truncate pr-[0.2em] italic`);
+    expect(labelOf(`kept.ts`).className).toBe(`max-w-40 truncate`);
 });
 
 // The italic says the tab is going away; the tooltip is the only room the strip has to say what stops that.
@@ -86,5 +90,5 @@ it(`asks to keep the tab that was double-clicked`, async () => {
 it(`draws every tab upright when nothing is being peeked at`, async () => {
     await mountStrip();
 
-    expect(labelOf(`peeked.ts`).className).not.toContain(`italic`);
+    expect(labelOf(`peeked.ts`).className).toBe(`max-w-40 truncate`);
 });
