@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
-import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
+import type { GrantedRole } from "@intentic/sandbox-contract";
 import {
     Avatar,
     Button,
@@ -13,6 +13,8 @@ import {
     RowGroup,
     RowNote,
     SkeletonRows,
+    StatusBadge,
+    type StatusVariant,
     ui,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -81,7 +83,6 @@ const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
         hint: `Can operate everything the owner can. The owner can revoke this access; the owner can't be revoked.`,
     },
 ];
-const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
@@ -102,10 +103,14 @@ const { inventory, loading: inventoryLoading } = useAccessInventory();
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
 const webhooksLine = computed(() =>
-    inventory.value.webhooks === undefined ? `Not readable right now.` : `${plural(inventory.value.webhooks, `event automation`, `event automations`)}, each with its own webhook URL and token. Rotate or remove one on its row in Automations.`,
+    inventory.value.webhooks === undefined
+        ? `Not readable right now.`
+        : `${plural(inventory.value.webhooks, `event automation`, `event automations`)}, each with its own webhook URL and token. Rotate or remove one on its row in Automations.`,
 );
 const gatesLine = computed(() =>
-    inventory.value.gates === undefined ? `Not readable right now.` : `${plural(inventory.value.gates, `gated workflow`, `gated workflows`)}, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel.`,
+    inventory.value.gates === undefined
+        ? `Not readable right now.`
+        : `${plural(inventory.value.gates, `gated workflow`, `gated workflows`)}, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel.`,
 );
 const ciLine = computed(() => {
     const repos = inventory.value.ciRepos;
@@ -129,14 +134,21 @@ const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 
-const badge = (status: InviteRecord["status"]): { label: string; class: string } => {
-    if (status === `accepted`) {
-        return { label: `Member`, class: `bg-primary-600/15 text-link` };
-    }
-    if (status === `expired`) {
-        return { label: `Expired`, class: `bg-danger/10 text-danger` };
-    }
-    return { label: `Pending`, class: `bg-overlay text-muted` };
+/* WHERE THIS ROSTER'S PILLS COME FROM, and the reason they are not written here any more. Five spans on this
+ * tab each spelled out `rounded-full … px-1.5 py-0.5 text-2xs font-semibold` and each capitalised its word, so
+ * Access was the one surface in the app whose chips read "Owner" and "Member" against the lowercase "pending",
+ * "packing", "invalid" every other list draws — same shape, one weight heavier, and a capital nothing else
+ * capitalises. <StatusBadge> owns the radius, the tint, the size and the casing (its header says so), which is
+ * exactly the set of decisions a call site kept getting a little bit wrong.
+ *
+ * THE TONE IS THE SEVERITY RAMP, not a role palette. An accepted member is the ordinary case and stays quiet;
+ * the two states that are WAITING on something — an invite not taken up, an invite that died — are the ones
+ * worth colour in a list you scan for exceptions. `owner` is the only tinted constant, because it is the one
+ * row on the roster that has no picker and no revoke button beside it. */
+const STATUS: Record<InviteRecord["status"], { label: string; variant: StatusVariant; dot: boolean }> = {
+    accepted: { label: `member`, variant: `neutral`, dot: false },
+    pending: { label: `pending`, variant: `info`, dot: true },
+    expired: { label: `expired`, variant: `danger`, dot: false },
 };
 
 /* THE FIRST READ ONLY, and only the one on mount. Every other call here follows a write whose response IS the
@@ -371,9 +383,7 @@ const revoke = async (target: string): Promise<void> => {
         <RowGroup label="Access">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
-                    <template #meta>
-                        <span class="rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
-                    </template>
+                    <template #meta><StatusBadge variant="primary" label="owner" size="xs" /></template>
                 </Row>
                 <div v-if="listing" role="status" aria-busy="true">
                     <template v-if="outline">
@@ -382,6 +392,20 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                 </div>
                 <Row v-for="member in members" :key="member.email" icon="user" :title="member.email">
+                    <!-- WHERE IT WAS BEFORE THE ROW HAD SLOTS: the invite's state used to sit in `#control`,
+                         wedged between the role picker and the Revoke button. It is a FACT, not an action —
+                         nothing about it is pressable — and <Row> keeps the two apart on purpose (facts are
+                         muted, tabular and never focusable; actions carry their own hit area). In the right
+                         slot it also lands ahead of the controls, so the roster reads as one column of states
+                         down the list with the buttons ranged after it, instead of a pill hiding in a toolbar. -->
+                    <template #meta>
+                        <StatusBadge
+                            :variant="STATUS[member.status].variant"
+                            :label="STATUS[member.status].label"
+                            :dot="STATUS[member.status].dot"
+                            size="xs"
+                        />
+                    </template>
                     <template #control>
                         <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
                          tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box:
@@ -397,9 +421,6 @@ const revoke = async (target: string): Promise<void> => {
                             :header="`Role for ${member.email}`"
                             @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
                         />
-                        <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
-                            badge(member.status).label
-                        }}</span>
                         <Button
                             v-if="member.status !== 'accepted'"
                             label="Resend"
@@ -426,7 +447,16 @@ const revoke = async (target: string): Promise<void> => {
                         <form class="flex flex-col gap-1.5" @submit.prevent="invite">
                             <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
                              is a refinement on that row. Collaborator preselected; the picker's own hints teach
-                             the model without sitting between two unrelated controls. -->
+                             the model without sitting between two unrelated controls.
+
+                             AND ALL THREE ARE THE COMPACT TIER, which is what the surface asks for. This form is
+                             the footer of a LIST, under rows whose own controls are 26px, and it was drawn at the
+                             page size: a 38px field, a 38px picker and a 38px Invite standing in a group of
+                             compact rows, which is what made this the one tab in the app with big buttons on it.
+                             Size is the surface's answer, not the call site's (ui.ts), and `ui.inputSm` is the
+                             button's `small` one control over, so the three boxes line up to the pixel rather
+                             than sitting two apart. The picker takes `ui-field-sm` for the same reason: its
+                             bordered trigger IS `ui-field-box`, so it shrinks by the same rule. -->
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 <input
                                     v-model="email"
@@ -434,7 +464,7 @@ const revoke = async (target: string): Promise<void> => {
                                     autocomplete="off"
                                     placeholder="teammate@example.com"
                                     :class="[
-                                        ui.input('min-w-0 sm:flex-1'),
+                                        ui.inputSm('min-w-0 sm:flex-1'),
                                         emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
                                             ? 'ui-field-error-box'
                                             : '',
@@ -449,11 +479,12 @@ const revoke = async (target: string): Promise<void> => {
                                         :disabled="busy"
                                         aria-label="Invite role"
                                         header="Invite as"
-                                        class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                                        class="ui-field-sm min-w-0 flex-1 sm:w-36 sm:flex-none"
                                     />
                                     <Button
                                         type="submit"
                                         label="Invite"
+                                        size="small"
                                         :loading="busy"
                                         :disabled="busy || !validEmail(email.trim().toLowerCase())"
                                         class="shrink-0"
@@ -474,10 +505,8 @@ const revoke = async (target: string): Promise<void> => {
             <template v-else>
                 <Row icon="user" :title="user?.email">
                     <template #meta>
-                        <span class="rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">{{
-                            roleLabel(sandbox.active.value?.role ?? `viewer`)
-                        }}</span>
-                        <span class="rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-semibold text-subtle">You</span>
+                        <StatusBadge variant="primary" :label="sandbox.active.value?.role ?? `viewer`" size="xs" />
+                        <StatusBadge variant="neutral" label="you" size="xs" />
                     </template>
                 </Row>
                 <RowNote>Only the sandbox owner can invite people or change roles.</RowNote>
@@ -499,7 +528,7 @@ const revoke = async (target: string): Promise<void> => {
         <RowGroup v-if="isOwner" label="Signed-in browsers">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" title="This browser" :description="thisBrowser">
-                <template #meta><span class="text-success">Signed in</span></template>
+                <template #meta><StatusBadge variant="success" label="signed in" size="xs" /></template>
             </Row>
 
             <!-- The empty list, explained where the reader asks about it, rather than left as a blank surface. -->
@@ -556,7 +585,11 @@ const revoke = async (target: string): Promise<void> => {
                 <Row icon="bolt" title="Webhooks" :description="webhooksLine" />
                 <Row icon="shield" title="Release gates" :description="gatesLine" />
                 <Row icon="sitemap" title="CI notifications" :description="ciLine" />
-                <Row icon="desktop" title="Paired devices and runners" description="Each holds its own enrollment key, revoked per device on Devices." />
+                <Row
+                    icon="desktop"
+                    title="Paired devices and runners"
+                    description="Each holds its own enrollment key, revoked per device on Devices."
+                />
             </template>
         </RowGroup>
 
@@ -578,7 +611,7 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                     <template #meta>
                         <!-- The role rides presence: who may do what is a fact every member gets to see. -->
-                        <span class="rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{ roleLabel(member.role) }}</span>
+                        <StatusBadge variant="neutral" :label="member.role" size="xs" />
                         <span v-if="member.idle">idle</span>
                     </template>
                 </Row>

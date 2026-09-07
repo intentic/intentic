@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CONTROL_SCOPE_REACH, type ControlScope } from "@intentic/sandbox-contract";
-import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -67,7 +67,11 @@ const EXPIRY_OPTIONS: readonly PickerOption<Expiry>[] = [
     { value: `30`, label: `30 days` },
     { value: `90`, label: `90 days` },
     { value: `365`, label: `1 year` },
-    { value: `never`, label: `Never`, hint: `Lives until revoked. Right for an editor on your own laptop; wrong for a secret in someone else's store.` },
+    {
+        value: `never`,
+        label: `Never`,
+        hint: `Lives until revoked. Right for an editor on your own laptop; wrong for a secret in someone else's store.`,
+    },
 ];
 
 const label = ref(``);
@@ -93,7 +97,11 @@ const origin = computed(() => daemonUrl.value ?? `https://sandbox-….intentic.d
 const curlSnippet = computed(() =>
     minted.value === undefined
         ? ``
-        : [`export INTENTIC_TOKEN=${minted.value.token}`, `curl "${origin.value}/git/root/status" \\`, `  -H "x-intentic-control: $INTENTIC_TOKEN"`].join(`\n`),
+        : [
+              `export INTENTIC_TOKEN=${minted.value.token}`,
+              `curl "${origin.value}/git/root/status" \\`,
+              `  -H "x-intentic-control: $INTENTIC_TOKEN"`,
+          ].join(`\n`),
 );
 
 /* The GitHub step runs the Marketplace action's run door (intentic/gate-action): the token goes in the repo's
@@ -151,18 +159,26 @@ const lifetime = (token: ControlToken): string => {
     return token.expiresAt === undefined ? `never expires` : `expires ${formatDate(token.expiresAt)}`;
 };
 
-const lastUsed = (token: ControlToken): string => (token.lastUsedAt === undefined ? `never used` : `used ${timeAgo(token.lastUsedAt, { now: now.value, days: true })}`);
+const lastUsed = (token: ControlToken): string =>
+    token.lastUsedAt === undefined ? `never used` : `used ${timeAgo(token.lastUsedAt, { now: now.value, days: true })}`;
 
 const describe = (token: ControlToken): string =>
-    [`${token.scope} · minted ${formatDate(token.createdAt)}${token.createdBy === undefined ? `` : ` by ${token.createdBy}`}`, lifetime(token), lastUsed(token)].join(` · `);
+    [
+        `${token.scope} · minted ${formatDate(token.createdAt)}${token.createdBy === undefined ? `` : ` by ${token.createdBy}`}`,
+        lifetime(token),
+        lastUsed(token),
+    ].join(` · `);
 </script>
 
 <template>
     <RowGroup v-if="isOwner" label="API tokens" :count="roster && tokens.length > 0 ? tokens.length : undefined">
         <template v-if="roster">
             <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
+                <!-- The same pill the member roster draws two groups up, because it is the same word about the
+                     same thing. Written as bare `text-danger` text it was "Expired" against that list's
+                     "expired", one tab, one fact column, two spellings. -->
                 <template v-if="expired(token)" #meta>
-                    <span class="text-danger">Expired</span>
+                    <StatusBadge variant="danger" label="expired" size="xs" />
                 </template>
                 <template #control>
                     <Button label="Revoke" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
@@ -183,8 +199,19 @@ const describe = (token: ControlToken): string =>
                          any wide screen, and with the chat docked this column is a phone's width on a wide screen,
                          which squeezed the field to a black stub. The field keeps a minimum and takes the remaining
                          width; the controls drop to their own line when that remainder is too small to type in. -->
+                    <!-- THE COMPACT TIER, the same call the invite form makes one group up, and for the same
+                         reason: this is a LIST'S FOOTER, under rows whose Revoke button is 26px, and both of
+                         this component's mounts are dense (the Access tab's roster, the Devices tab's card,
+                         which sizes its own folder field at `ui.inputSm`). Field, pickers and button take one
+                         height, so the strip is one control tall instead of three boxes of two sizes. -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <input v-model="label" type="text" autocomplete="off" placeholder="Label, e.g. nightly CI" :class="ui.input(`min-w-48 flex-1`)" />
+                        <input
+                            v-model="label"
+                            type="text"
+                            autocomplete="off"
+                            placeholder="Label, e.g. nightly CI"
+                            :class="ui.inputSm(`min-w-48 flex-1`)"
+                        />
                         <div class="flex min-w-0 flex-wrap items-center gap-2">
                             <Picker
                                 v-if="scopeOptions.length > 1"
@@ -194,10 +221,24 @@ const describe = (token: ControlToken): string =>
                                 aria-label="Token scope"
                                 header="Scope"
                                 label-class="capitalize"
-                                class="w-32"
+                                class="ui-field-sm w-32"
                             />
-                            <Picker v-model="expiry" :options="EXPIRY_OPTIONS" variant="input" aria-label="Token expiry" header="Expires" class="w-32" />
-                            <Button type="submit" label="Mint token" :loading="minting" :disabled="minting || scope === undefined" class="shrink-0">
+                            <Picker
+                                v-model="expiry"
+                                :options="EXPIRY_OPTIONS"
+                                variant="input"
+                                aria-label="Token expiry"
+                                header="Expires"
+                                class="ui-field-sm w-32"
+                            />
+                            <Button
+                                type="submit"
+                                label="Mint token"
+                                size="small"
+                                :loading="minting"
+                                :disabled="minting || scope === undefined"
+                                class="shrink-0"
+                            >
                                 <template #icon><Icon name="key" /></template>
                             </Button>
                         </div>
@@ -219,7 +260,12 @@ const describe = (token: ControlToken): string =>
                         lang="yaml"
                         label="GitHub Actions: the token goes in a repository secret named INTENTIC_TOKEN"
                     />
-                    <Code v-if="shownSnippets.includes(`acp`)" :code="acpSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
+                    <Code
+                        v-if="shownSnippets.includes(`acp`)"
+                        :code="acpSnippet"
+                        lang="json"
+                        label="Zed → settings.json (JetBrains takes the same command + env)"
+                    />
                 </div>
             </div>
         </RowNote>
