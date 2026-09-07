@@ -15,9 +15,24 @@ import { environment } from "./environment";
  *   • the Environment card, the same, for an owner-approved overlay
  * The last two are the ones a user meets over and over, which is the real argument for the app existing. */
 
+/* What the app tells the page about the webview it is standing in, as opposed to about the app: this window
+ * does not gate the reach for loopback, so the page may dial the sandbox on this machine without asking anyone
+ * first (loopbackPermission.ts).
+ *
+ * OPTIONAL BECAUSE THE TWO SIDES SHIP SEPARATELY. This SPA is deployed continuously and the app is a binary
+ * somebody installed once, so an older window is an ordinary state rather than a legacy one — and it says
+ * nothing here, which reads as "ask the browser", which is exactly right for a webview that still enforces the
+ * check. */
+interface DesktopWebview {
+    version: string;
+    installId: string;
+    update: string | null;
+    loopbackUngated?: boolean;
+}
+
 declare global {
     interface Window {
-        __INTENTIC_DESKTOP__?: { version: string; installId: string; update: string | null };
+        __INTENTIC_DESKTOP__?: DesktopWebview;
     }
 }
 
@@ -30,7 +45,7 @@ declare global {
  * `update` is the newest of the three and the only one that changes after load, so it arrives twice: here for
  * a page that loads after the download finished, and on the event below for a page that was already open when
  * it did. Neither is IPC — the app injects both, and the page's only way back is the `intentic://` link. */
-export const desktopApp = (): { version: string; installId: string; update: string | null } | undefined => window.__INTENTIC_DESKTOP__;
+export const desktopApp = (): DesktopWebview | undefined => window.__INTENTIC_DESKTOP__;
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
 

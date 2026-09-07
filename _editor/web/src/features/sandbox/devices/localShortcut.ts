@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
 import { activeSandboxId } from "../overview/activeSandbox";
+import { loopbackPermission } from "./loopbackPermission";
 
 /* WHETHER THIS BROWSER MAY REACH FOR A SANDBOX RUNNING ON THIS DEVICE, asked in the app's own words, once,
  * before the browser asks in its own.
@@ -16,6 +17,11 @@ import { activeSandboxId } from "../overview/activeSandbox";
  * possible place to learn what a feature is for. So the app states the benefit first, in one sentence, and
  * reaches for the address only after a yes, which means the browser's dialog, when it comes, is the answer to
  * a question the user has just been asked rather than an interruption they cannot place.
+ *
+ * WHICH MAKES THIS MODULE THE RECORD OF A CONVERSATION, NOT THE STATE OF A PERMISSION. Chrome owns the
+ * permission and is asked for it directly (loopbackPermission.ts); what is kept here is what the USER told this
+ * app, which only decides anything while the browser is still at `prompt`. A browser that has no such
+ * permission, or already holds the grant, is never asked by us at all — there is no dialog to explain.
  *
  * THE TWO ANSWERS ARE REMEMBERED AT DIFFERENT SCOPES, because they answer different questions.
  *
@@ -52,8 +58,32 @@ const question = computed(() => (asking.value === activeSandboxId.value ? asking
 
 export type ShortcutAnswer = "unasked" | "allowed" | "declined";
 
-export const shortcutAnswer = (sandboxId: string): ShortcutAnswer =>
-    allowed.value ? `allowed` : declined.value.has(sandboxId) ? `declined` : `unasked`;
+/* MAY THIS BROWSER REACH FOR THIS SANDBOX — the browser's own answer first, and only then the two stored above.
+ *
+ * The ordering is a precedence of authorities rather than a chain of conditions. Chrome owns the permission;
+ * what this module keeps is a record of a conversation about it, and a record can go stale in ways the thing it
+ * describes cannot.
+ *
+ *   • `denied` ends it. The user has told Chrome no, in Chrome's own words, and the app has nothing to add: it
+ *     cannot re-ask, and probing would spend requests on an address the browser refuses. Read as a decline so
+ *     the caller falls to the tunnel exactly as it would for a sandbox on somebody else's desk.
+ *   • `granted` and `ungated` are the same answer to the caller — nothing is in the way — and they outrank a
+ *     stored no for the same reason the browser-wide yes always has: a permission that has genuinely been given
+ *     (or one that was never needed) is not overridden by a note about which machine a sandbox was on.
+ *   • `prompt` is the only state the card was ever for, and there the stored answers decide, unchanged.
+ *
+ * Asynchronous because the Permissions API is, which is why the caller is `resolve` (useEndpoint.ts) rather
+ * than anything rendering: this is a question asked on a reconnect, never on a frame. */
+export const shortcutAnswer = async (sandboxId: string): Promise<ShortcutAnswer> => {
+    const browser = await loopbackPermission();
+    if (browser === `denied`) {
+        return `declined`;
+    }
+    if (browser === `granted` || browser === `ungated`) {
+        return `allowed`;
+    }
+    return allowed.value ? `allowed` : declined.value.has(sandboxId) ? `declined` : `unasked`;
+};
 
 export function useLocalShortcut() {
     // Raise the question for a sandbox. Callers gate on `shortcutAnswer` first, so this never re-asks something

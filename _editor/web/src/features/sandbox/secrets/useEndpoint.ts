@@ -162,10 +162,12 @@ const resolve = async (): Promise<void> => {
     if (!couldBeOnThisMachine(sandbox)) {
         return;
     }
-    /* The probe is the app's only reach for the machine this browser runs on, and the browser interrupts with a
-     * permission dialog the first time it happens. So the app asks first, in its own words, and this returns
-     * without probing until the answer is yes, the notice calls back in (localShortcut.ts). */
-    const answer = shortcutAnswer(id);
+    /* The probe is the app's only reach for the machine this browser runs on, and a browser that gates that
+     * interrupts with a permission dialog the first time it happens. So the BROWSER is asked what it thinks
+     * (loopbackPermission.ts) and, only where it would raise that dialog, the user is asked first in the app's
+     * own words — this returns without probing until the answer is yes and the notice calls back in
+     * (localShortcut.ts). Awaited here rather than sooner so the cheap gates above still cost nothing. */
+    const answer = await shortcutAnswer(id);
     if (answer !== `allowed`) {
         if (answer === `unasked`) {
             ask(id);

@@ -163,6 +163,42 @@ than one button. Three things follow from it:
 - **It answers off its own IPC callback** (`commands.rs`), because answering destroys the webview that called
  : the same WebView2 COM re-entrancy the workspace's navigation handler steps around.
 
+## The local network gate is answered here, not by the user
+
+Chrome 142 made a request from a public origin to loopback a permission, collected with a dialog about
+"devices on your local network". The SPA reaches loopback for one reason: a sandbox running on this machine
+answers on a published port, one hop away instead of a round trip to a Cloudflare edge and back. In a browser
+the SPA has to explain that dialog before Chrome raises it, with a card it puts up once
+(`web/src/features/sandbox/devices/localShortcut.ts`).
+
+**Inside this window it does not, because the question was already answered by installing this app.** Somebody
+ran an installer whose stated purpose is running a sandbox on this computer, and the workspace webview loads
+exactly one origin — `stays_in_webview` keeps every other URL out and `on_new_window` sends the rest to the
+default browser — so the check would be guarding our own page against reaching our own daemon. `BROWSER_ARGS`
+in `windows.rs` disables it: `LocalNetworkAccessChecks` for fetch, plus the WebSockets and WebTransport
+variants Chrome 147 added, which is what terminals and the browser view ride.
+
+Three things about that constant are load-bearing:
+
+- **It carries wry's own defaults.** Setting additional browser arguments *replaces*
+  `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` rather than adding to them, and Chromium
+  honours only the last `--disable-features`. One list, holding everything, or the mini menu and SmartScreen
+  come back inside the app.
+- **Every window carries it identically.** The arguments configure the WebView2 *environment*, created once by
+  whichever webview is built first — so a launcher built with different arguments than the workspace would
+  silently decide the workspace's, depending on which screen the app opened on. The two local faces gain
+  nothing from the flag; they carry it so there is one answer to configure.
+- **It is paired with a claim the page reads.** `workspace_init_script` sets `loopbackUngated: true` on
+  `__INTENTIC_DESKTOP__`, and the SPA skips its card on the strength of that word alone. Change one without
+  the other and the user gets Chrome's dialog with nothing on screen to place it — or no dialog and no
+  shortcut. `loopback_tests` pins both halves.
+
+Windows only, in effect: `additional_browser_args` is a no-op elsewhere, and needs to be, because macOS and
+Linux run this webview on WebKit, which has no such permission to begin with. The claim is true on all three
+platforms for that reason. An **older** app is a webview that still enforces the check and says nothing, which
+the SPA reads as "ask the browser" — the right answer for it, and why the field is optional rather than
+assumed of any desktop build.
+
 ## Why it runs the scripts instead of reimplementing them
 
 The first attempt at this app (archived 2026-07-19, revived here) put the machine work in Rust: an

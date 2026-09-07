@@ -31,6 +31,43 @@ use crate::state::CloseAction;
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
+/* THE LOCAL NETWORK GATE, ANSWERED AT INSTALL TIME INSTEAD OF BY THE USER, FOREVER.
+ *
+ * Chrome 142 made a request from a public origin to loopback a permission, collected with a dialog about
+ * "devices on your local network". The SPA reaches loopback for one reason — the sandbox on this machine
+ * answers there, a hop away instead of a round trip to a Cloudflare edge and back — and in a browser it has to
+ * explain that dialog before Chrome raises it (the web app's localShortcut.ts). Inside THIS window it does not,
+ * because the question is already settled: somebody installed an app whose stated purpose is running a sandbox
+ * on this computer, and this webview loads exactly one origin — `stays_in_webview` keeps every other URL out
+ * and `on_new_window` denies the rest — so the check is guarding our own page against reaching our own daemon.
+ *
+ * WINDOWS ONLY, IN EFFECT. `additional_browser_args` is a no-op anywhere else, and needs to be: macOS and Linux
+ * run this webview on WebKit, which has no such permission to disable.
+ *
+ * WRY'S OWN DEFAULT IS CARRIED HERE. Setting this REPLACES `--disable-features=msWebOOUI,msPdfOOUI,
+ * msSmartScreenProtection` rather than adding to it, and Chromium honours only the last `--disable-features`,
+ * so there is one list and it has to hold everything. Dropping those three would bring back the mini menu and
+ * SmartScreen inside the app.
+ *
+ * ALL THREE WINDOWS, IDENTICALLY. These arguments configure the WebView2 ENVIRONMENT, which is created once per
+ * user data folder by whichever webview is built first — so a launcher built with different arguments than the
+ * workspace decides the workspace's, silently, depending on which screen the app opened on. The two local faces
+ * gain nothing from the flag; they carry it so there is only ever one answer to configure.
+ *
+ * IT IS PAIRED WITH A CLAIM THE PAGE READS. `workspace_init_script` tells the SPA this window does not gate the
+ * reach, and the SPA skips its card on the strength of it. Change one and the other is a lie: the user gets
+ * Chrome's dialog with nothing on screen to explain it. */
+const BROWSER_ARGS: &str = concat!(
+    "--disable-features=",
+    "msWebOOUI,msPdfOOUI,msSmartScreenProtection,",
+    // Fetch, subresources and subframes — the /health probe and every daemon call after it.
+    "LocalNetworkAccessChecks,",
+    // Terminals and the browser view hold WebSockets on that same address (terminalSession.ts,
+    // useBrowserView.ts); Chrome 147 brought them under the same permission.
+    "LocalNetworkAccessChecksWebSockets,",
+    "LocalNetworkAccessChecksWebTransport"
+);
+
 /// The third label, and NOT a third face: a dialog the app draws about the window it is standing in front of.
 /// It keeps to the one-window rule the way a dialog does — off the taskbar, owned by the frame it is about,
 /// and gone the moment it is answered.
@@ -201,13 +238,18 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
 /// the two cover different orderings — the event reaches a page that is already open, and this reaches a page
 /// that loads afterwards. Without it a webview navigated at any point after the download would draw no banner
 /// and the app would look, from inside, exactly as up to date as it is not.
+///
+/// `loopbackUngated` is the fourth and is about the WINDOW rather than the app: this webview does not gate the
+/// reach for loopback (`BROWSER_ARGS` on Windows, WebKit having no such check anywhere else), so the page may
+/// dial the sandbox on this machine without first showing the card that explains a dialog nothing is going to
+/// raise. It grants nothing — the page could always make the request; this only says nobody will interrupt it.
 fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update} }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -290,6 +332,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
          * not here. The workspace upload pipeline is built on DataTransfer/webkitGetAsEntry, so the handler
          * stays off on this window. */
         .disable_drag_drop_handler()
+        // The one window this is actually for — see BROWSER_ARGS, and `loopbackUngated` below, which tells the
+        // page it was done.
+        .additional_browser_args(BROWSER_ARGS)
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false)
@@ -417,6 +462,9 @@ fn ask_before_closing(app: &AppHandle) {
             // a flash on a dark dialog — the exact impression of malfunction this whole change is about.
             // Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css), which index.html pins.
             .background_color(tauri::window::Color(15, 13, 10, 255))
+            // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
+            // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).
+            .additional_browser_args(BROWSER_ARGS)
             .visible(false);
     if let Some(parent) = &parent {
         builder = match builder.parent(parent) {
@@ -518,6 +566,8 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
          * mode (@intentic/ui semantic-colors.css), which index.html pins — the same colour the confirmation
          * dialog paints for the same reason. */
         .background_color(tauri::window::Color(15, 13, 10, 255))
+        // Same reason as the confirmation dialog's: one environment, one set of arguments (BROWSER_ARGS).
+        .additional_browser_args(BROWSER_ARGS)
         .visible(false)
         .build();
     match result {
@@ -703,6 +753,46 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
                 park_setup(&handle, args);
             }
         });
+}
+
+/* THE PAIR THAT HAS TO STAY A PAIR: the flag that stops the webview gating loopback, and the claim the page
+ * believes about it. Asserted on the strings because neither can be observed anywhere else — the arguments
+ * reach a WebView2 environment that only exists on Windows at runtime, and the script runs in a webview. */
+#[cfg(test)]
+mod loopback_tests {
+    use super::*;
+
+    /// Setting our own arguments replaces wry's default rather than adding to it, and Chromium reads only the
+    /// last `--disable-features` — so one list, holding wry's three as well as ours.
+    #[test]
+    fn the_browser_arguments_keep_wrys_own_defaults() {
+        assert_eq!(BROWSER_ARGS.matches("--disable-features=").count(), 1);
+        for feature in ["msWebOOUI", "msPdfOOUI", "msSmartScreenProtection"] {
+            assert!(BROWSER_ARGS.contains(feature), "dropped {feature}");
+        }
+    }
+
+    /// Every transport the SPA takes to the daemon on this machine: fetch for the probe and the calls,
+    /// WebSockets for terminals and the browser view.
+    #[test]
+    fn the_browser_arguments_disable_every_local_network_check_we_meet() {
+        for feature in [
+            "LocalNetworkAccessChecks",
+            "LocalNetworkAccessChecksWebSockets",
+            "LocalNetworkAccessChecksWebTransport",
+        ] {
+            assert!(BROWSER_ARGS.contains(feature), "still gated: {feature}");
+        }
+    }
+
+    /// And the page is told, because it skips its own card on the strength of this word alone
+    /// (loopbackPermission.ts). A build that disables the check without saying so costs the user a dialog with
+    /// nothing on screen to explain it; one that says so without disabling it costs them the same dialog.
+    #[test]
+    fn the_page_is_told_the_reach_is_ungated() {
+        let script = workspace_init_script("install-1", None);
+        assert!(script.contains("loopbackUngated: true"), "{script}");
+    }
 }
 
 #[cfg(test)]
