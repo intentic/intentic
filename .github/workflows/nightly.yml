@@ -296,14 +296,21 @@ jobs:
       # An action cannot — its only channel is a step-level `env:`, which is the job environment this job must
       # keep clean. One fewer JavaScript action in a container job is the second reason: each one costs the
       # runner a `docker exec` probe of the container before it runs.
+      #
+      # BOTH halves of the credential arrive as `env:`, never as `${{ }}` inside the script. The token because a
+      # secret written into a run block is a secret written into the shell's command line; the actor because
+      # `github.actor` is a repository-controlled string that the expansion would splice in as SCRIPT rather than
+      # data — the template-injection shape zizmor fails the checkout gate on, and the reason this file carries no
+      # `${{ }}` in any `run:`.
       - name: Log in to ghcr.io for the box's image pull
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           set -euo pipefail
           export DOCKER_HOST="$JOB_DOCKER_HOST"
-          printenv GHCR_TOKEN | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          printenv GHCR_TOKEN | docker login ghcr.io --username "$GHCR_USER" --password-stdin
       - uses: ./.github/actions/pnpm-setup
       - run: npx playwright install --with-deps chromium
         working-directory: _tools/onboarding
