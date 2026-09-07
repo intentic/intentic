@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { type CustodyGateway, custodyGateway, type TypedData, walletEnabled } from "./wallet-custody.js";
+import { ensureWallet, NETWORKS } from "./wallet-store.js";
 
 /* THE WALLET SIGNER, the platform's two sandbox-facing routes, and the place where "the agent cannot spend
  * what its owner didn't release" stops being a policy and becomes arithmetic somebody else's process does.
@@ -20,6 +21,10 @@ import { type CustodyGateway, custodyGateway, type TypedData, walletEnabled } fr
  * costs no round trip, but the container is not a trust boundary (its agent and its daemon are one root
  * process tree), so the number that actually binds is this one, computed from THIS database's own payment
  * rows. A compromised sandbox can at worst spend what its owner already delegated on the capability card.
+ *
+ * AND THE CAPS ARE NOT WRITTEN HERE, for the same reason. Nothing a connect token can reach may set the
+ * number a connect token is then held to: the caps arrive over the owner's SESSION (wallet.orpc.ts, from the
+ * editor as the card is saved), and a sandbox's ensure gets exactly the one thing it needs, an address.
  *
  * The row is written BEFORE the signature is returned, inside the same transaction that reads the day's
  * total, so two concurrent requests cannot both fit under one remaining cap. An authorization that is never
@@ -43,20 +48,9 @@ const atomicToUsd = (atomic: bigint): string => {
     return fraction === `` ? `${whole}.00` : `${whole}.${fraction.padEnd(2, `0`)}`;
 };
 
-// The chains this signer will mint for, and the token it will mint for on each, the compliance surface as
-// a lookup: USDC only, `exact` scheme only, so every signature is a fixed-amount transfer of a
-// dollar-pegged token the owner's caps are honestly written in.
-const NETWORKS: Record<string, { readonly chainId: number; readonly asset: string }> = {
-    "eip155:8453": { chainId: 8453, asset: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` },
-    "eip155:84532": { chainId: 84532, asset: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` },
-};
-
 const usd = z.string().regex(USD_RE);
 
-const EnsureSchema = z.object({
-    network: z.string(),
-    policy: z.object({ perPaymentMaxUsd: usd, dailyCapUsd: usd }),
-});
+const EnsureSchema = z.object({ network: z.string() });
 
 const SignSchema = z.object({
     network: z.string(),
@@ -106,9 +100,10 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         return sandbox?.ownerId;
     };
 
-    /* Create-or-return this member's wallet, and mirror the capability card's caps onto it. Called by the
-     * wallet capability's apply, so editing the card is what re-states the numbers this signer enforces,
-     * and the two can never drift into disagreeing about what the owner set. */
+    /* Create-or-return this member's wallet: the ADDRESS, and nothing about the caps. Called by the wallet
+     * capability's apply so the card can show where to send funds. The caps this signer enforces are the
+     * owner's to state, over a session (wallet.orpc.ts); a wallet the sandbox brings into being here carries
+     * the schema's defaults until the owner does. */
     app.post(`/ensure`, async (c) => {
         if (!walletEnabled(config)) {
             return c.json({ error: `wallet signing is not enabled on this platform` }, 404);
@@ -119,35 +114,14 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         }
         const parsed = EnsureSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
-            return c.json({ error: `the ensure body must be {"network":"eip155:…","policy":{"perPaymentMaxUsd":"1.00","dailyCapUsd":"5.00"}}` }, 400);
+            return c.json({ error: `the ensure body must be {"network":"eip155:…"}` }, 400);
         }
-        const { network, policy } = parsed.data;
+        const { network } = parsed.data;
         if (NETWORKS[network] === undefined) {
             return c.json({ error: `this platform signs USDC on ${Object.keys(NETWORKS).join(`, `)} only` }, 400);
         }
-        const existing = await prisma.wallet.findUnique({ where: { userId_network: { userId: ownerId, network } } });
-        if (existing !== null) {
-            await prisma.wallet.update({
-                where: { id: existing.id },
-                data: { perPaymentMaxUsd: policy.perPaymentMaxUsd, dailyCapUsd: policy.dailyCapUsd },
-            });
-            return c.json({ address: existing.address });
-        }
         try {
-            // `reference` is the platform's own stable id for this member+network, which is what makes the
-            // provider's create idempotent: a retried ensure returns the same wallet rather than minting a
-            // second one the owner would then have to fund twice.
-            const created = await gateway().wallet(`${ownerId}:${network}`, network);
-            const wallet = await prisma.wallet.create({
-                data: {
-                    userId: ownerId,
-                    network,
-                    address: created.address,
-                    providerWalletId: created.id,
-                    perPaymentMaxUsd: policy.perPaymentMaxUsd,
-                    dailyCapUsd: policy.dailyCapUsd,
-                },
-            });
+            const wallet = await ensureWallet(prisma, gateway(), ownerId, network);
             return c.json({ address: wallet.address });
         } catch (error) {
             c.get(`logger`)?.warn({ err: error }, `wallet ensure failed`);

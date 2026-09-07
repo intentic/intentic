@@ -67,8 +67,10 @@ const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[
             const key = where.userId_network;
             return wallets.find((row) => row.userId === key.userId && row.network === key.network) ?? null;
         }),
-        create: vi.fn(async ({ data }: { data: Omit<StoredWallet, `id`> }) => {
-            const row = { id: `wallet-${(next += 1)}`, ...data };
+        // The schema's own default caps, as Postgres would fill them: a wallet the sandbox brings into being
+        // carries the floor until the owner states otherwise over their session.
+        create: vi.fn(async ({ data }: { data: Omit<StoredWallet, `id` | `perPaymentMaxUsd` | `dailyCapUsd`> }) => {
+            const row = { id: `wallet-${(next += 1)}`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, ...data };
             wallets.push(row);
             return row;
         }),
@@ -264,26 +266,34 @@ it("404s everything when no custody provider is configured", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
     const off = { ...config, wallet: { custodyUrl: ``, custodyKey: `` } };
     expect((await app({ prisma, config: off })(`/sign`, signBody())).status).toBe(404);
-    expect(
-        (await app({ prisma, config: off })(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } })).status,
-    ).toBe(404);
+    expect((await app({ prisma, config: off })(`/ensure`, { network: `eip155:8453` })).status).toBe(404);
 });
 
-it("creates one wallet per account and network, and re-states the caps on a repeat ensure", async () => {
+/* THE SANDBOX CANNOT SET ITS OWN CEILING. The ensure used to carry the card's caps and write them onto the row,
+ * over the connect token the daemon holds in its env, so a compromised sandbox raised its own caps to anything
+ * and then asked for a signature under them. Now the ensure yields an address and nothing else: a wallet it
+ * brings into being carries the schema's defaults, one that exists is returned as it is, and a body that still
+ * carries a policy is answered without reading it. The caps are the owner's session's to state (wallet.orpc.ts). */
+it("creates one wallet per account and network, and a repeat ensure returns it without touching its caps", async () => {
     const { prisma, wallets } = fakePrisma();
     const request = app({ prisma });
-    const first = await request(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } });
+    const first = await request(`/ensure`, { network: `eip155:8453` });
     expect(first.status).toBe(200);
     expect(((await first.json()) as { address: string }).address).toBe(ADDRESS);
-    // A repeat ensure is an EDIT, not a second wallet: the owner would otherwise have to fund a new address.
-    const second = await request(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `0.25`, dailyCapUsd: `2.00` } });
+    expect(wallets[0]).toMatchObject({ perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` });
+    // The owner raised the caps over their session in the meantime; the sandbox's next ensure must not be a
+    // way to restate them, however much it asks for.
+    wallets[0] = { ...wallets[0]!, perPaymentMaxUsd: `2.00`, dailyCapUsd: `20.00` };
+    const second = await request(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1000000.00`, dailyCapUsd: `1000000.00` } });
     expect(second.status).toBe(200);
+    expect(((await second.json()) as { address: string }).address).toBe(ADDRESS);
     expect(wallets).toHaveLength(1);
-    expect(wallets[0]).toMatchObject({ perPaymentMaxUsd: `0.25`, dailyCapUsd: `2.00` });
+    expect(wallets[0]).toMatchObject({ perPaymentMaxUsd: `2.00`, dailyCapUsd: `20.00` });
+    expect(prisma.wallet.update).not.toHaveBeenCalled();
 });
 
 it("refuses a network this platform does not sign for", async () => {
     const { prisma } = fakePrisma();
-    const response = await app({ prisma })(`/ensure`, { network: `eip155:1`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } });
+    const response = await app({ prisma })(`/ensure`, { network: `eip155:1` });
     expect(response.status).toBe(400);
 });

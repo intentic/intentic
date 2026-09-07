@@ -97,7 +97,7 @@ import type {
     WorkspaceSearchSpanSchema,
     WorkspaceSearchTagSchema,
 } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema, WalletNetworkSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // The oRPC OpenAPI handler is mounted under this prefix on the server; the client
@@ -742,7 +742,13 @@ export const SandboxSummarySchema = z.object({
     // case of never having refused one. Cleared by an announce that succeeds, so a value here always
     // describes a live disagreement rather than one somebody already fixed.
     announceRefusal: AnnounceRefusalSchema.nullable(),
-    token: z.string(),
+    /* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. The browser spends it on exactly one
+     * daemon-side act, the first-bind that seeds ownership, which is the owner's act by definition: a member
+     * reaches a daemon that is already bound, and the daemon never reads the header again. On the platform the
+     * same secret is a credential in its own right (it spends the owner's trial allowance, asks the owner's
+     * wallet for signatures, speaks as the sandbox to /sandbox/announce), so it is not something a `viewer`
+     * invite may carry away. */
+    token: z.string().nullable(),
     // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
     // floors, so this is a rendering fact, never the security boundary.
@@ -768,6 +774,18 @@ export const SandboxSummarySchema = z.object({
     hosted: SandboxHostedSchema.nullable(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
+
+/* THE OWNER'S SPENDING CAPS on the platform's wallet signer (api wallet/), written over a SESSION and nowhere
+ * else. The sandbox's wallet card carries the same two numbers for its own pre-check and its ledger's words, but
+ * the container is not a trust boundary, so the copy the signer enforces is written only by the browser the
+ * owner is signed into, over this shape: the editor sends it as the card is saved. USD decimal strings with up
+ * to six places, USDC's own precision; money is never a float on either side. */
+export const WalletPolicySchema = z.object({
+    network: WalletNetworkSchema,
+    perPaymentMaxUsd: z.string().regex(/^\d+(\.\d{1,6})?$/),
+    dailyCapUsd: z.string().regex(/^\d+(\.\d{1,6})?$/),
+});
+export type WalletPolicy = z.infer<typeof WalletPolicySchema>;
 
 // The sandbox's public base URL as the OWNER asserts it (sandbox.attach) instead of the daemon announcing it,
 // the "I already run my sandbox behind a domain that works" path, where nothing ever phones home. https only:

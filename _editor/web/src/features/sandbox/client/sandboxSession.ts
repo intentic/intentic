@@ -466,7 +466,8 @@ if (channel !== undefined) {
 const removalRequest = async (sandbox: SandboxSummary, base: string, bearer: string): Promise<Response> =>
     fetch(`${base.replace(/\/$/, ``)}${sandbox.role === `owner` ? `/system/access/disable` : `/members/self`}`, {
         method: sandbox.role === `owner` ? `POST` : `DELETE`,
-        headers: { authorization: `Bearer ${bearer}`, "x-intentic-connect": sandbox.token },
+        // A member's row carries no connect token, and the daemon it reaches is bound already: nothing to send.
+        headers: { authorization: `Bearer ${bearer}`, ...(sandbox.token === null ? {} : { "x-intentic-connect": sandbox.token }) },
         signal: AbortSignal.timeout(10_000),
     });
 

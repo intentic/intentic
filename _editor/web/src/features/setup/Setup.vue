@@ -1265,6 +1265,14 @@ const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
 };
 
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
+// The connect token to present to the daemon being attached. The pasted token wins: it is the one the daemon
+// is actually gating first-bind on. Otherwise the row's own (a resumed sandbox whose daemon was started from
+// this account's own setup code); the row is this account's, so it carries one, but the shape allows null.
+const attachConnectToken = (): string | undefined => {
+    const pasted = attachToken.value.trim();
+    return pasted !== `` ? pasted : (created.value?.token ?? undefined);
+};
+
 // daemon has authorized us record it on the platform. Verifying BEFORE creating anything means a typo can't
 // leave an orphan sandbox behind; a retry after a failed attach re-uses
 // the row the previous attempt created. On success there is nothing left to do: straight to the workspace.
@@ -1282,10 +1290,7 @@ const connectDomain = async (): Promise<void> => {
             error.value = noticeOf(`Sign in with Google to reach your sandbox.`);
             return;
         }
-        // The pasted token wins: it is the one the daemon is actually gating first-bind on. Otherwise present
-        // the row's token (a resumed sandbox whose daemon was started from this account's own setup code).
-        const pasted = attachToken.value.trim();
-        const connectToken = pasted !== `` ? pasted : created.value?.token;
+        const connectToken = attachConnectToken();
         const outcome = await probeDaemon({ daemonUrl: url, idToken, ...(connectToken !== undefined ? { connectToken } : {}) });
         if (outcome.kind !== `ok`) {
             attachOutcome.value = outcome;
@@ -1811,7 +1816,8 @@ const remint = (): void => {
 // Derive the default `sandbox-<hash>` prefix (must mirror the CLI) once the connection token is known, and
 // pre-fill the editable subdomain field if the user hasn't typed one.
 watch(
-    () => created.value?.token,
+    // The setup wizard is the owner's, so the row it creates carries its token; null (a member's row) never reaches here.
+    () => created.value?.token ?? undefined,
     async (token) => {
         if (token === undefined) {
             return;

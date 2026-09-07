@@ -44,15 +44,22 @@ const config = (over: Record<string, unknown> = {}): Config =>
 // checking in, so a fixture that sets it IS a machine that came up.
 const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) => {
     const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, tunnelId: `abcdef012345`, ownerId: `canary-user` };
-    return {
+    const prisma = {
         user: { findUnique: vi.fn().mockResolvedValue({ id: `canary-user` }), create: vi.fn().mockResolvedValue({ id: `canary-user` }) },
         sandbox: {
             findMany: vi.fn().mockResolvedValue([]),
             create: vi.fn().mockResolvedValue(sandbox),
             findUnique: vi.fn().mockResolvedValue({ ...sandbox, lastSeenAt }),
+            findUniqueOrThrow: vi.fn().mockResolvedValue(sandbox),
             update: vi.fn().mockResolvedValue(sandbox),
             delete: vi.fn().mockResolvedValue(sandbox),
         },
+        // The row write runs under the owner's slot lock (hosted.ts withHostedSlot): the callback runs against
+        // this same fake, the lock is a no-op, and `hostedMachine.count` below is the canary owner's use, none.
+        $transaction: vi.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $executeRaw: vi.fn().mockResolvedValue(0),
+        // The slot count reads the owner's plan (hosted-plan.ts hostedSlotsOf): the canary's account has none.
+        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         // The counts are how the run asks whether the lane has any machines left before it spends one
         // (hosted-capacity.ts). An empty fleet with no stock: this platform's whole capacity is whatever the
         // case's own config and refusals say it is.
@@ -64,7 +71,8 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
         hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
         hostedBuild: { count: vi.fn().mockResolvedValue(0) },
         ...over,
-    } as unknown as PrismaClient;
+    };
+    return prisma as unknown as PrismaClient;
 };
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });

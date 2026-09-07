@@ -27,6 +27,7 @@ import {
     LIVE_STATES,
 } from "./fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { hostedSlotsOf } from "./hosted-plan.js";
 
 /* The hosted lane's orchestration, what the routes call, over the fly.ts client. One machine + one volume in
  * one app per sandbox; the app name is `<prefix>-<the sandbox's 12-hex tunnel id>`, ALWAYS, pool-born or built
@@ -99,6 +100,45 @@ const hostedAppName = (config: Config, sandboxId: string, connectToken: string):
  * gone for the next arrival, several machines were running the same connect token until the pool's reconcile
  * collected them, and the reader who lost the race was shown a gateway error while their machine booted. */
 export class HostedAlreadyProvisioned extends Error {}
+
+/* THE OWNER HAS NO SLOT LEFT, thrown where the row would have been written. Its own class for the route's sake:
+ * this is a refusal in the owner's own words (BAD_REQUEST, "remove one first"), never a provider fault. */
+export class HostedSlotsExhausted extends Error {}
+
+// The one sentence both refusals say, the route's early one and the write's binding one, so they cannot drift.
+export const slotsMessage = (used: number): string =>
+    `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first, or add a slot to your plan`;
+
+/* WRITE THE MACHINE ROW UNDER THE OWNER'S SLOT COUNT, atomically.
+ *
+ * The route checks the allowance before anything is built (sandbox.routes.ts assertHostedAllowance), and that
+ * check is a read with no lock behind it: `sandbox.create` is unlimited, so N sandboxes and N concurrent
+ * provisions all read "0 of 1 used" and all proceed, and the only brake left was the provider's own refusal,
+ * which on a platform with no ceiling configured is a hundred machines away. HostedMachine is unique per
+ * SANDBOX, not per owner, so no constraint catches it either. This is the check that binds: a transaction-scoped
+ * advisory lock keyed on the owner serializes every row-write for that owner, and the count taken under it sees
+ * whatever a competing write just committed. Held for milliseconds (a count and an insert), never across a
+ * provider call, which is why the lock is here and not around the whole provision.
+ *
+ * Every caller has already created or claimed a machine by the time it reaches this, so a refusal here costs one
+ * provider create-and-destroy in the racing case (the cold path's own cleanup). That is the right price: the
+ * alternative was an unbounded fleet on one free account. */
+const withHostedSlot = async <T>(
+    prisma: PrismaClient,
+    config: Config,
+    sandboxId: string,
+    write: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> =>
+    prisma.$transaction(async (tx) => {
+        const { ownerId } = await tx.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, select: { ownerId: true } });
+        // Two int4 keys, the first naming the purpose, so nothing else on this database can share the owner's lock.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('hosted-slot'), hashtext(${ownerId}))`;
+        const [used, slots] = await Promise.all([tx.hostedMachine.count({ where: { sandbox: { ownerId } } }), hostedSlotsOf(tx, config, ownerId)]);
+        if (used >= slots) {
+            throw new HostedSlotsExhausted(slotsMessage(used));
+        }
+        return write(tx);
+    });
 
 /* Did this sandbox get its machine from somewhere else while this call was building one?
  *
@@ -326,8 +366,8 @@ const claimPoolMachine = async (
             // oxlint-disable-next-line eslint/no-await-in-loop
             await startAfterUpdate(config, row);
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await prisma.$transaction([
-                prisma.hostedMachine.create({
+            await withHostedSlot(prisma, config, args.sandboxId, async (tx) => {
+                await tx.hostedMachine.create({
                     data: {
                         sandboxId: args.sandboxId,
                         appName: row.appName,
@@ -337,12 +377,12 @@ const claimPoolMachine = async (
                         warm: true,
                         wokeAt: new Date(),
                     },
-                }),
-                prisma.hostedPoolMachine.delete({ where: { id: row.id } }),
+                });
+                await tx.hostedPoolMachine.delete({ where: { id: row.id } });
                 // The ciphertext moves as it is (same key, and a fresh IV bought nothing); the derived
                 // columns are the same derivation the mint writes.
-                prisma.sandbox.update({ where: { id: args.sandboxId }, data: { token: row.token, ...connectTokenIdentity(connectToken) } }),
-            ]);
+                await tx.sandbox.update({ where: { id: args.sandboxId }, data: { token: row.token, ...connectTokenIdentity(connectToken) } });
+            });
             return { appName: row.appName, region: row.region, warm: true };
         } catch (error) {
             /* THE ONE FAILURE THAT MUST NOT MOVE TO THE NEXT CANDIDATE: this sandbox already has a machine, so
@@ -356,6 +396,12 @@ const claimPoolMachine = async (
                     `hosted pool: this sandbox was provisioned concurrently; abandoning the claim rather than branding more stock`,
                 );
                 throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+            }
+            // The owner's slots are spent (withHostedSlot): the same terminal shape, since the next candidate
+            // would meet the same count. The machine this iteration branded holds no row; the reconcile collects it.
+            if (error instanceof HostedSlotsExhausted) {
+                logger.warn({ app: row.appName, sandboxId: args.sandboxId }, `hosted pool: the owner has no slot left; abandoning the claim`);
+                throw error;
             }
             logger.warn({ err: error, app: row.appName }, `hosted pool: claim failed; trying the next warm machine`);
         }
@@ -413,9 +459,11 @@ export const provisionHosted = async (
         // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
         // so the free lane's clock starts here rather than at the first wake, which is the only version that
         // does not hand out an uncounted first session to everyone who ever provisions one.
-        await prisma.hostedMachine.create({
-            data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
-        });
+        await withHostedSlot(prisma, config, args.sandboxId, (tx) =>
+            tx.hostedMachine.create({
+                data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
+            }),
+        );
         return { appName, region, warm: false };
     } catch (error) {
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>

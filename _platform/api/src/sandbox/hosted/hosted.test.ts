@@ -57,12 +57,18 @@ const config = (over?: Record<string, unknown>): Config =>
  * The defaults matter: the hour meter reads membership (absent ⇒ not a member ⇒ metered) and the month's
  * usage (absent ⇒ nothing spent) on paths whose SUBJECT is something else entirely, and a fixture that
  * omitted them would fail those tests for a reason none of them are about. */
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
-    ({
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => {
+    const prisma = {
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
-        // The claim's transactional hand-off: the stub just settles what the model calls already returned.
-        $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
+        /* Two shapes. The array form settles what the model calls already returned. The callback form is the
+         * row write under the owner's slot lock (hosted.ts withHostedSlot): it runs against this same fake, the
+         * advisory lock below is a no-op, and the slot count answers whatever the case set `hostedMachine.count`
+         * to — 0 unless a case is about the count. */
+        $transaction: vi.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
+            typeof work === `function` ? work(prisma) : Promise.all(work),
+        ),
+        $executeRaw: vi.fn().mockResolvedValue(0),
         ...overrides,
         // An empty pool by default, so every test not ABOUT the pool exercises the cold path it always did.
         hostedPoolMachine: {
@@ -71,11 +77,20 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             delete: vi.fn().mockResolvedValue({}),
             ...overrides[`hostedPoolMachine`],
         },
-        // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so.
-        hostedMachine: { update: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]), ...overrides[`hostedMachine`] },
-        // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction.
-        sandbox: { update: vi.fn().mockResolvedValue({}), ...overrides[`sandbox`] },
-    }) as unknown as OrpcContext[`prisma`];
+        // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so;
+        // `count` is the owner's slot use at the row write, none unless a test says so.
+        hostedMachine: {
+            update: vi.fn().mockResolvedValue({}),
+            findMany: vi.fn().mockResolvedValue([]),
+            count: vi.fn().mockResolvedValue(0),
+            ...overrides[`hostedMachine`],
+        },
+        // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction, and
+        // the slot write reads the row's owner first.
+        sandbox: { update: vi.fn().mockResolvedValue({}), findUniqueOrThrow: vi.fn().mockResolvedValue({ ownerId: `u1` }), ...overrides[`sandbox`] },
+    };
+    return prisma as unknown as OrpcContext[`prisma`];
+};
 
 // `respond` receives the URL so a route can answer per app (the orphan sweep asks each app about its own
 // machines, and what those machines say is the whole subject of its tests).

@@ -21,10 +21,8 @@ import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
  * the base and the connect token were read underneath the await: a switch in between paired one daemon's
  * session with another daemon's URL, which that daemon can only answer 401 (and then, at the upgrade, 1008). */
 const params = async (target: SandboxTarget): Promise<URLSearchParams | undefined> => {
+    // Absent on a member's target (sandboxTarget.ts): the daemon reads it on first-bind only, and a member never binds.
     const connect = target.connectToken;
-    if (connect === undefined) {
-        return undefined;
-    }
     const bearer = await useSandboxSession().getSessionToken(target);
     if (bearer === undefined) {
         return undefined;
@@ -32,7 +30,7 @@ const params = async (target: SandboxTarget): Promise<URLSearchParams | undefine
     try {
         const response = await fetch(`${target.base}/system/ws-ticket`, {
             method: `POST`,
-            headers: { authorization: `Bearer ${bearer.token}`, "x-intentic-connect": connect },
+            headers: { authorization: `Bearer ${bearer.token}`, ...(connect === undefined ? {} : { "x-intentic-connect": connect }) },
         });
         if (response.ok) {
             const { ticket } = (await response.json()) as { ticket?: unknown };
@@ -43,7 +41,7 @@ const params = async (target: SandboxTarget): Promise<URLSearchParams | undefine
     } catch {
         // A failed mint is not a failed connection: fall through and let the upgrade itself report the problem.
     }
-    return new URLSearchParams({ token: bearer.token, connect });
+    return new URLSearchParams({ token: bearer.token, ...(connect === undefined ? {} : { connect }) });
 };
 
 // The full ws(s):// URL for `path`, with the auth params and `extra` merged in, undefined when the sandbox

@@ -33,6 +33,7 @@ import {
     SandboxSummarySchema,
     SetupCodeSchema,
     UserSchema,
+    WalletPolicySchema,
 } from "./schemas.js";
 
 export * from "./schemas.js";
@@ -229,6 +230,15 @@ export const hostedPlanContract = {
         .output(HostedPlanStateSchema),
 };
 
+/* THE WALLET'S OWNER-SIDE HALF: the spending caps the signer enforces (schemas.ts WalletPolicySchema). The
+ * sandbox reaches the signer over plain HTTP with its connect token (/wallet/ensure for an address, /wallet/sign
+ * for a signature, neither part of this contract); the caps it is held to come from HERE, a session route the
+ * container cannot call. Creates the account's wallet on that network when there is none yet, so the caps can be
+ * stated before the sandbox first asks. Refuses (NOT_FOUND) on a platform with no custody provider. */
+export const walletContract = {
+    setPolicy: oc.route({ method: "POST", path: "/wallet/policy" }).input(WalletPolicySchema).output(WalletPolicySchema),
+};
+
 /* THE PUSH RELAY. APNs on behalf of daemons that hold no vendor secret (schemas.ts explains the split).
  *
  * `register`/`unregister` require a session: they are the signed-in web app inside the iOS shell, and a device
@@ -313,5 +323,6 @@ export const apiContract = {
     desktop: desktopContract,
     hostedPlan: hostedPlanContract,
     push: pushRelayContract,
+    wallet: walletContract,
     admin: adminContract,
 };

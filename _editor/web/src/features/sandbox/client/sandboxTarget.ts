@@ -8,6 +8,8 @@ import { useSandbox } from "./useSandbox";
 export interface SandboxTarget {
     readonly sandboxId: string | undefined;
     readonly base: string;
+    // The owner's alone (the summary carries null on a member's row): it is spent on the daemon's first-bind,
+    // which is the owner's act, and a member reaches a daemon that is already bound and never asks for it.
     readonly connectToken: string | undefined;
     /* The platform can VOUCH for this reader to this daemon: the sandbox runs on a machine the platform hosts
      * and the reader owns it, so `sandbox.ownerTicket` will answer with a signed proof the daemon accepts in
@@ -26,7 +28,7 @@ export const currentSandboxTarget = (): SandboxTarget | undefined => {
     if (base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token, ...vouchedFor(active.value) };
+    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token ?? undefined, ...vouchedFor(active.value) };
 };
 
 /* The same destination for a sandbox this browser is NOT pointed at, what the surfaces that read across
@@ -55,5 +57,5 @@ export const targetFor = (sandboxId: string): SandboxTarget | undefined => {
     if (sandbox === undefined || base === null || base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId, base, connectToken: sandbox.token, ...vouchedFor(sandbox) };
+    return { sandboxId, base, connectToken: sandbox.token ?? undefined, ...vouchedFor(sandbox) };
 };

@@ -10,19 +10,17 @@ import type { TransferAuthorization } from "./x402.js";
  * own ledger and refuses over-cap requests no matter what this container claims, the daemon's checks in
  * payment-offer.ts are the UX, the signer's are the guarantee, so a compromised sandbox can at worst spend
  * what the owner already delegated. Authenticated by the connect token, which names whose wallet signs and
- * which the agent's own grant never covers (auth/grants.ts). */
+ * which the agent's own grant never covers (auth/grants.ts).
+ *
+ * THE CAPS NEVER CROSS THIS WIRE. The card's two numbers are what THIS side checks and what its ledger reads;
+ * the copy the signer enforces is written to the platform by the owner's browser, over their session, as the
+ * card is saved. This relay used to mirror them on ensure, which made the container the author of its own
+ * ceiling, exactly the party the ceiling exists to bound. */
 
-// Policy caps as the platform mirrors them, sent on ensure so the signer enforces the same numbers the
-// owner set on the capability card, and re-sent on every apply so an edit propagates.
-export interface WalletPolicyMirror {
-    readonly perPaymentMaxUsd: string;
-    readonly dailyCapUsd: string;
-}
-
-// POST /wallet/ensure, create-or-return the owner's wallet for `network`, and mirror the policy. Answers
-// {address} or a refusal sentence (no platform, wallet signing not enabled there, secrets key unset).
-export const relayWalletEnsure = (config: Config, network: string, policy: WalletPolicyMirror): Promise<RelayedAnswer> =>
-    relayPlatform(config, "POST", "/wallet/ensure", JSON.stringify({ network, policy }));
+// POST /wallet/ensure, create-or-return the owner's wallet for `network`. Answers {address} or a refusal
+// sentence (no platform, wallet signing not enabled there, secrets key unset).
+export const relayWalletEnsure = (config: Config, network: string): Promise<RelayedAnswer> =>
+    relayPlatform(config, "POST", "/wallet/ensure", JSON.stringify({ network }));
 
 export interface SignRequest {
     readonly network: string;

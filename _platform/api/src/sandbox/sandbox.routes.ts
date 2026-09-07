@@ -17,15 +17,17 @@ import {
     HostedAlreadyProvisioned,
     type HostedProvisionArgs,
     hostedEnabled,
+    HostedSlotsExhausted,
     provisionHosted,
     refreshHosted,
+    slotsMessage,
     wakeHosted,
 } from "./hosted/hosted.js";
 import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
-import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { closeHostedStretch, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -130,6 +132,10 @@ const restartOrRebuild = async (
  * provisioning: kept out of the handler so it reads as the three things it actually does (mint the grant, build
  * the machine, answer with the row).
  *
+ * The slot count here is the EARLY answer, not the binding one: it is a read with no lock behind it, so two
+ * provisions racing the same slot both pass it. What binds is the count hosted.ts takes under the owner's lock
+ * as it writes the row (withHostedSlot), which this saves the honest case a provider round-trip to reach.
+ *
  * The hour ceiling applies to a NEW machine as much as to a wake: a machine boots the moment it is created, so
  * without it here, releasing a spent machine and provisioning another would be the way around the limit. */
 const assertHostedAllowance = async (context: OrpcContext, userId: string): Promise<void> => {
@@ -139,9 +145,7 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
         hostedSlotsOf(context.prisma, context.config, userId),
     ]);
     if (used >= slots) {
-        throw new ORPCError(`BAD_REQUEST`, {
-            message: `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first, or add a slot to your plan`,
-        });
+        throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
     }
     const budget = await hostedBudgetOf(context.prisma, context.config, userId);
     if (budget.metered && budget.remainingMinutes === 0) {
@@ -151,9 +155,19 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
     }
 };
 
+/* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. The
+ * browser needs it for exactly one daemon-side act, the first-bind that seeds ownership, and that is the owner's
+ * act by definition: a member reaches a daemon that is already bound, where the daemon's authorize never reads
+ * the header. On the PLATFORM side the same token is a credential in its own right — it spends the owner's
+ * trial allowance (/trial), asks the owner's wallet for signatures (/wallet), and speaks as the sandbox to
+ * /sandbox/announce and its siblings — so handing it to every accepted member made a `viewer` invite worth the
+ * owner's whole platform-side standing, past every role floor the daemon enforces. */
+const connectTokenFor = (config: Config, encryptedToken: string, role: MemberRole): string | null =>
+    role === `owner` ? decryptSecret(config, encryptedToken) : null;
+
 // Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
-// rows are access-only. token + daemonUrl are what the browser needs to reach the daemon directly (the stored
-// token is encrypted at rest, so it is decrypted here); daemonUrl + lastSeenAt come from the daemon's announce.
+// rows are access-only. daemonUrl is what the browser needs to reach the daemon directly (plus, for the owner,
+// the connect token above); daemonUrl + lastSeenAt come from the daemon's announce.
 // `providedAddress` flags a daemonUrl under the platform's own zone, the browser reads it to tell a sandbox we
 // made reachable (through the edge, by tunnel or by replay) from one the owner attached behind a domain of
 // their own.
@@ -201,7 +215,7 @@ const toSummary = (
         bootReport: boot.success ? boot.data : null,
         announceRefusal: refusal.success ? refusal.data : null,
         hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
-        token: decryptSecret(context.config, sandbox.token),
+        token: connectTokenFor(context.config, sandbox.token, role),
         role,
         providedAddress: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
         /* Derived from the LOOPBACK zone, never from `daemonUrl`: those are two different zones now, and
@@ -271,9 +285,17 @@ export const sandboxRoutes = {
      * exactly what the hosted reaper collects. The daemon keeps running on its host until cleanup.sh tears it
      * down there. */
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
-        await requireOwnedSandbox(context, input.sandboxId);
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         // Read the hosted record BEFORE the row goes, the cascade takes it, and its appName is the teardown.
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: input.sandboxId } });
+        if (hosted !== null) {
+            /* The machine's open awake stretch is charged to its owner's month BEFORE the cascade takes the row
+             * that holds it (hosted-usage.ts closeHostedStretch): the meter reads open stretches live off the
+             * row, so a delete used to be the one act that made hours disappear, and provision → work → delete
+             * → provision was a free lane with no ceiling at all. The machine is destroyed below, so now is
+             * when it stops. */
+            await closeHostedStretch(context.prisma, hosted, sandbox.ownerId);
+        }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
         // A hosted sandbox's machine dies with it, best-effort AFTER the row: the row is what the browser
         // reads, so a slow provider would otherwise keep a just-removed sandbox on screen, and a failed
@@ -404,6 +426,12 @@ export const sandboxRoutes = {
             if (error instanceof HostedAtCapacity) {
                 throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
             }
+            /* The allowance check above passed and the row-write's own count (hosted.ts withHostedSlot) did
+             * not: a provision for ANOTHER of this owner's sandboxes committed in between. The machine this
+             * call built is already torn down; the answer is the same sentence the early check would have said. */
+            if (error instanceof HostedSlotsExhausted) {
+                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
+            }
             if (!(error instanceof HostedAlreadyProvisioned)) {
                 throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
             }
@@ -457,6 +485,9 @@ export const sandboxRoutes = {
             } catch (error) {
                 throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `destroying the machine failed` });
             }
+            // A machine runs from the moment it is created (its row opens a stretch at provision), so even a
+            // never-connected one has awake minutes to charge before its row goes; delete's reasoning verbatim.
+            await closeHostedStretch(context.prisma, hosted, sandbox.ownerId);
             await context.prisma.hostedMachine.delete({ where: { sandboxId: sandbox.id } });
         }
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
@@ -555,6 +586,11 @@ export const sandboxRoutes = {
              * hardware to put under it this minute. */
             if (error instanceof HostedAtCapacity) {
                 throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
+            }
+            // The rebuild dropped this sandbox's row and found the owner's slots taken by then (a plan with fewer
+            // slots than machines): the owner's own words, not a gateway's.
+            if (error instanceof HostedSlotsExhausted) {
+                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
             }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }

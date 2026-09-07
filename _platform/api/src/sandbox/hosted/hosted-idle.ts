@@ -5,6 +5,7 @@ import { linkEmail, sendMail } from "../../mail.js";
 import { onHostedPlan } from "./hosted-plan.js";
 import { getMachine, isFlyGone, LIVE_STATES } from "./fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
+import { closeHostedStretch } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";
 
 /* COLLECTING THE MACHINES NOBODY CAME BACK TO, the free hosted lane's largest cost and its least useful one.
@@ -59,6 +60,8 @@ interface IdleCandidate {
     readonly machineId: string;
     readonly createdAt: Date;
     readonly idleWarnedAt: Date | null;
+    // The open awake stretch, if any (hosted-usage.ts): closed before the row goes, or its minutes go with it.
+    readonly wokeAt: Date | null;
     readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
 }
 
@@ -86,6 +89,9 @@ const decideIdleMachine = async (
         return undefined;
     });
     if (state === undefined) {
+        // A stretch still open on a machine that no longer exists ended at the latest now; charged before the
+        // row that carries it is dropped, the same ceiling the meter's own settle takes for a gone machine.
+        await closeHostedStretch(prisma, machine, machine.sandbox.ownerId);
         await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
         logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
         return `dropped`;
@@ -99,6 +105,9 @@ const decideIdleMachine = async (
         return `kept`;
     }
     if (idleDaysSoFar >= config.hosted.idleDays) {
+        // Any stretch still open is closed at the stop Fly just reported, BEFORE the app goes: afterwards there
+        // is no machine to ask and, a line later, no row to hold the minutes.
+        await closeHostedStretch(prisma, machine, machine.sandbox.ownerId, state.updatedAt);
         await destroyHosted(config, machine.appName);
         // The row goes with the machine, and so does the address that was the machine's (forgetHostedMachine);
         // the SANDBOX stays, which is what lets its owner give it a new machine without losing the name or who
@@ -146,6 +155,7 @@ export const reapIdleHosted = async (
             machineId: true,
             createdAt: true,
             idleWarnedAt: true,
+            wokeAt: true,
             sandbox: { select: { id: true, name: true, lastSeenAt: true, ownerId: true, owner: { select: { email: true } } } },
         },
     });

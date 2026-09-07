@@ -214,7 +214,8 @@ const cleanupSlug = ref<string | undefined>(undefined);
 // both equal connect.sh's SLUG), or (for a sandbox that never announced a daemonUrl) the same
 // sandbox-<sha256(token)[:12]> derivation Setup.vue pre-fills the subdomain with (must mirror the CLI).
 watch(pending, async (target) => {
-    if (target === undefined || target.role !== `owner`) {
+    // Owner rows only, and an owner's row is the one that carries the token (a member's says null).
+    if (target === undefined || target.role !== `owner` || target.token === null) {
         cleanupSlug.value = undefined;
         return;
     }

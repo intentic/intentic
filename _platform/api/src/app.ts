@@ -27,6 +27,10 @@ import { Prisma, type PrismaClient } from "@intentic/prisma";
 
 type AppEnv = { Variables: { logger: Logger } };
 
+// The request-body ceilings (see the middleware in createApp): the platform's, and the trial's larger one.
+const BODY_LIMIT_BYTES = 1024 * 1024;
+const TRIAL_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
+
 // Accept only a valid https origin so a bogus value can't be stored as the sandbox's address.
 const isHttpsUrl = (value: string): boolean => {
     try {
@@ -140,6 +144,22 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }),
     );
     app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
+
+    /* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. Hono buffers a JSON body whole
+     * and Node puts no ceiling under that, so every route that parses before it looks anything up
+     * (/setup/claim, /setup/report, /sandbox/announce, all sessionless) was a way to hand this process as much
+     * heap as a client cared to send, and the authenticated ones were no better once past their token check.
+     * A megabyte covers everything the platform is legitimately sent; the largest body in the contract is a
+     * sandbox logo (ImageDataUrlSchema, 150 KB). The trial's chat completions are the exception and get a
+     * ceiling of their own: a conversation is sent whole on every turn, and a long one with tool output in it
+     * runs to megabytes. The build report keeps the tighter cap it declares itself. A Content-Length over the
+     * limit is refused before a byte is read; a chunked body is read up to the limit and no further. */
+    app.use(`*`, (c, next) =>
+        bodyLimit({
+            maxSize: c.req.path.startsWith(`/trial/`) ? TRIAL_BODY_LIMIT_BYTES : BODY_LIMIT_BYTES,
+            onError: (refused) => refused.text(`error: request body too large`, 413),
+        })(c, next),
+    );
 
     // Better Auth owns everything under /api/auth (sign-in, OAuth callback, session, sign-out).
     app.on([`POST`, `GET`], `/api/auth/**`, (c: Context) => auth.handler(c.req.raw));

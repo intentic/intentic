@@ -4,7 +4,7 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
 import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { relayWalletEnsure, type WalletPolicyMirror } from "../wallet/wallet-signer.js";
+import { relayWalletEnsure } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
@@ -73,9 +73,9 @@ export interface CapabilityCtx {
     // The image-baked extensions dir (services.config.extensionsDir), lets the cli handler build the connector
     // registry (installedExtensions) from the narrow ctx without holding Services.
     readonly extensionsDir: string;
-    // Create-or-fetch the owner's platform wallet and mirror its policy caps (wallet/wallet-signer.ts), the
-    // wallet handler's whole platform reach, closure-wrapped so it stays testable.
-    readonly walletEnsure: (network: string, policy: WalletPolicyMirror) => Promise<{ readonly status: number; readonly body: string }>;
+    // Create-or-fetch the owner's platform wallet for its address (wallet/wallet-signer.ts), the wallet
+    // handler's whole platform reach, closure-wrapped so it stays testable. The caps are not this side's to send.
+    readonly walletEnsure: (network: string) => Promise<{ readonly status: number; readonly body: string }>;
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
@@ -174,7 +174,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         endpointModels: services.endpointModels,
         syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,
-        walletEnsure: (network, policy) => relayWalletEnsure(services.config, network, policy),
+        walletEnsure: (network) => relayWalletEnsure(services.config, network),
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),

@@ -7,8 +7,9 @@ import type { CapabilityHandler } from "../capability.js";
  * `apply` asks the PLATFORM for this owner's wallet (one per owner, created on first ask) and writes the
  * answered ADDRESS back into the manifest entry, the address is public and is the whole of what the
  * container ever holds; the signing key stays with the platform, reached only through the connect token
- * (wallet/wallet-signer.ts says why). The policy caps ride along on every apply, so editing the card is how
- * an owner changes what the SIGNER will enforce, not just what the daemon checks.
+ * (wallet/wallet-signer.ts says why). The card's caps are what THIS side checks before it asks for a
+ * signature; the caps the signer enforces reach the platform from the owner's browser as the card is saved,
+ * never from here, so nothing running in this container can widen its own allowance.
  *
  * A failed ensure is NOT fatal, the endpoint handler's reasoning verbatim: the entry stores either way and
  * the card carries the truth (`pending`), because the ordinary failure is a platform that has wallet signing
@@ -17,11 +18,6 @@ import type { CapabilityHandler } from "../capability.js";
  * `remove` is a disconnect, not a burn: the wallet and its funds stay with the platform under the owner's
  * account (re-adding the card finds the same address), because a capability removal must never be the thing
  * that strands money. */
-
-const policyOf = (config: WalletConfig): { perPaymentMaxUsd: string; dailyCapUsd: string } => ({
-    perPaymentMaxUsd: config.perPaymentMaxUsd,
-    dailyCapUsd: config.dailyCapUsd,
-});
 
 export const walletHandler: CapabilityHandler = {
     // No secret: the config is an address and the owner's own policy numbers, all of it printable.
@@ -44,7 +40,7 @@ export const walletHandler: CapabilityHandler = {
         const wallet = config as WalletConfig;
         const network = usdcNetworkOf(wallet.network);
         yield { kind: "log", message: `Asking the platform for this owner's wallet on ${network?.label ?? wallet.network}…` };
-        const answer = await ctx.walletEnsure(wallet.network, policyOf(wallet));
+        const answer = await ctx.walletEnsure(wallet.network);
         if (answer.status !== 200) {
             yield {
                 kind: "log",

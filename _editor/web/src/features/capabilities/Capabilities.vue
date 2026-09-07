@@ -76,6 +76,7 @@ import {
 } from "./model/form";
 import { type ConfSummary, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./model/normalize";
 import { HOST_PRESETS, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./model/previews";
+import { pushWalletPolicy } from "./model/walletPolicy";
 import { probeCapability, useCapabilities } from "./connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
@@ -1097,31 +1098,56 @@ const handOff = (entry: CapabilityCatalogEntry, added: CapabilitySummary): void 
     }
 };
 
+// The submit as refused: raise the alarm tier, so from here on a required-but-empty box is the thing actually
+// blocking the reader and is allowed to say so in red, and make the refusal visible.
+const refuseSubmit = (entry: NonNullable<typeof selected.value>): void => {
+    attempted.value = true;
+    // A refusal the reader cannot see is a form that looks broken: if what blocks the submit sits in the
+    // Advanced fold, open it.
+    if (
+        advancedFields(entry).some(
+            (field) =>
+                fieldMissing(field, values[field.key], keptSecrets.value) || fieldInvalid(field, values[field.key], keptSecrets.value) !== undefined,
+        )
+    ) {
+        advancedOpen.value = true;
+    }
+    shaking.value = false;
+    void nextTick(() => {
+        shaking.value = true;
+    });
+};
+
+/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its card is two writes (model/walletPolicy.ts): the
+ * daemon's, then the platform's, over this browser's session. Second, so a card the daemon refused sets
+ * nothing. Its failure is SAID rather than folded into a saved card: the daemon now shows the new numbers while
+ * the signer still holds the old ones, which is a state the reader has to know they are in. Answers whether the
+ * submit may go on to leave the card. */
+const pushedWalletPolicy = async (entry: NonNullable<typeof selected.value>, config: Record<string, string>): Promise<boolean> => {
+    if (entry.kind !== `wallet`) {
+        return true;
+    }
+    try {
+        await pushWalletPolicy(config);
+        return true;
+    } catch (caught) {
+        error.value = noticeFrom(
+            caught,
+            `The card was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the card again to retry.`,
+        );
+        return false;
+    }
+};
+
 const submit = async (): Promise<void> => {
     const entry = selected.value;
     if (entry === undefined || submitting.value) {
         return;
     }
-    // Mark every field touched, and raise the alarm tier: from here on a required-but-empty box is the thing
-    // actually blocking the reader, and is allowed to say so in red.
+    // Mark every field touched; a refusal past this point is one the reader is shown.
     touchAll();
     if (!canSubmit.value) {
-        attempted.value = true;
-        // A refusal the reader cannot see is a form that looks broken: if what blocks the submit sits in the
-        // Advanced fold, open it.
-        if (
-            advancedFields(entry).some(
-                (field) =>
-                    fieldMissing(field, values[field.key], keptSecrets.value) ||
-                    fieldInvalid(field, values[field.key], keptSecrets.value) !== undefined,
-            )
-        ) {
-            advancedOpen.value = true;
-        }
-        shaking.value = false;
-        void nextTick(() => {
-            shaking.value = true;
-        });
+        refuseSubmit(entry);
         return;
     }
     submitting.value = true;
@@ -1129,7 +1155,8 @@ const submit = async (): Promise<void> => {
     /* One write for both, because the daemon's is one write: adding and editing are the same upsert over the
      * same id. The only difference is what a blank credential box means, and `keptSecrets` is what carries that
      *: a kept one goes down as the marker the daemon resolves back into the stored value. */
-    const input: AddCapabilityInput = { id: savedName.value, kind: entry.kind, config: buildConfig(entry, values, keptSecrets.value) };
+    const config = buildConfig(entry, values, keptSecrets.value);
+    const input: AddCapabilityInput = { id: savedName.value, kind: entry.kind, config };
     // Read BEFORE the write, like `next` below: a one-per-sandbox card that is being connected for the first
     // time becomes an edit the moment its entry lands, and asking afterwards would call every first add an edit.
     const wasEditing = editing.value !== undefined;
@@ -1147,6 +1174,9 @@ const submit = async (): Promise<void> => {
             }
         });
         rememberSecrets(entry, values);
+        if (!(await pushedWalletPolicy(entry, config))) {
+            return;
+        }
         attempted.value = false;
         const added = capabilities.value.find((capability) => capability.id === input.id);
         if (added?.status.state === `pending`) {

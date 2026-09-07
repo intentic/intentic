@@ -353,3 +353,61 @@ describe(`a metered owner whose month is spent`, () => {
         expect(error).toMatchObject({ code: `PAYMENT_REQUIRED`, status: 402 });
     });
 });
+
+/* THE CONNECT TOKEN STAYS WITH THE OWNER. sandbox.list hands the browser one row per sandbox the caller can
+ * reach, and every row used to carry the decrypted connect token: a `viewer` invite was therefore worth the
+ * owner's whole platform-side standing (the trial allowance, wallet signatures, the announce). A member's row
+ * now says null; the daemon a member reaches is bound already and never asks for the token. */
+describe(`sandbox.list and the connect token`, () => {
+    it(`decrypts the token onto the owner's rows and withholds it from a member's`, async () => {
+        const prisma = fakePrisma({
+            sandbox: { findMany: vi.fn().mockResolvedValue([{ ...sandboxRow, hosted: null }]) },
+            sandboxMember: {
+                findMany: vi.fn().mockResolvedValue([{ role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } }]),
+            },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        expect(sandboxes.map(({ id, role, token }) => ({ id, role, token }))).toEqual([
+            { id: `s1`, role: `owner`, token: `tok` },
+            { id: `s2`, role: `viewer`, token: null },
+        ]);
+    });
+});
+
+/* DELETING A HOSTED SANDBOX CHARGES ITS OPEN STRETCH FIRST. The meter reads an awake machine's minutes live off
+ * its row (hosted-usage.ts), so the cascade that took the row took the minutes with it, and
+ * provision → work → delete → provision again was a free lane with no ceiling at all. */
+describe(`sandbox.delete on a hosted sandbox`, () => {
+    const hostedConfig = {
+        webOrigin: `https://app.test`,
+        intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true },
+        ingress: { ...testIngressConfig },
+        secrets: { key: `` },
+        email: { apiKey: ``, from: `` },
+        hosted: { flyApiToken: `fly`, flyOrg: `org`, monthlyHours: 40, perUser: 1 },
+    } as OrpcContext[`config`];
+
+    it(`charges the owner's month for the open stretch before the row goes`, async () => {
+        const wokeAt = new Date(Date.now() - 90 * 60_000);
+        const month = wokeAt.toISOString().slice(0, 7);
+        const upsert = vi.fn().mockResolvedValue({});
+        const deleteRow = vi.fn().mockResolvedValue({});
+        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 202 })));
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: deleteRow },
+            hostedMachine: {
+                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt }),
+                update: vi.fn().mockResolvedValue({}),
+            },
+            hostedUsage: { upsert },
+        });
+        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
+        expect(upsert).toHaveBeenCalledWith({
+            where: { userId_month: { userId: `u1`, month } },
+            create: { userId: `u1`, month, minutes: 90 },
+            update: { minutes: { increment: 90 } },
+        });
+        // Charged BEFORE the cascade: after it there is no row left to hold the minutes.
+        expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteRow.mock.invocationCallOrder[0]!);
+    });
+});

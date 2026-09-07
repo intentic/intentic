@@ -407,3 +407,19 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         expect(await res.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 });
+
+/* THE BODY IS BOUNDED BEFORE ANY ROUTE READS IT. The sessionless routes parse their JSON before they look
+ * anything up, so without a ceiling a client could hand this process as much heap as it cared to send, one
+ * request at a time, with no token. Refused as 413 with nothing looked up. */
+describe(`request body limit`, () => {
+    it(`413s an oversized body before the route runs`, async () => {
+        const findUnique = vi.fn();
+        const res = await createApp(config, fakePrisma({ sandbox: { findUnique } }), logger).app.request(`/sandbox/announce`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+            body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev`, padding: `x`.repeat(1024 * 1024) }),
+        });
+        expect(res.status).toBe(413);
+        expect(findUnique).not.toHaveBeenCalled();
+    });
+});

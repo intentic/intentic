@@ -58,7 +58,7 @@ export const onHostedPlan = async (prisma: PrismaClient, config: Config, userId:
  * allowance (config.hosted.perUser) otherwise. A plan with fewer slots than the free lane gives would be a
  * plan that takes something away, so the free number is the floor. The comp list grants the free number:
  * comping is "always on", not "any number of machines". */
-export const hostedSlotsOf = async (prisma: PrismaClient, config: Config, userId: string): Promise<number> => {
+export const hostedSlotsOf = async (prisma: Pick<PrismaClient, "hostedPlan">, config: Config, userId: string): Promise<number> => {
     const plan = await prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true, quantity: true } });
     return plan !== null && isOnPlan(plan) ? Math.max(plan.quantity, config.hosted.perUser) : config.hosted.perUser;
 };

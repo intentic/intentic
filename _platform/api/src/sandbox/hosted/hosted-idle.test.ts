@@ -73,6 +73,22 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
+    /* THE MINUTES GO WITH THE ROW unless they are charged first. The used figure reads an open stretch live off
+     * the machine row (hosted-usage.ts), so a collection that dropped the row with `wokeAt` still set erased
+     * whatever the owner had not yet been charged. Closed at the stop Fly reports, before the app and the row go. */
+    it(`charges a machine's open awake stretch to its owner's month before dropping its row`, async () => {
+        stubFly(`stopped`);
+        const upsert = vi.fn().mockResolvedValue({});
+        const wokeAt = daysAgo(30);
+        const prisma = prismaWith([machine({ wokeAt })], { hostedUsage: { upsert } });
+        expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
+        expect(upsert).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { userId_month: { userId: `u1`, month: wokeAt.toISOString().slice(0, 7) } } }),
+        );
+        const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+        expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
+    });
+
     /* THE ROW THAT OUTLIVED ITS MACHINE, and the reason this sweep threw every night for weeks: a machine
      * destroyed provider-side (here, by a second deployment's orphan sweep) left a row that could never be
      * read again. The row is not inert, `hostedOffer` counts rows against the one-machine allowance, so its

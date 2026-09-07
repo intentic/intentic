@@ -181,7 +181,8 @@ const resolve = async (): Promise<void> => {
     const attempt = (async (): Promise<void> => {
         const endpoint = await selectEndpoint({
             daemonUrl: url,
-            token: sandbox.token,
+            // Null on a member's row: no id to derive a loopback candidate from, so the tunnel it is (endpoint.ts).
+            token: sandbox.token ?? undefined,
             hosted: sandbox.hosted,
             // Forwarded, never recomputed: the platform owns the certificate's zone and this row is where it
             // says so (endpoint.ts Addressing).
@@ -236,7 +237,7 @@ const demote = (sandboxId: string): void => {
 const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
     const endpoint = endpoints.value[sandboxId];
     const sandbox = active.value;
-    const token = sandbox?.token;
+    const token = sandbox?.token ?? undefined;
     if (endpoint === undefined || token === undefined || token === ``) {
         // Nothing resolved to check, or no token to check it against: keep the old unconditional behaviour
         // rather than inventing a verdict from missing evidence.
