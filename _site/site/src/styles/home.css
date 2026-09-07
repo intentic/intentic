@@ -280,13 +280,25 @@
 
 /* ── 2 · The verbs, a screenful each ─────────────────────
    THE SHOWCASE. Five stages down the page, and each one is a title, a line and then the screen itself,
-   filling the page's own column. Two rules decide the whole shape of it.
+   a little wider than the column the title sits in. Two rules decide the whole shape of it.
 
-   FIRST: A STAGE TAKES THE SHELL'S MEASURE, the same 84rem every other band on the page stops at, and it
-   is centred in it like everything else. It was 116rem for a while — a band that broke out of the page's
-   column and ran to the window's edges, on the theory that a photograph of a screen has no reading width
-   the way a column of words does. It does not, but the PAGE does: five frames wider than every heading
-   above and below them do not read as a generous showcase, they read as a section that has come loose.
+   FIRST: THE WORDS TAKE THE SHELL'S MEASURE AND THE PICTURE STEPS PAST IT — the verb, its line and its
+   link stay in the same 84rem column every other band on the page stops at, and the frame alone leans out
+   of it on both sides. That difference is the point: a picture set to exactly the width of the paragraph
+   above it reads as an illustration IN the column, and the same picture a few rem wider reads as the
+   thing the column is captioning. It takes very little to land — 4.5rem a side at most, so the words end
+   at 81rem and the frame at 90rem.
+
+   A CAP, THOUGH, AND A SMALL ONE. This band was 116rem for a while — frames that broke the page's column
+   and ran to the window's edges, on the theory that a photograph of a screen has no reading width the way
+   a column of words does. It does not, but the PAGE does: five frames wider than every heading above and
+   below them do not read as a generous showcase, they read as a section that has come loose. Leaning out
+   by a few rem says the same thing without spending the page's alignment to say it.
+
+   AND THE BLEED IS COMPUTED, NOT CHOSEN, which is what keeps it out of trouble on a narrow window. See
+   `--stage-bleed` below: it is half of whatever space the window has left over beside the shell, so it is
+   exactly zero until the window is wider than the shell has any use for, and no breakpoint has to be
+   remembered for it.
 
    SECOND: EVERY FRAME IS 16:9 AND EVERY SHOT FILLS IT, because the shots are TAKEN at 16:9. That is the
    only arrangement of this section that works, and it took three tries to get there. The captures the
@@ -315,13 +327,34 @@
     padding-top: 1.5rem;
 }
 
-/* The shell's own measure and gutters, so a stage's frame lines up with the heading above it and with
+/* The shell's own measure and gutters, so a stage's words line up with the heading above it and with
    every other band's card. Only the vertical rhythm is the stage's own: a screenful apart, not a card's
    gap, which is what makes the section read one picture at a time. */
 .home .stage {
     max-width: 84rem;
     margin: 0 auto;
     padding: clamp(2.5rem, 6vh, 4.5rem) 1.5rem;
+
+    /* WHAT THE WINDOW HAS LEFT OVER beside the shell, on one side. Zero until the window is wider than
+       84rem, because until then the shell IS the window and there is nothing to lean into. */
+    --stage-room: max(0rem, (100vw - 84rem) / 2);
+    /* HALF OF IT, AND NEVER MORE THAN 4.5REM. Half rather than all of it is the rule that keeps this safe
+       at every width without a media query: whatever the frame takes, at least as much is left standing as
+       page margin outside it, so the picture can never end up pinned to the edge of the window on the
+       laptop widths where the leftover space is only a few dozen pixels. The cap lands the frame on 90rem
+       — 3rem past the shell's edge on each side, 4.5rem past the words — and a 102rem window reaches it.
+       `100vw` INCLUDES THE SCROLLBAR, and that is the one way a rule like this overflows a page. It cannot
+       here: the term is halved and the stage's own 1.5rem gutters are wider than any scrollbar, so on a
+       window narrower than the shell the bleed is at most a few px against 24px of gutter to spend it in,
+       and above the shell it is bounded by the real space beside it. */
+    --stage-bleed: min(4.5rem, var(--stage-room) / 2);
+}
+/* THE STEP OUT OF THE COLUMN, and both of the things a stage can carry take it: the four screenshots and
+   the plate Automate draws its machine on. If only the frames leaned out, the fifth stage would read as
+   the one that missed — the rhythm of this band is five visuals on one measure, whatever is inside them. */
+.home .stage-frame,
+.home .stage-machine {
+    margin-inline: calc(-1 * var(--stage-bleed));
 }
 /* STACKED, and the link is the third line of it rather than the far end of a row. It was a row once, the
    shape the old lead verb used: title and line at one end, "See it" pushed to the other. At card width
@@ -375,9 +408,10 @@
     height: auto;
 }
 /* THE 16:9 BOX TAKES OVER AT 48rem, which is also where `STAGE_SIZES` in `Landing.astro` stops asking for
-   a rung sized to the 205% crop and starts asking for one sized to the column. The two have to switch on
+   a rung sized to the 275% crop and starts asking for one sized to the frame. The two have to switch on
    the same number or there is a viewport where the stylesheet paints at twice the width `sizes` budgeted
-   for and the browser hands back a picture at half the resolution it is being drawn at.
+   for and the browser hands back a picture at half the resolution it is being drawn at. The same goes for
+   the two numbers the bleed above is built from: `sizes` carries them back as its own top two terms.
    THE SHOT SITS FLUSH TO THE FRAME, as it does in every other frame on this site (`.window-full`). There
    is no mount and no padding here, because there is nothing to mount: the capture already is the frame's
    shape. An earlier version of this band had both, and they existed only to make a letterbox look

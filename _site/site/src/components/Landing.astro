@@ -66,14 +66,22 @@ const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
 const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
 const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
-/* HOW WIDE A VERB STAGE PAINTS ITS SCREENSHOT. A stage takes the shell's measure — `max-width: 84rem` with
- * a 1.5rem gutter either side — so the widest a shot is ever drawn is 1296px, and below 84rem it is the
- * window minus those gutters. Under 48rem it is a top-left crop drawn at 275% of the frame instead, which
- * is what the last term is; the number and the breakpoint both have to match `home.css`.
+/* HOW WIDE A VERB STAGE PAINTS ITS SCREENSHOT, which is no longer the column it sits in: the words take
+ * the shell's measure — `max-width: 84rem` with a 1.5rem gutter either side, so 1296px of column — and the
+ * FRAME leans out of it by half of whatever the window has left over beside the shell, capped at 4.5rem a
+ * side (`--stage-bleed` in home.css, which says why). Four terms, and each one is that rule read back:
+ *
+ *   · from 102rem the bleed is capped, so the frame is a flat 1296 + 2 × 72 = 1440px;
+ *   · from 84rem to 102rem it grows with the window: 1296 + (100vw - 1344) / 2, i.e. `50vw + 624px`;
+ *   · below 84rem there is no room beside the shell to lean into, so it is the window minus the gutters;
+ *   · under 48rem the box crops a top-left corner drawn at 275% of itself instead.
+ *
+ * Every number here also lives in `home.css` and the two have to move together: paint wider than `sizes`
+ * budgeted for and the browser hands back a picture at a fraction of the resolution it is being drawn at.
  *
  * Not `COLUMN_SIZES`: that one describes the 80rem shell the feature and docs pages are built on, and this
  * page's is 84rem. Four rem of difference is a rung's worth of sharpness on a retina screen. */
-const STAGE_SIZES = "(min-width: 84rem) 1296px, (min-width: 48rem) calc(100vw - 3rem), 275vw";
+const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), 275vw";
 
 /* THE GETTING-STARTED BEATS, SORTED BY WHERE THEY HAPPEN rather than by their number. Everything up to the
  * last one is done in a browser on our side; the last is the line you paste into a terminal on your own
@@ -217,7 +225,8 @@ const machineStep = content.connect.steps.at(-1)!;
                  job is showing the product. A screenshot small enough that nothing in it can be read is not
                  a picture of the product; it is a picture of a screenshot.
                  Every verb now takes a stage: its name, its one line, its link, and then the screen itself,
-                 filling the page's own column in a 16:9 frame. The four `stage-*` captures are SHOT at that
+                 in a 16:9 frame that leans a little wider than the words above it — see `--stage-bleed` in
+                 home.css for how far and why it can never be far. The four `stage-*` captures are SHOT at that
                  shape rather than fitted to it (`_tools/e2e/shots/capture.mts`), which is what lets this page
                  scale them and do nothing else. The chapter label is the band's eyebrow, sitting just above
                  the first verb. -->
