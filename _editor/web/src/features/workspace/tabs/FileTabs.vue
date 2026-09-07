@@ -175,7 +175,7 @@ watch(
              stops its own event before it gets here. -->
         <div
             ref="scroller"
-            class="ftabs-scroll flex min-w-0 flex-1 items-stretch overflow-x-auto"
+            class="ftabs-scroll scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto"
             @scroll="updateThumb"
             @wheel="onWheel"
             @contextmenu="emit('contextmenu', undefined, $event)"
@@ -232,14 +232,10 @@ watch(
 </template>
 
 <style scoped>
-/* Hide the native horizontal scrollbar: it would take 6px off the fixed-height row and push tab text up.
- * Scrolling still works via scrollLeft (wheel handler + the overlay thumb below). */
-.ftabs-scroll {
-    scrollbar-width: none; /* Firefox */
-}
-.ftabs-scroll::-webkit-scrollbar {
-    display: none;
-}
+/* The native horizontal scrollbar is hidden by `.scrollbar-none` on the element (styles/utilities.css): it
+ * would take 6px off the fixed-height row and push the tab text up. Scrolling still works via scrollLeft
+ * (wheel handler + the overlay thumb below), which is the condition that utility documents for its use.
+ * `.ftabs-scroll` remains as the hook the thumb below measures against. */
 .ftabs-thumb {
     position: absolute;
     bottom: 1px;

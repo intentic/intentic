@@ -36,9 +36,11 @@ export interface PointerResize {
  *
  * @param onMove What this surface does with the pointer, called only while a drag is live.
  * @param onStart Read anything the move needs that is only true at the START of the gesture — the edge the
- * width is measured from, which moves during the drag if it is read per move.
+ * width is measured from, which moves during the drag if it is read per move, or the pointer's own position,
+ * which <ResizeSeam> subtracts from every later move so it can report a SIZE rather than a coordinate. It is
+ * handed the pointerdown event for that second case; a callback that wants neither can still take none.
  */
-export function usePointerResize(onMove: (event: PointerEvent) => void, onStart?: () => void): PointerResize {
+export function usePointerResize(onMove: (event: PointerEvent) => void, onStart?: (event: PointerEvent) => void): PointerResize {
     const resizing = ref(false);
 
     return {
@@ -46,7 +48,7 @@ export function usePointerResize(onMove: (event: PointerEvent) => void, onStart?
         start: (event) => {
             // Or the browser starts a text selection / native drag under the handle instead of a resize.
             event.preventDefault();
-            onStart?.();
+            onStart?.(event);
             resizing.value = true;
             (event.target as HTMLElement).setPointerCapture(event.pointerId);
         },

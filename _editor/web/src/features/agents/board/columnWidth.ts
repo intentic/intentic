@@ -30,8 +30,10 @@ import { ref, type Ref } from "vue";
 
 const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
 export const DEFAULT_RAIL_WIDTH = 320;
-const MIN_RAIL_WIDTH = 288;
-const MAX_RAIL_WIDTH = 480;
+// Exported for the same reason the default is: <ResizeSeam> is told where the drag may stop, and a second
+// spelling of these numbers in the component is how the seam and the clamp below would drift apart.
+export const MIN_RAIL_WIDTH = 288;
+export const MAX_RAIL_WIDTH = 480;
 
 export const clampRailWidth = (px: number): number => Math.round(Math.max(MIN_RAIL_WIDTH, Math.min(px, MAX_RAIL_WIDTH)));
 

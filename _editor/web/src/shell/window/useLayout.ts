@@ -71,7 +71,12 @@ const MAX_CHAT_WIDTH = 4000;
 const NARROW_DESKTOP_MAX_PX = 1280;
 const isNarrowDesktop = (width: number): boolean => width < NARROW_DESKTOP_MAX_PX && width >= 768;
 
-const defaultChatWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_CHAT_WIDTH : DEFAULT_CHAT_WIDTH);
+/* The bounds below are exported for the same reason DEFAULT_SIDE_PANE_WIDTH is: <ResizeSeam> is told where a
+ * drag may stop and what a double-click resets to, and a second spelling of those numbers in the view is how
+ * the seam and the clamp behind it drift apart. The setters remain the authority — a seam is a control, not a
+ * second opinion about what a width may be. */
+export const defaultChatWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_CHAT_WIDTH : DEFAULT_CHAT_WIDTH);
+export { MIN_CHAT_WIDTH };
 
 // Workspace explorer sidebar, the file-tree column inside the /workspace view. Persisted like the chat width.
 //
@@ -85,8 +90,8 @@ const SIDEBAR_WIDTH_KEY = `ui-workspace-sidebar-width`;
 const SIDEBAR_COLLAPSED_KEY = `ui-workspace-sidebar-collapsed`;
 const DEFAULT_SIDEBAR_WIDTH = 288;
 const NARROW_DEFAULT_SIDEBAR_WIDTH = 240;
-const MIN_SIDEBAR_WIDTH = 272;
-const MAX_SIDEBAR_WIDTH = 600;
+export const MIN_SIDEBAR_WIDTH = 272;
+export const MAX_SIDEBAR_WIDTH = 600;
 
 /* The editor's companion pane, the right-hand column of a split (see EditorStrip). Its width rather than a
  * ratio, because what has to stay readable is the pane itself: a percentage silently squeezes a diff below the
@@ -110,11 +115,11 @@ const MAX_SIDE_PANE_WIDTH = 4000;
 const REVIEW_LIST_WIDTH_KEY = `ui-agent-review-list-width`;
 const DEFAULT_REVIEW_LIST_WIDTH = 288;
 const NARROW_DEFAULT_REVIEW_LIST_WIDTH = 240;
-const MIN_REVIEW_LIST_WIDTH = 180;
-const MAX_REVIEW_LIST_WIDTH = 800;
+export const MIN_REVIEW_LIST_WIDTH = 180;
+export const MAX_REVIEW_LIST_WIDTH = 800;
 
-const defaultSidebarWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH);
-const defaultReviewListWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH);
+export const defaultSidebarWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH);
+export const defaultReviewListWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH);
 
 // The global terminal, the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
 // terminal button + Ctrl+` toggle it); its height belongs to the shared TerminalPanel, persisted per surface.
@@ -204,11 +209,10 @@ const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 // whole window spends 5% on the sliver and then overflows by the rail's width on any window under ~1.2kpx,
 // which put the column's right edge (the composer's margin) past the window and under .shell's clip.
 const { iconRailSize } = useIconRailSize();
-const clampWidth = (px: number): number => {
-    const viewportMax = toAppPx((window.innerWidth - iconRailScreenPx(iconRailSize.value)) * 0.95);
-    const max = Math.min(MAX_CHAT_WIDTH, viewportMax);
-    return Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, max)));
-};
+/** The chat's cap, which is the only one of these that MOVES: it tracks the viewport (and the rail it sits
+ *  beside), so the seam is handed a call rather than a constant. */
+export const maxChatWidth = (): number => Math.min(MAX_CHAT_WIDTH, toAppPx((window.innerWidth - iconRailScreenPx(iconRailSize.value)) * 0.95));
+const clampWidth = (px: number): number => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, maxChatWidth())));
 
 const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(px, MAX_SIDEBAR_WIDTH)));
 

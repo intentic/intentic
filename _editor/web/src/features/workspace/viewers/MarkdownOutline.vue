@@ -75,7 +75,7 @@ watch(
                 :key="row.index"
                 :data-outline-row="row.index"
                 type="button"
-                class="outline-row block w-full border-l py-1 pr-2 text-left text-xs leading-snug"
+                class="block w-full cursor-pointer border-l py-1 pr-2 text-left text-xs leading-snug transition-[color,border-color] duration-[90ms] ease-out hover:border-line-strong hover:text-content focus-visible:border-primary-500 focus-visible:text-content focus-visible:outline-none"
                 :class="row.index === active ? `border-link text-content` : `border-line text-subtle`"
                 :style="{ paddingLeft: inset(row.heading) }"
                 :aria-current="row.index === active ? `true` : undefined"
@@ -88,22 +88,3 @@ watch(
     </nav>
 </template>
 
-<style scoped>
-/* The row idiom of a spine: the border firms up and the words come forward together, fast enough to land inside
-   a pointer sweeping down the column. */
-.outline-row {
-    cursor: pointer;
-    transition:
-        color 0.09s ease-out,
-        border-color 0.09s ease-out;
-}
-.outline-row:hover {
-    border-color: var(--color-line-strong);
-    color: var(--color-content);
-}
-.outline-row:focus-visible {
-    outline: none;
-    border-color: var(--color-primary-500);
-    color: var(--color-content);
-}
-</style>

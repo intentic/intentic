@@ -978,19 +978,3 @@
 .composer-stop:hover {
     background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
 }
-.resize-handle {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.resize-handle:hover,
-.chat-panel.is-resizing .resize-handle {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.chat-panel.is-resizing {
-    user-select: none;
-}

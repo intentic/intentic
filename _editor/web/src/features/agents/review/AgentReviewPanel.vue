@@ -7,10 +7,10 @@ import {
     explorerColorClass,
     iconForEntry,
     Notice,
+    ResizeSeam,
     SegmentedControl,
     useDevice,
     useExplorerStyle,
-    usePointerResize,
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
@@ -30,8 +30,8 @@ import {
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../core-views/documentRegistry";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { useLayout } from "../../../shell/window/useLayout";
-import { toAppPx, uiLength } from "../../../shell/window/uiScale";
+import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../shell/window/useLayout";
+import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
 import { diffRawUrls } from "../../workspace/changes/diffRaw";
 import { useWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
 import DiffToolbar from "../../workspace/viewers/DiffToolbar.vue";
@@ -697,21 +697,13 @@ const openChanges = (): void => {
 // --- the list's width ----------------------------------------------------------------------------------
 // The file list is a column of PATHS, and how much of one you need is the reviewer's call, not a constant:
 // a flat repo reads fine at the default, a deep monorepo truncates every row at it. Same gesture and same
-// persistence as the workspace explorer's edge: drag to size, double-click to reset, remembered after.
-// Pointer capture rather than window listeners, so a drag that outruns the 6px strip still tracks.
-const listEl = ref<HTMLElement>();
-let listLeft = 0;
-const {
-    resizing,
-    start: startResize,
-    move: onResize,
-    end: endResize,
-} = usePointerResize(
-    (event) => shell.setReviewListWidth(toAppPx(event.clientX - listLeft)),
-    () => {
-        listLeft = listEl.value?.getBoundingClientRect().left ?? 0;
-    },
-);
+// persistence as the workspace explorer's edge: drag to size, double-click to reset, remembered after — all of
+// which is <ResizeSeam>'s, not this view's. The seam speaks in pointer coordinates; the stored width is in app
+// pixels (see uiScale), so the two meet in this computed rather than in a conversion inside the drag.
+const seamWidth = computed<number>({
+    get: () => toScreenPx(shell.reviewListWidth.value),
+    set: (px) => shell.setReviewListWidth(toAppPx(px)),
+});
 </script>
 
 <template>
@@ -835,10 +827,11 @@ const {
 
         <!-- List | diff. On a phone the two are the same real estate: the list IS the view until a file is
              picked, and the diff takes the screen with a back arrow: no route change either way. -->
-        <div v-else class="flex min-h-0 flex-1" :class="resizing ? 'select-none' : ''">
+        <!-- No select-none while dragging: <ResizeSeam> takes the whole document's text selection for the
+             duration of the drag, which is the pointer's reach rather than this row's. -->
+        <div v-else class="flex min-h-0 flex-1">
             <aside
                 v-if="!mobile || selected === undefined"
-                ref="listEl"
                 class="flex min-h-0 min-w-0 flex-col"
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
@@ -1043,17 +1036,14 @@ const {
             <!-- The seam between list and diff. Sits in flow with negative margins, so it straddles the border
                  without an overlay: the list scrolls, and an absolutely-positioned handle inside it would
                  scroll away with the rows. -->
-            <div
+            <ResizeSeam
                 v-if="!mobile"
-                class="review-resize"
-                :class="resizing ? 'is-resizing' : ''"
-                @pointerdown="startResize"
-                @pointermove="onResize"
-                @pointerup="endResize"
-                @pointercancel="endResize"
-                @dblclick="shell.resetReviewListWidth()"
+                v-model="seamWidth"
+                :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
+                :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
+                :reset="toScreenPx(defaultReviewListWidth())"
                 title="Drag to resize · double-click to reset"
-            ></div>
+            />
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <template v-if="selected !== undefined">
@@ -1181,21 +1171,3 @@ const {
         </div>
     </div>
 </template>
-
-<style scoped>
-/* Drag-to-resize seam on the file list's right edge (pointer-capture, no global listeners: mirrors the
-   workspace explorer's .ws-resize). Above the sticky repo headers so a drag started over one still grabs it. */
-.review-resize {
-    position: relative;
-    z-index: 20;
-    flex: 0 0 6px;
-    margin: 0 -3px;
-    cursor: col-resize;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.review-resize:hover,
-.review-resize.is-resizing {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-</style>

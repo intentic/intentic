@@ -125,7 +125,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     <template v-else>
                         <!-- The action's track is held open in the header too, so the columns below it stay put
                              whether or not a row is being hovered. -->
-                        <div class="row-line mt-2 px-1 pb-1 text-2xs text-subtle">
+                        <div class="mt-2 flex items-center gap-2 px-1 pb-1 text-2xs text-subtle">
                             <div class="hs-row min-w-0 flex-1">
                                 <span></span>
                                 <span></span>
@@ -136,7 +136,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                             <span class="w-4 shrink-0"></span>
                         </div>
                         <ul class="flex flex-col">
-                            <li v-for="(row, index) in rows" :key="row.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
+                            <li v-for="(row, index) in rows" :key="row.path" class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay">
                                 <!-- One hue for every bar: length is the whole message, and a colour keyed to the
                                      bar's own size would double-encode it. Text keeps text tokens throughout. -->
                                 <button type="button" class="hs-row min-w-0 flex-1 text-left" @click="emit('open-file', row.path)">
@@ -186,7 +186,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
                     <!-- No bar here: the RANK is the claim, and export counts are not a magnitude worth drawing. -->
                     <ul v-else class="mt-2 flex flex-col">
-                        <li v-for="(module, index) in modules" :key="module.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
+                        <li v-for="(module, index) in modules" :key="module.path" class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay">
                             <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="emit('open-file', module.path)">
                                 <span class="w-5 shrink-0 text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                 <span class="flex min-w-0 flex-1 overflow-hidden text-xs">
@@ -219,16 +219,6 @@ const building = computed(() => health.value?.freshness.state === `building`);
 </template>
 
 <style scoped>
-/* A row is the ranking plus its action, side by side: the ranking a button that opens the file, the action a
-   button of its own beside it, because one cannot nest inside the other. The hover tint lives out here so that
-   reaching for the action still lights the row it belongs to. */
-.row-line {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: background-color 150ms;
-}
-
 /* Header and rows share one track list so the columns line up. The bar column is fixed rather than fluid: a
    ranked bar is compared against its neighbours, and a column that grows with the panel would rescale the
    comparison every time the sidebar moves. */

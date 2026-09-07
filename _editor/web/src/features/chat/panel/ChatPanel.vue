@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, useDevice, ui, usePointerResize } from "@intentic/ui";
+import { Button, Icon, ResizeSeam, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
@@ -12,8 +12,8 @@ import { chatOnRail, chatWide } from "./chatPanelLayout";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
-import { toAppPx, uiLength } from "../../../shell/window/uiScale";
+import { defaultChatWidth, maxChatWidth, MIN_CHAT_WIDTH, MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
+import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
 import ChatCapacityRail from "./ChatCapacityRail.vue";
 import ChatPane from "./ChatPane.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
@@ -51,7 +51,6 @@ const { mobile } = useDevice();
 
 // The panel's own element (the left-edge resize handle measures against it).
 const root = ref<HTMLElement>();
-
 
 /* --- The panes ---------------------------------------------------------------------------------
  * How narrow a chat may be squeezed (useLayout's MIN_PANE_PX): imported rather than restated, because the
@@ -328,14 +327,14 @@ watch(
 );
 
 // --- Resize ----------------------------------------------------------------------------------
-// Left-edge resize: pointer capture routes move/up to the handle even past its bounds. The chat is the
-// rightmost column flush to the viewport's right edge, so its width is the distance from the pointer to it.
-const {
-    resizing,
-    start: startResize,
-    move: onResize,
-    end: endResize,
-} = usePointerResize((event) => layout.setChatWidth(toAppPx(globalThis.innerWidth - event.clientX)));
+// The seam speaks in pointer coordinates; the stored width is in app pixels (see uiScale). It reports a SIZE
+// rather than a position, which retires the viewport arithmetic this used to do: the width was read as the
+// distance from the pointer to the window's right edge, which is only correct while the chat is the rightmost
+// column flush to it. A size taken at pointer-down plus the distance dragged since is correct regardless.
+const seamWidth = computed<number>({
+    get: () => toScreenPx(layout.chatWidth.value),
+    set: (px) => layout.setChatWidth(toAppPx(px)),
+});
 </script>
 
 <template>
@@ -357,18 +356,23 @@ const {
     <div
         ref="root"
         class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
-        :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
+        :class="chatWide ? 'flex-row' : 'flex-col'"
         :style="{ '--capacity-rail': showsCapacity ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
-        <div
+        <!-- An OVERLAY seam rather than an in-flow one (place="edge"), because docked, this panel's own axis is
+             the column it draws — bar above, panes below — and its left border is not a position in that
+             column. It rides the panel's `relative` box. `pane="after"` because the chat is to the RIGHT of
+             the seam, which is what makes dragging leftward widen it. -->
+        <ResizeSeam
             v-if="!chatWide && !mobile"
-            class="resize-handle"
-            @pointerdown="startResize"
-            @pointermove="onResize"
-            @pointerup="endResize"
-            @dblclick="layout.resetChatWidth()"
+            v-model="seamWidth"
+            place="edge"
+            pane="after"
+            :min="toScreenPx(MIN_CHAT_WIDTH)"
+            :max="toScreenPx(maxChatWidth())"
+            :reset="toScreenPx(defaultChatWidth())"
             title="Drag to resize · double-click to reset"
-        ></div>
+        />
 
         <template v-if="tabs">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />

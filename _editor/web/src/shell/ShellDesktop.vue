@@ -714,7 +714,7 @@ useKeybindings();
                  Navigation remains live while the daemon catches up: cached views are still useful, and the
                  workspace gate itself decides whether there is anything truthful to paint. Actions inside a
                  view keep using exact reachability. -->
-            <div class="icon-rail-nav flex flex-col items-center overflow-y-auto overscroll-contain">
+            <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- The band seam: air, in the same quantity the hairline's box used to take, so the run's
                          rhythm is unchanged and only the line is gone. aria-hidden because a band boundary is a
@@ -1032,13 +1032,9 @@ useKeybindings();
     flex-shrink: 1;
     min-height: 0;
     gap: var(--icon-rail-gap);
-    /* A scrollbar in a 44px column would eat a quarter of it and sit under the tiles; the seam above and below
-     * is what says there is more, and the tiles scroll under the finger regardless. */
-    scrollbar-width: none;
-}
-
-.icon-rail-nav::-webkit-scrollbar {
-    display: none;
+    /* The bar itself is hidden by `.scrollbar-none` on the element (styles/utilities.css): a scrollbar in a 44px
+     * column would eat a quarter of it and sit under the tiles. The seam above and below is what says there is
+     * more, and the tiles scroll under the finger regardless. */
 }
 
 .icon-rail-tile {

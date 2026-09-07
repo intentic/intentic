@@ -66,8 +66,10 @@ it(`draws both rails as the same column, at the same width`, () => {
     // Neither may size itself: a Tailwind width class here is exactly how the two came apart before.
     expect(chat.className).toBe(other.className);
     // And both carry the drag: a rail that cannot be widened is the one whose reader has to live with it.
-    expect(chat.querySelector(`.rail-resize`)).not.toBeNull();
-    expect(other.querySelector(`.rail-resize`)).not.toBeNull();
+    // Addressed by the seam's ROLE rather than by a class: the drag is <ResizeSeam>'s now, and its class list is
+    // that component's private business, while `role="separator"` is what it promises a reader and a test alike.
+    expect(chat.querySelector(`[role="separator"]`)).not.toBeNull();
+    expect(other.querySelector(`[role="separator"]`)).not.toBeNull();
 });
 
 it(`moves both when either is dragged, and remembers it`, async () => {

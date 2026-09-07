@@ -371,7 +371,7 @@ watch(
 
                     <!-- WHICH PAGE. The agent's own tab strip, in the shape a person already reads. Capped at
                          half the row: the address beside it has to stay legible with eight tabs open. -->
-                    <div ref="stripEl" class="tabstrip flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
+                    <div ref="stripEl" class="scrollbar-none flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
                         <button
                             v-for="page in current?.pages ?? []"
                             :key="page.id"
@@ -657,14 +657,3 @@ watch(
     </div>
 </template>
 
-<style scoped>
-/* The tab strip scrolls without drawing a bar: it rides a bar barely taller than a line of text, where a
-   platform scrollbar is a second horizontal rule under the tabs and eats a third of the row's height. The
-   workspace's file tabs suppress it the same way (FileTabs' .ftabs-scroll), and for the same reason. */
-.tabstrip {
-    scrollbar-width: none;
-}
-.tabstrip::-webkit-scrollbar {
-    display: none;
-}
-</style>

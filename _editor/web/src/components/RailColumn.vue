@@ -17,66 +17,44 @@
      It resizes off its RIGHT edge (pointer capture, double-click resets), since it stands at the left of
      whatever surface hosts it. -->
 <script setup lang="ts">
-import { ref } from "vue";
-import { usePointerResize } from "@intentic/ui";
-import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
-import { toAppPx, uiLength } from "../shell/window/uiScale";
+import { computed } from "vue";
+import { ResizeSeam } from "@intentic/ui";
+import { DEFAULT_RAIL_WIDTH, MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
+import { toAppPx, toScreenPx, uiLength } from "../shell/window/uiScale";
 
-const frame = ref<HTMLElement | null>(null);
-
-/* The width is the distance from the rail's own left edge to the pointer: measured off the ELEMENT, not off
- * the window. In a floating window the two are the same thing (the rail is flush with that window's left
- * edge), but in the /chat area and on /subagents the shell's icon rail stands to its left, and a width read as
- * the pointer's x would be that column's width too wide on every drag.
+/* The seam speaks in pointer coordinates; the rail's width is stored in app pixels (see uiScale), so the two
+ * meet here rather than in a conversion inside the drag.
  *
- * Read per MOVE rather than once at the start: this rail's own left edge is what the shell's layout puts it
- * at, and the drag can widen a neighbour out from under it. */
-const {
-    resizing,
-    start: startResize,
-    move: onResize,
-    end: endResize,
-} = usePointerResize((event) => setRailWidth(toAppPx(event.clientX - (frame.value?.getBoundingClientRect().left ?? 0))));
+ * The seam reports a SIZE rather than a position, which is what retires this component's old measure-the-left-
+ * edge arithmetic: the width used to be read as the pointer's x minus the rail's own left edge, because in the
+ * /chat area and on /subagents the shell's icon rail stands to the left and a raw clientX was that column's
+ * width too wide on every drag. A size taken at pointer-down plus the distance dragged since is correct
+ * wherever the seam sits, so there is nothing left to measure. */
+const seamWidth = computed<number>({
+    get: () => toScreenPx(railWidth.value),
+    set: (px) => setRailWidth(toAppPx(px)),
+});
 </script>
 
 <template>
     <!-- No divider down the right edge: the lane slabs are the structure, and a hairline against a column of
          them is a second edge saying what the first already said. -->
-    <aside
-        ref="frame"
-        class="relative flex h-full min-h-0 shrink-0 flex-col items-stretch gap-1 p-1.5"
-        :class="{ 'rail-resizing': resizing }"
-        :style="{ width: uiLength(railWidth) }"
-    >
-        <div
-            class="rail-resize"
-            @pointerdown="startResize"
-            @pointermove="onResize"
-            @pointerup="endResize"
-            @dblclick="setRailWidth(DEFAULT_RAIL_WIDTH)"
+    <!-- The width stays on the <aside>, which is the rail: hosts, and railColumn.test.ts, address it as one
+         element at one width. Inside, the column of content and the seam beside it are a flex ROW, because the
+         seam is dragged off the right edge and an in-flow strip is what <ResizeSeam> is. It costs the content
+         nothing: the seam's negative margin gives back exactly the width it takes, so the column is as wide
+         with a seam as without one. The gutter stays on the content box and never on the host's scroller, for
+         the reason in this file's header. -->
+    <aside class="relative flex h-full min-h-0 shrink-0" :style="{ width: uiLength(railWidth) }">
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-1 p-1.5">
+            <slot />
+        </div>
+        <ResizeSeam
+            v-model="seamWidth"
+            :min="toScreenPx(MIN_RAIL_WIDTH)"
+            :max="toScreenPx(MAX_RAIL_WIDTH)"
+            :reset="toScreenPx(DEFAULT_RAIL_WIDTH)"
             title="Drag to resize · double-click to reset"
-        ></div>
-        <slot />
+        />
     </aside>
 </template>
-
-<style scoped>
-/* Drag-to-resize handle on the rail's RIGHT edge: the seam against whatever stands beside it (pointer-capture,
- * mirrors the chat panel's .resize-handle). */
-.rail-resize {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.rail-resize:hover,
-.rail-resizing .rail-resize {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.rail-resizing {
-    user-select: none;
-}
-</style>

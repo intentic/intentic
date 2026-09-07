@@ -75,19 +75,11 @@ const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
                  gap; `visibility` is what hides them, so the box they occupy survives and the button does not
                  change size when the spinner arrives. -->
             <span class="contents" :class="shown ? `invisible` : ``"><slot /></span>
-            <span v-if="shown" class="ui-press-spinner"><Icon name="spinner" spin /></span>
+            <!-- Over the middle of the button, out of flow, so the hidden content underneath keeps the width it
+                 had. The root carries `relative` for this and nothing else; PrimeVue's own root sets no
+                 position. `ui-press-spinner` no longer styles anything — it is the hook the press-lock tests
+                 assert the spinner by, so it stays as a name while the shape is utilities. -->
+            <span v-if="shown" class="ui-press-spinner absolute inset-0 flex items-center justify-center"><Icon name="spinner" spin /></span>
         </template>
     </PrimeButton>
 </template>
-
-<style scoped>
-/* Over the middle of the button, out of flow, so the hidden content underneath keeps the width it had. The
-   root carries `relative` for this and nothing else; PrimeVue's own root sets no position. */
-.ui-press-spinner {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-</style>

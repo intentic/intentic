@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice, usePointerResize, vAction } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, ResizeSeam, useDevice, vAction } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
@@ -701,7 +701,6 @@ const write = (key: string, value: string): void => {
     }
 };
 
-const root = ref<HTMLElement>();
 const height = ref(readHeight());
 const setHeight = (px: number): void => {
     height.value = clampHeight(px);
@@ -1099,37 +1098,38 @@ watch(
     },
 );
 
-// The panel's bottom viewport offset, captured at drag start: its height is the pointer's distance above it.
-let panelBottom = 0;
-const {
-    resizing,
-    start: startResize,
-    move: onResize,
-    end: endResize,
-} = usePointerResize(
-    (event) => setHeight(panelBottom - event.clientY),
-    () => {
-        panelBottom = root.value?.getBoundingClientRect().bottom ?? 0;
-    },
-);
+/* The seam's own model. This height is the one width-or-height in the app already held in SCREEN pixels rather
+ * than app pixels (it is compared against window.innerHeight, and the terminal paints its own text from a
+ * number), so unlike every other caller of <ResizeSeam> there is no conversion here: the seam and the store
+ * speak the same unit. setHeight stays the authority on the bounds, and the seam is handed the same ones so a
+ * drag stops at the limit instead of running past it and springing back. */
+const seamHeight = computed<number>({
+    get: () => height.value,
+    set: setHeight,
+});
+// Read at render rather than stored: the cap is a share of a viewport that the reader can resize under it.
+const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </script>
 
 <template>
     <div
-        ref="root"
         class="term relative flex min-h-0 shrink-0 border-t border-line"
-        :class="[vertical ? 'flex-row' : 'flex-col', { 'is-resizing': resizing, 'h-full': !resizable }]"
+        :class="[vertical ? 'flex-row' : 'flex-col', { 'h-full': !resizable }]"
         :style="resizable ? { height: `${height}px` } : undefined"
     >
-        <div
+        <!-- The seam rides the panel's TOP edge, in flow as the column's first item: its negative margin gives
+             back the height it takes, so it straddles the border above without costing the terminal a pixel.
+             `pane="after"` because the panel is BELOW the seam, which is what makes dragging upward grow it. -->
+        <ResizeSeam
             v-if="resizable"
-            class="term-resize"
-            @pointerdown="startResize"
-            @pointermove="onResize"
-            @pointerup="endResize"
-            @dblclick="setHeight(DEFAULT_HEIGHT)"
+            v-model="seamHeight"
+            axis="y"
+            pane="after"
+            :min="MIN_HEIGHT"
+            :max="maxHeight"
+            :reset="DEFAULT_HEIGHT"
             title="Drag to resize · double-click to reset"
-        ></div>
+        />
         <!-- The bar: across the top when docked, down the left edge in the floating window (`vertical`). Same
              pills, same toolbar, same right-click menu: only the axis differs. -->
         <div
@@ -1532,24 +1532,6 @@ const {
 </template>
 
 <style scoped>
-/* Drag-to-resize handle on the panel's top edge (pointer-capture, mirrors Workspace's .ws-resize). */
-.term-resize {
-    position: absolute;
-    inset: -3px 0 auto 0;
-    height: 6px;
-    cursor: row-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.term-resize:hover,
-.term.is-resizing .term-resize {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.term.is-resizing {
-    user-select: none;
-}
-
 /* Terminal tab pill: mirrors FileTabs' .ftab muted→hover→active progression, kept rounded to sit among the
    toolbar's other rounded-md buttons. Selected (Shift/Ctrl+click) tints toward primary so a multi-selection
    reads at a glance without fighting the active pill's overlay. */

@@ -165,7 +165,7 @@
 @source inline("scroll-{auto,smooth}");
 @source inline("{snap-none,snap-x,snap-y,snap-start,snap-center,snap-end,snap-mandatory,snap-proximity}");
 /* This app's own, promised by name for the same reason as everything above. */
-@source inline("{scrollbar-thin,scrollbar-stable,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
+@source inline("{scrollbar-thin,scrollbar-stable,scrollbar-none,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
 /* THE CHIP, promised for the same reason as the field and the row: it is a hand-written control everywhere it
  * is not named. An extension picking one of a set — a trigger's events, a schedule's weekdays, a widget's
  * access mode — either wears this pair or invents a fifth spelling of "this one is on", which is precisely the

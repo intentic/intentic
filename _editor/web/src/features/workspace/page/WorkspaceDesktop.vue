@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow, usePointerResize } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -16,7 +16,15 @@ import { workspaceAgent } from "../health/workspaceScope";
 import { detectActivations } from "../../../core-views/registry";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { useMonaco } from "../files/useMonaco";
-import { DEFAULT_SIDE_PANE_WIDTH, MIN_PANE_PX, type SidebarPanel, useLayout } from "../../../shell/window/useLayout";
+import {
+    defaultSidebarWidth,
+    DEFAULT_SIDE_PANE_WIDTH,
+    MAX_SIDEBAR_WIDTH,
+    MIN_PANE_PX,
+    MIN_SIDEBAR_WIDTH,
+    type SidebarPanel,
+    useLayout,
+} from "../../../shell/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
 import { reportOpenPath } from "../../../shell/presence/usePresence";
 import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
@@ -314,21 +322,14 @@ let dragDepth = 0;
 // would decline must not be accepted by a row just because the pointer was over one.
 let unwatchDragSource: (() => void) | undefined;
 
-const sidebar = ref<HTMLElement>();
-// The sidebar's left viewport offset, captured at drag start: its width is the pointer's distance from it (the
-// sidebar is not flush to the viewport edge; the shell's rail sits to its left).
-let sidebarLeft = 0;
-const {
-    resizing,
-    start: startResize,
-    move: onResize,
-    end: endResize,
-} = usePointerResize(
-    (event) => layout.setSidebarWidth(toAppPx(event.clientX - sidebarLeft)),
-    () => {
-        sidebarLeft = sidebar.value?.getBoundingClientRect().left ?? 0;
-    },
-);
+// The explorer column's seam. Like the split's below, it speaks in pointer coordinates while the stored width
+// is in app pixels (see uiScale). <ResizeSeam> reports a SIZE rather than a position, which is what retires the
+// left-offset this used to capture at drag start: the sidebar is not flush to the viewport edge (the shell's
+// rail sits to its left), so a width read from a raw clientX was the rail's width too wide on every drag.
+const sidebarSeamWidth = computed<number>({
+    get: () => toScreenPx(layout.sidebarWidth.value),
+    set: (px) => layout.setSidebarWidth(toAppPx(px)),
+});
 
 const clearFilter = (): void => {
     filter.value = ``;
@@ -825,7 +826,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
     <div
         ref="rootEl"
         class="ws flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
-        :class="{ 'is-resizing': resizing, 'ws-scoped': workspaceAgent !== undefined }"
+        :class="{ 'ws-scoped': workspaceAgent !== undefined }"
         @dragover.prevent
         @drop.prevent
     >
@@ -845,7 +846,6 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                  stored column width is ignored: it was chosen against a pane this one is not. -->
             <aside
                 v-if="sidebarOpen"
-                ref="sidebar"
                 class="relative flex min-h-0 flex-col border-r border-line bg-card"
                 :class="narrowBody ? `absolute inset-y-0 left-0 z-20 w-[min(20rem,85%)] shadow-xl` : `shrink-0`"
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
@@ -1063,20 +1063,28 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         @open-directory="openDirectory"
                     />
                 </div>
-                <!-- No seam on the drawer: its width is the pane's to decide, not the reader's to drag. -->
-                <div
-                    v-if="!narrowBody"
-                    class="ws-resize"
-                    @pointerdown="startResize"
-                    @pointermove="onResize"
-                    @pointerup="endResize"
-                    @dblclick="layout.resetSidebarWidth()"
-                    title="Drag to resize · double-click to reset"
-                ></div>
                 <!-- Root drop hint over the whole panel (files mode only: review/history aren't drop targets);
                      pointer-events-none so drops still reach the rows/aside. -->
-                <div v-if="rootDragging && layout.sidebarPanel.value === 'files'" class="ws-dropzone pointer-events-none absolute inset-1 z-10"></div>
+                <!-- Root drop-zone hint (a folder row shows its own inset ring instead). -->
+                <div
+                    v-if="rootDragging && layout.sidebarPanel.value === 'files'"
+                    class="pointer-events-none absolute inset-1 z-10 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6"
+                ></div>
             </aside>
+
+            <!-- The seam sizes the explorer, so it stands OUTSIDE the column it drags: in flow between the
+                 sidebar and the editor, straddling their shared border on negative margins. Inside the aside it
+                 would have to be an overlay, and an overlay over a scroller scrolls away with the rows.
+                 No seam on the drawer: at that width the column's size is the pane's to decide, not the
+                 reader's to drag. -->
+            <ResizeSeam
+                v-if="sidebarOpen && !narrowBody"
+                v-model="sidebarSeamWidth"
+                :min="toScreenPx(MIN_SIDEBAR_WIDTH)"
+                :max="toScreenPx(MAX_SIDEBAR_WIDTH)"
+                :reset="toScreenPx(defaultSidebarWidth())"
+                title="Drag to resize · double-click to reset"
+            />
 
             <!-- Dismisses the drawer by clicking the file it is covering: the way every drawer works, and the
                  only affordance the toggle button does not already provide. -->
@@ -1109,7 +1117,12 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             aria-label="Toggle explorer"
                         >
                             <Icon name="bars" class="text-sm" />
-                            <span v-if="autoHidden" class="ws-stashed" :class="{ 'ws-stashed-new': justHidden }" aria-hidden="true"></span>
+                            <span
+                                v-if="autoHidden"
+                                class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary-500"
+                                :class="{ 'ws-stashed-new': justHidden }"
+                                aria-hidden="true"
+                            ></span>
                         </button>
                     </template>
                     <template #status>
@@ -1153,7 +1166,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                      Withheld from a read-only member: an invitation to drop is a promise to keep the file. -->
                 <div
                     v-if="rootDragging && externalDrag && canEditFiles"
-                    class="ws-dropzone pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 text-primary-500"
+                    class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-primary-500"
                 >
                     <Icon name="upload" class="text-2xl" />
                     <span class="text-xs font-medium">Drop files to add to workspace root</span>
@@ -1192,23 +1205,6 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
 </template>
 
 <style scoped>
-/* Drag-to-resize handle on the sidebar's right edge (pointer-capture, no global listeners). */
-.ws-resize {
-    position: absolute;
-    inset: 0 -3px 0 auto;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.ws-resize:hover,
-.ws.is-resizing .ws-resize {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.ws.is-resizing {
-    user-select: none;
-}
 /* `.ws-scoped` (the tint that says this is not the shared tree) lives in styles.css beside .view-header: it has
  * to reach the bars inside child components, and the phone's workspace wears the same one. */
 
@@ -1222,16 +1218,11 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
  * at the file they just opened is a change nobody sees happen, and a badge that keeps pulsing for as long as the
  * state lasts is a thing people learn to ignore. The ring is a separate element scaling out from under the dot,
  * so the dot itself never moves. `prefers-reduced-motion` keeps the dot and drops the ring: the information is
- * in the dot, the animation is only what draws the eye to it. */
-.ws-stashed {
-    position: absolute;
-    top: 0.25rem;
-    right: 0.25rem;
-    width: 0.375rem;
-    height: 0.375rem;
-    border-radius: 9999px;
-    background: var(--color-primary-500);
-}
+ * in the dot, the animation is only what draws the eye to it.
+ *
+ * THE DOT ITSELF IS UTILITIES, on the element (`absolute right-1 top-1 h-1.5 w-1.5 rounded-full
+ * bg-primary-500`). What is left here is only what a class attribute cannot hold: a pseudo-element, its
+ * keyframes, and the media query that drops them. */
 .ws-stashed-new::after {
     content: "";
     position: absolute;
@@ -1255,11 +1246,5 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
     .ws-stashed-new::after {
         animation: none;
     }
-}
-/* Root drop-zone hint (a folder row shows its own inset ring instead). */
-.ws-dropzone {
-    border: 2px dashed color-mix(in srgb, var(--color-primary-500) 60%, transparent);
-    background: color-mix(in srgb, var(--color-primary-500) 6%, transparent);
-    border-radius: 0.375rem;
 }
 </style>

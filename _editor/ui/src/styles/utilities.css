@@ -33,6 +33,29 @@
         background: var(--color-muted);
     }
 
+    /* NO SCROLLBAR AT ALL, on a box that still scrolls. The third of the three scrollbar answers, and the one
+     * that had no name: the shell's icon rail, the workspace's file tabs and the browsers' tab strip each spelled
+     * `scrollbar-width: none` plus the `::-webkit-` pseudo-element out in their own scoped block, three copies of
+     * four lines whose only variation was the class it hung off.
+     *
+     * It cannot be a Tailwind utility written at the call site, which is why it lives here beside its two
+     * siblings rather than being inlined: `::-webkit-scrollbar` is a pseudo-element with no arbitrary-variant
+     * spelling that is worth reading, and a rule that must exist in a stylesheet should exist in the ONE
+     * stylesheet the design system owns.
+     *
+     * FOR A STRIP THAT IS ALREADY SHORTER THAN A SCROLLBAR IS TALL — a 44px rail, a row of tabs — where the
+     * platform bar would take a third of the box's height and sit under its own content. Never for a scroller a
+     * reader has to find their place in: this hides the only thing on screen that says how far down they are.
+     * The content must stay reachable by wheel, trackpad and drag without it (all three of these keep a wheel
+     * handler or an overlay thumb of their own). */
+    .scrollbar-none {
+        scrollbar-width: none;
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
+    }
+
     /* A FINGER'S WORTH OF HIT AREA, WITHOUT MOVING A PIXEL.
      *
      * The app's dense controls are measured for a mouse and they are right for one: a 24px icon button in a
