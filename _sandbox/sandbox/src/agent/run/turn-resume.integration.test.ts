@@ -1562,3 +1562,102 @@ test("a reset instant that had already passed when the refusal happened is never
     expect(turns).toHaveLength(0);
     clearPendingResume("lim-auto-6");
 });
+
+/* THE ACCOUNT IS A CHOICE, NOT A RULE: a session is a file this daemon keeps and a credential is an env it passes
+ * per turn, so a press that says `carry` keeps the session across the account change. What the model is told
+ * differs from the fresh arm in the one fact it cannot see, that its context is about to be read cold on
+ * somebody else's allowance. */
+test("a press that carries keeps the session across the account change, and says so", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({
+        input: { prompt: "ship the parser", conversationId: "lim-carry", isolated: true, account: "spent-one" },
+        sessionId: "s-real",
+        ran: true,
+    });
+
+    await fireLimitResume(services, heldWake(turns), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
+    await settle("lim-carry");
+
+    expect(turns[0]!.account).toBe("with-room");
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.prompt).toMatch(/in this same session/i);
+    expect(turns[0]!.prompt).toContain("ship the parser");
+
+    clearPendingResume("lim-carry");
+});
+
+// A carry the provider would not take is tried once, and the fallback is the fresh session the press could have
+// chosen: the entry re-recorded with `carryRefused` and a move to where the turn already is.
+test("a carry the other account refused re-runs fresh on that account, once", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure(
+        {
+            input: { prompt: "ship the parser", conversationId: "lim-refused-carry", isolated: true, account: "with-room" },
+            sessionId: "s-real",
+            ran: true,
+            carryRefused: true,
+            move: { account: "with-room", carry: false },
+        },
+        RECORDED,
+    );
+
+    await scheduler.tick(RECORDED + 5_000);
+    await settle("lim-refused-carry");
+    await scheduler.tick(RECORDED + 10_000);
+    await settle("lim-refused-carry");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.account).toBe("with-room");
+    expect(turns[0]!.sessionId).toBeUndefined();
+    expect(turns[0]!.prompt).toMatch(/sent again on a different account/i);
+    clearPendingResume("lim-refused-carry");
+});
+
+/* THE OWNER'S POLICY, PERFORMED. A move booked at the failure (LimitFailure.move) goes on the next pass, with no
+ * instant to wait for and no posture to re-read, and goes ONCE: the entry keeps its `fired` stamp exactly as the
+ * appointment does, so a second pass finds nothing to do and a press still works. */
+test("a booked move fires on the next pass, with the session the policy said to carry, and only once", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure(
+        {
+            input: { prompt: "ship the parser", conversationId: "lim-move", isolated: true, account: "spent-one" },
+            sessionId: "s-real",
+            ran: true,
+            reopensAt: REOPENS,
+            move: { account: "with-room", carry: true },
+        },
+        RECORDED,
+    );
+
+    await scheduler.tick(RECORDED + 5_000);
+    await settle("lim-move");
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.account).toBe("with-room");
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.prompt).toMatch(/in this same session/i);
+
+    // Neither the next pass nor the reset fires it again: one hold, one fire.
+    await scheduler.tick(RECORDED + 10_000);
+    await scheduler.tick(REOPENS * 1000 + 1);
+    await settle("lim-move");
+    expect(turns).toHaveLength(1);
+    clearPendingResume("lim-move");
+});
+
+// Without a booking the pass does what it always did: nothing, for a conversation nobody armed.
+test("a held turn with no booked move and no arming stays held", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+
+    await scheduler.tick(RECORDED + 5_000);
+    await scheduler.tick(REOPENS * 1000 + 1);
+    expect(turns).toHaveLength(0);
+    clearPendingResume("lim-unbooked");
+});

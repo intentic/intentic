@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { effectiveAutoLand, effectiveLimitResume, landedAway, limited, writingNow } from "../fleet/agentStatus";
+import { effectiveAutoLand, effectiveLimitMove, effectiveLimitResume, landedAway, limited, writingNow } from "../fleet/agentStatus";
 import type { useAgentChanges } from "../review/useAgentChanges";
 import { useAgents } from "../fleet/useAgents";
 import { useRole } from "../../sandbox/secrets/useRole";
@@ -32,7 +32,7 @@ const { changes, agentId, landInMenu } = defineProps<{
 // the page rather than inside a menu that closes on every press.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: [] }>();
 
-const { agentById, restore, busyIds, setResumeAfterLimit } = useAgents();
+const { agentById, restore, busyIds, setResumeAfterLimit, setMoveAfterLimit } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 /* WORK THIS SESSION LANDED THAT THE WORKSPACE NO LONGER HOLDS: the reason "Land now" above stands down.
  *
@@ -82,6 +82,17 @@ const toggleSendsAgain = async (): Promise<void> => {
     const next = !sendsAgainOn.value;
     emit(`selected`);
     await setResumeAfterLimit(agentId, next === sandboxSendsAgain.value ? null : next);
+};
+
+/* The other answer to the same wall, in the same three states: move the held turn to another account of the
+ * same provider with room, now, rather than waiting for this one's reset. Offered on the same card and for
+ * the same reason, and its row says what it spends: a second account, on this conversation's behalf. */
+const sandboxMoves = computed(() => sandboxSettings.value?.moveAfterLimit ?? false);
+const movesOn = computed(() => effectiveLimitMove(agentById(agentId), sandboxMoves.value));
+const toggleMoves = async (): Promise<void> => {
+    const next = !movesOn.value;
+    emit(`selected`);
+    await setMoveAfterLimit(agentId, next === sandboxMoves.value ? null : next);
 };
 
 // The ship-tier items (land, re-land, auto-land posture, discard) leave the menu below maintainer rather
@@ -191,6 +202,19 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                         sendsAgainOn
                             ? `This turn goes again by itself at the reset. Stopping leaves it here to send by hand.`
                             : `Nothing sends it for you. Arm it and this turn goes once, at the hour the provider named.`
+                    }}
+                </span>
+            </span>
+        </button>
+        <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleMoves">
+            <Icon name="user" class="mt-0.5 text-xs" :class="movesOn ? 'text-link' : 'text-subtle'" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ movesOn ? `Stop moving this to another account` : `Move to another account when spent` }}</span>
+                <span class="text-2xs text-subtle">
+                    {{
+                        movesOn
+                            ? `A refused turn moves to a connected account of the same provider with room, at once, on this chat's behalf.`
+                            : `Spends a second account on this chat's behalf; with none that has room, it waits as the row above says.`
                     }}
                 </span>
             </span>

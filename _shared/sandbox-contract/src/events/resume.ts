@@ -45,9 +45,14 @@ export const RESUME_NOTES = {
      * turn was a person pressing Continue. */
     limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
     switched:
-        "The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account, which starts a fresh session. The conversation so far has been carried across above, including the part of the request that was already completed: continue from that point instead of starting over.",
+        "The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account, which starts a fresh session. The conversation so far has been carried across above, including the part of the request that was already completed, and the sandbox has measured where the work actually stands (the files changed on this branch, what was verified, what the checklist still holds) in the note headed 'Where the work stands': trust that note over anything recalled, then continue from that point instead of starting over.",
+    /* `carried` is the same mid-turn stranding picked back up on another account of the SAME provider with the
+     * session kept: a session is a file the daemon holds and a credential is an env it passes, so nothing about
+     * the switch touches what the model knew. REPEATED is exactly right for it, the work IS in this session's
+     * own history, which is what separates it from `switched` one entry up. */
+    carried: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account of the same provider, in this same session: everything you knew is still here. ${REPEATED}`,
     refused:
-        "The model provider refused the previous attempt at this request outright, because its usage allowance was spent: no part of the request below was read or acted on, and nothing has been done towards it. It has been sent again, and starts from the beginning.",
+        "The model provider refused the previous attempt at this request outright, because its usage allowance was spent: no part of the request below was read or acted on, and nothing has been done towards it. It has been sent again, and starts from the beginning. Where the sandbox has measured earlier work on this branch, it is in the note headed 'Where the work stands'.",
     // A turn that was PARKED on the user when the daemon died: nothing re-runs at boot, the card is restored
     // instead, and this is the turn their answer starts (turn-resume.ts). What rides below the note is the
     // answer itself, so the model picks the session back up at exactly the decision it had handed over.
@@ -105,6 +110,7 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
      * served it. The line is also the only place a retired session is accounted for. */
     limit: { kind: "notice", text: "Sent again after the allowance ran out mid-turn, picking up where it left off." },
     switched: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
+    carried: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it." },
     refused: { kind: "notice", text: "Sent again after the allowance refused it: nothing had run." },
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };

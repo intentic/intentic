@@ -365,6 +365,18 @@ export const ResumeRoutingSchema = z.object({
     // Omitted rather than guessed: a client whose catalog hasn't loaded has no pick to send, and the turn's own
     // model is a better answer than a blank one.
     model: z.string().optional().describe("Which model. Leave it out to keep the one the refused turn named."),
+    /* WHETHER THE PROVIDER SESSION COMES ALONG when only the account changes. A session is a file the daemon
+     * keeps and a credential is an env the daemon passes, so a same-provider move can resume the very session
+     * the refused turn was in: the model keeps everything, and the price is one cold re-read of the whole
+     * context on the other account. Left out (or false) the move opens a fresh session seeded from the record
+     * and the sandbox's measured brief, cheaper and lossier. A press that names another PROVIDER cannot carry
+     * and this is ignored; a press on the same account has nothing to carry and is ignored too. */
+    carry: z
+        .boolean()
+        .optional()
+        .describe(
+            "When the account changes, keep the provider session (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record. Ignored when the provider changes, or when nothing changes.",
+        ),
 });
 export type ResumeRouting = z.infer<typeof ResumeRoutingSchema>;
 /* RUN THE HELD TURN AGAIN: which conversation, and who serves it now.

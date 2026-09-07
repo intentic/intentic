@@ -130,6 +130,27 @@ export const setResumeAfterLimit = async (id: string, resumeAfterLimit: boolean 
     }
 };
 
+/* The third posture of the same grammar: whether a spent allowance MOVES this conversation's held turn to another
+ * account of the same provider with room, the moment the refusal lands (SandboxSettings.moveAfterLimit has the
+ * policy and what a move costs). Same optimistic write, same one-card scope. */
+export const setMoveAfterLimit = async (id: string, moveAfterLimit: boolean | null): Promise<void> => {
+    const previous = registry.value.find((agent) => agent.id === id);
+    const revert = previous?.moveAfterLimit;
+    if (previous !== undefined) {
+        previous.moveAfterLimit = moveAfterLimit ?? undefined;
+    }
+    try {
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/move-after-limit`, jsonBody(`POST`, { moveAfterLimit }));
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } catch (error) {
+        const target = registry.value.find((agent) => agent.id === id);
+        if (target !== undefined) {
+            target.moveAfterLimit = revert;
+        }
+        throw error;
+    }
+};
+
 /* SEND A STRANDED TURN AGAIN, the board's half of the chat's pick-up strip: the daemon is still holding the
  * turn a spent allowance refused, so this re-RUNS that turn rather than appending a message saying "carry on"
  * (agent.contract's `resume`, and events.ts's `held` for the transcript full of the word "Continue" that

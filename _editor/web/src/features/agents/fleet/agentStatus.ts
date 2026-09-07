@@ -81,6 +81,8 @@ export interface AgentStanding {
     readonly limitHeld?: boolean;
     /** Whether a fire is already booked for it at the reset, so this card needs nobody. The one lane input. */
     readonly limitScheduled?: boolean;
+    /** The account the owner's policy is moving the held turn to, while that move is booked (a scheduled card's sentence). */
+    readonly limitMoving?: string;
 }
 
 /* A SPENT ALLOWANCE, WHICH IS THE ONE "FAILURE" HERE THAT NOBODY HAS TO FIX. Nothing is broken, no credential
@@ -620,7 +622,8 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
 // says which kind of unfinished it is rather than claiming work that is not happening.
 const activeLabel = (agent: AgentStanding): string => {
     if (limitScheduled(agent)) {
-        return `Sends itself again`;
+        // A booked move names where it is going; the appointment has only its hour, which the corner shows.
+        return agent.limitMoving === undefined ? `Sends itself again` : `Moving to ${agent.limitMoving}`;
     }
     return watching(agent) && !turnInFlight(agent) ? `Waiting on a condition` : `Still working`;
 };
@@ -693,6 +696,11 @@ export const effectiveOutageResume = (agent: { readonly resumeAfterOutage?: bool
  * how somebody ends up pressing a button that says the opposite of what it does. */
 export const effectiveLimitResume = (agent: { readonly resumeAfterLimit?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.resumeAfterLimit ?? sandboxDefault ?? false;
+
+/* And the fourth fold, for the answer to a spent allowance that does not wait: whether THIS conversation's held
+ * turn is moved to another account of the same provider with room. Same two levels, same reason. */
+export const effectiveLimitMove = (agent: { readonly moveAfterLimit?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
+    agent?.moveAfterLimit ?? sandboxDefault ?? false;
 
 // The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
 // provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are

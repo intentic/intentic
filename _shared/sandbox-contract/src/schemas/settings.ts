@@ -633,6 +633,47 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether a turn a spent usage limit refused is sent again by itself once the allowance reopens. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because the allowance is your budget and a turn that spends it the second it comes back is not a decision to make for you. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
         ),
+    /* THE OTHER ANSWER TO A SPENT ALLOWANCE, and the one that does not wait: "move the held turn to another
+     * connected account of the same provider that still has room, now".
+     *
+     * A POLICY, NEVER A REFLEX. Nothing here decides to spend a second account on the owner's behalf; this row is
+     * the owner deciding it once, for the board, and any one conversation can say otherwise (AgentSummarySchema
+     * .moveAfterLimit). Composed with `resumeAfterLimit` above it spells four postures: hold for a press (both
+     * off), send again at the reset, move or else hold, move or else send again at the reset.
+     *
+     * WHAT A MOVE COSTS, said here because the toggle is where it is decided. A provider session belongs to the
+     * credential that minted it only by the daemon's own rule, not the provider's, so a move can CARRY the
+     * session: the model keeps everything it knew, and the price is one cold re-read of the whole context on
+     * the other account (a prompt cache is per account, and it has expired anyway). Or it can start FRESH:
+     * a capped copy of the record plus the sandbox's measured brief of where the work stands, a few thousand
+     * tokens, which loses whatever detail never reached the record. `limitMoveCarryUnder` below draws the
+     * line between the two by how much context there is to re-read.
+     *
+     * Same-provider only, and only where the daemon picks the account (Claude). A routed provider balances its
+     * own credentials before it refuses, so a refusal there already means every one is spent, and a different
+     * PROVIDER retires the session for a saving that is not one (see `downgradeModels`). No account with room
+     * leaves the turn exactly as the rows above would: held, or booked for the reset. */
+    moveAfterLimit: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Whether a turn a spent usage limit refused is moved to another connected account of the same provider that still has room, as soon as the refusal lands. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because it spends a second account on your behalf. With no account that has room the turn waits as the setting above says.",
+        ),
+    /* HOW MUCH CONTEXT A MOVE MAY CARRY before it starts fresh instead, in tokens.
+     *
+     * Carrying keeps every word the model had, at the price of reading all of it again on the other account;
+     * starting fresh costs the brief and the capped record and loses the rest. Neither is right at every size:
+     * under a hundred thousand tokens the re-read is a few times the brief and buys full fidelity, at the top
+     * of a window it is a re-read the next compaction was about to throw away. The owner names the line. Zero
+     * means never carry, which is the honest spelling of "always the cheap one". */
+    limitMoveCarryUnder: z
+        .number()
+        .int()
+        .min(0)
+        .default(100_000)
+        .describe(
+            "When a spent usage limit moves a turn to another account, carry the provider session (the model keeps everything, and re-reads all of it once on the other account) while the conversation's context is under this many tokens; at or above it, start a fresh session with the sandbox's measured brief instead. Zero always starts fresh.",
+        ),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like
      * the outage resume above and for the same reason: a boot that re-runs turns spends the user's allowance on

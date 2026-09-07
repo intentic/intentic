@@ -33,8 +33,38 @@ export interface PickUp {
      * was refused, which is the difference between two sentences the strip could not previously tell apart: it
      * said "the work so far is still here" over every spent allowance, including the overwhelmingly common one
      * that refused the turn's first request and left no work at all. */
-    readonly held?: { readonly ran: boolean };
+    readonly held?: HeldTurn;
 }
+
+/* THE HELD TURN AS THE DAEMON DESCRIBES IT, the same shape on the failure frame and on the record's ending.
+ *
+ * `contextTokens` and `handoffTokens` are what the two ways on cost, and the reason the strip can now say a
+ * number where it used to say "Continue": a press that keeps the session re-reads the whole context once, cold
+ * (on this account at the reset, or carried to another); a press that opens a fresh session pays the capped
+ * record plus the sandbox's measured brief instead. `moving` is the owner's policy already taking the turn to
+ * another account, so the strip reports the move rather than offering a press. */
+export interface HeldTurn {
+    readonly ran: boolean;
+    readonly contextTokens?: number;
+    readonly handoffTokens?: number;
+    readonly moving?: string;
+}
+
+/* WHAT THE PLAIN PRESS PAYS, read off the daemon's own arms (turn-resume.ts fireLimitResume): a turn that ran
+ * resumes its session and re-reads it; one refused at the door has nothing worth resuming and opens a fresh
+ * session with the hand-off. Undefined when the daemon measured neither, which is what an honest tooltip says
+ * nothing about. */
+export type PressCost = { readonly kind: `reread`; readonly tokens: number } | { readonly kind: `handoff`; readonly tokens: number };
+
+export const pressCost = (held: HeldTurn | undefined): PressCost | undefined => {
+    if (held === undefined) {
+        return undefined;
+    }
+    if (held.ran) {
+        return held.contextTokens === undefined ? undefined : { kind: `reread`, tokens: held.contextTokens };
+    }
+    return held.handoffTokens === undefined ? undefined : { kind: `handoff`, tokens: held.handoffTokens };
+};
 
 /* THE SAME STATE, AS THE DAEMON HAS IT (AgentTranscriptSchema.ending), for every window that did not watch the
  * turn die: a reload, another device, a tab reopened from the board, a Stop pressed with the chat closed.
@@ -48,13 +78,16 @@ export interface PickUp {
  * `scheduled` becomes `automatic` only WITH an instant to aim at, the same guard armLimitResume applies at the
  * other end: a booking with no hour is not an appointment, and a countdown to nothing would replace a live press
  * with a promise nobody can keep. */
-export const pickUpOf = (ending: TurnEnding): PickUp => {
+export const pickUpOf = (ending: TurnEnding, now: number = Date.now()): PickUp => {
     const readyAt = ending.resetsAt === undefined ? undefined : ending.resetsAt * 1_000;
+    // A booked MOVE is scheduled with no hour to aim at: it goes on the next pass, which is "now" to a reader.
+    const moving = ending.held?.moving !== undefined;
+    const at = moving ? now : readyAt;
     return {
         reason: ending.reason,
         ...(readyAt === undefined ? {} : { readyAt }),
-        ...(ending.held === undefined ? {} : { held: { ran: ending.held.ran } }),
-        ...(ending.scheduled === true && readyAt !== undefined ? { automatic: { at: readyAt } } : {}),
+        ...(ending.held === undefined ? {} : { held: ending.held }),
+        ...(ending.scheduled === true && at !== undefined ? { automatic: { at } } : {}),
     };
 };
 
@@ -122,14 +155,22 @@ const attemptsSaid = (attempts: PickUpAttempts | undefined): string =>
  * LIMIT's is an APPOINTMENT: the hour came from the provider, the fire happens once, there is nothing to keep
  * trying, so there is no count to spend and no failure to report. Saying "provider failed" over that would be
  * wrong twice over about a provider that was working perfectly and said so. */
-const automaticStatus = (reason: PickUpReason, at: number, attempts: PickUpAttempts | undefined, now: number): string =>
-    reason === `limit`
+const automaticStatus = (pickUp: PickUp, at: number, attempts: PickUpAttempts | undefined, now: number): string => {
+    if (pickUp.reason !== `limit`) {
+        return `Provider failed · retrying ${pickUpWhen(at, now)}${attemptsSaid(attempts)}`;
+    }
+    // A move names where the turn is going; it has no hour, because it goes at once.
+    return pickUp.held?.moving === undefined
         ? `Limit reached · sending again ${pickUpWhen(at, now)}`
-        : `Provider failed · retrying ${pickUpWhen(at, now)}${attemptsSaid(attempts)}`;
+        : `Limit reached · ${survivedOf(pickUp)} · moving to ${pickUp.held.moving} now`;
+};
+
+// The one thing a reader cannot check for themselves: whether the held turn got anywhere before the wall.
+const survivedOf = (pickUp: PickUp): string => (pickUp.held?.ran === false ? `nothing ran` : `work kept`);
 
 export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
     if (pickUp.automatic !== undefined) {
-        return automaticStatus(pickUp.reason, pickUp.automatic.at, attempts, now);
+        return automaticStatus(pickUp, pickUp.automatic.at, attempts, now);
     }
     if (pickUp.reason === `outage`) {
         return `Provider failed · work kept`;
@@ -145,9 +186,8 @@ export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefine
          * provider's own guess at when the window reopens and it is routinely wrong in the useful direction,
          * which is why the press stays live in front of it (pickUpReady) and why the caveat lives on the press
          * rather than here. */
-        const survived = pickUp.held?.ran === false ? `nothing ran` : `work kept`;
         const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · back ${pickUpWhen(pickUp.readyAt, now)}`;
-        return `Limit reached · ${survived}${due}`;
+        return `Limit reached · ${survivedOf(pickUp)}${due}`;
     }
     return `Turn stopped short · work kept`;
 };

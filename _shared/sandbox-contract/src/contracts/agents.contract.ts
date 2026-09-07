@@ -11,6 +11,7 @@ import {
     AgentPlaceSchema,
     AgentRenameSchema,
     AgentResumeAfterLimitSchema,
+    AgentMoveAfterLimitSchema,
     AgentResumeAfterOutageSchema,
     AgentsArchivedSchema,
     AgentSearchQuerySchema,
@@ -173,6 +174,19 @@ export const agentsContract = {
                 "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. Off unless asked for, because the allowance is the user's own budget and a turn that spends it the moment it reopens is not a decision to make on their behalf.",
         })
         .input(AgentResumeAfterLimitSchema)
+        .output(AgentSummarySchema),
+    /* THIS conversation's answer to a spent allowance that does not wait: move the held turn to another account
+     * of the same provider that has room, the moment the refusal lands. Same three states, same scope argument
+     * as its two neighbours; SandboxSettingsSchema.moveAfterLimit says what it costs and why it is a policy. */
+    moveAfterLimit: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/move-after-limit",
+            summary: "Whether this conversation moves to another account when its allowance is spent",
+            description:
+                "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. A move spends a second account of the same provider on this conversation's behalf, so it is off unless asked for.",
+        })
+        .input(AgentMoveAfterLimitSchema)
         .output(AgentSummarySchema),
     seen: oc
         .route({

@@ -21,6 +21,18 @@ const { settings, patch } = useSandboxSettings();
 //, so unlike the holdout boxes an emptied field cannot fall back to the saved number without making 0
 // unreachable; it clamps to the bound instead, and the input is written back so a refused number doesn't stay
 // on screen.
+// The carry line, in tokens. 0 is a real value (never carry), so an emptied field clamps rather than falling
+// back to the saved number, and the input is written back so a refused value doesn't stay on screen.
+const setLimitMoveCarryUnder = (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const limitMoveCarryUnder = Math.max(0, Math.round(Number(input.value) || 0));
+    input.value = String(limitMoveCarryUnder);
+    patch({ limitMoveCarryUnder });
+};
+
 const setAutomationFailureLimit = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
@@ -68,6 +80,48 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :model-value="settings?.resumeAfterLimit ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ resumeAfterLimit: value })"
+                />
+            </template>
+        </Row>
+
+        <!-- The other answer to the same wall, and the one that does not wait: another connected account of the
+             same provider that still has room, now. A policy rather than a reflex, for the reason the group's
+             header gives, it spends a second account on the owner's behalf, so it is theirs to switch on. With
+             no account that has room the turn waits exactly as the row above says. -->
+        <Row
+            icon="user"
+            title="Continue on another account when the allowance is spent, by default"
+            description="Move a refused turn to a connected account of the same provider that has room, at once. With none, it waits as above."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.moveAfterLimit ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ moveAfterLimit: value })"
+                />
+            </template>
+        </Row>
+
+        <!-- What a move may carry. Both ways cost tokens and the row says which: carrying re-reads the whole
+             context once on the other account, and keeps everything the model knew; starting fresh costs the
+             sandbox's measured brief plus a capped copy of the record, and loses whatever never reached it.
+             The owner draws the line by size; 0 never carries. Same clamp-and-write-back as the failure
+             limit below: a refused number must not stay on screen. -->
+        <Row
+            icon="clock"
+            title="Carry the session when its context is under"
+            description="Tokens. Under this a move keeps the session (re-reads it once, cold); at or above it a fresh session starts from the measured brief. 0 always starts fresh."
+        >
+            <template #control>
+                <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    aria-label="Context size, in tokens, under which a moved turn keeps its session"
+                    class="ui-field-box ui-field-sm w-24 text-right"
+                    :value="settings?.limitMoveCarryUnder ?? 100000"
+                    :disabled="settings === undefined"
+                    @change="setLimitMoveCarryUnder"
                 />
             </template>
         </Row>

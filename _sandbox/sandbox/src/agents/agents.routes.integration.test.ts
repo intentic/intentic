@@ -330,7 +330,8 @@ test("the transcript reports a spent allowance as a held ending, so a window tha
     await runAgentTurn(client, { prompt: "rewrite the reconcile engine", conversationId: "conv-spent" });
 
     const transcript = await client.agents.transcript({ id: "conv-spent" });
-    expect(transcript.ending).toEqual({ reason: "limit", held: { ran: false } });
+    // The costs ride beside `ran` when the daemon measured them (limit-way.ts); this suite pins the hold.
+    expect(transcript.ending).toEqual({ reason: "limit", held: expect.objectContaining({ ran: false }) });
     /* No `resetsAt` and no `scheduled`, and both absences are the honest answer rather than a gap in the
      * fixture: this provider published no reopening hour (so a countdown would be a guess the reader plans
      * around), and nothing armed a resend (so the strip offers the press instead of reporting somebody else's

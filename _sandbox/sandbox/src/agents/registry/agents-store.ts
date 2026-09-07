@@ -233,6 +233,9 @@ export const PersistedAgentSchema = z.object({
     limitResetsAt: z.number().optional(),
     limitHeld: z.boolean().optional(),
     limitScheduled: z.boolean().optional(),
+    // Where the booked move was taking it (AgentSummarySchema.limitMoving); stripped on load with its two
+    // neighbours, since the booking did not survive the process either.
+    limitMoving: z.string().optional(),
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit, see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
@@ -245,6 +248,9 @@ export const PersistedAgentSchema = z.object({
     // reason its neighbour is, only more so: an allowance reopens hours out, long past the life of the tab
     // that armed it, which is the whole case for arming it at all.
     resumeAfterLimit: z.boolean().optional(),
+    // Per-agent override of the sandbox-wide moveAfterLimit setting, absent ⇒ inherit. Persisted for the reason
+    // its neighbour is: the refusal it answers lands with nobody watching as often as not.
+    moveAfterLimit: z.boolean().optional(),
     // A collaborator's standing ask for this work to be landed (see AgentSummarySchema.landRequested).
     // Persisted so the ask survives a daemon restart, the maintainer it waits for may arrive tomorrow.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),

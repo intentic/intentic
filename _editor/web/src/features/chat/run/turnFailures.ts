@@ -24,6 +24,20 @@ import { bindingWindow, formatWait, usageStatusFor } from "../session/usageStatu
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
 
+/* WHEN A SPENT ALLOWANCE'S TURN COMES BACK BY ITSELF, off the frame's own verdict. An armed appointment is
+ * aimed at the instant the daemon recorded with the held turn; a booked MOVE (held.moving) has no hour, the
+ * daemon's pass performs it at once, so the wait it reports starts now. Undefined when nothing is booked: a
+ * limit the user has not armed, or one whose provider published no instant to aim at. */
+const limitAutomatic = (error: TurnError, now: number = Date.now()): { readonly at: number } | undefined => {
+    if (error.autoResume !== `scheduled`) {
+        return undefined;
+    }
+    if (error.held?.moving !== undefined) {
+        return { at: now };
+    }
+    return error.resetsAt === undefined ? undefined : { at: error.resetsAt * 1_000 };
+};
+
 /* A provider outage the daemon is working through, as this window sees it: when the next attempt is due, how
  * many are left, and whether it is armed or waiting on the setting. Drives the composer's outage banner, the
  * one place that can honestly answer "is anything still happening?", which is the only question a user has
@@ -326,12 +340,12 @@ export class TurnFailures {
          * The instant is the frame's here, never the store's fallback: a scheduled fire is aimed at the reset
          * the daemon recorded with the held turn, and counting down to a different one would be this window
          * inventing an appointment. */
-        const scheduled = error.autoResume === `scheduled` && error.resetsAt !== undefined;
+        const automatic = limitAutomatic(error);
         this.host.pickUp.value = {
             reason: `limit`,
             ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
-            ...(error.held === undefined ? {} : { held: { ran: error.held.ran } }),
-            ...(scheduled && error.resetsAt !== undefined ? { automatic: { at: error.resetsAt * 1_000 } } : {}),
+            ...(error.held === undefined ? {} : { held: error.held }),
+            ...(automatic === undefined ? {} : { automatic }),
         };
     }
 

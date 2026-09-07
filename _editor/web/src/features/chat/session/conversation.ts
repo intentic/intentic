@@ -17,6 +17,7 @@ import {
     providerLabel,
     settledCards,
     type TranscriptCards,
+    type ResumeRouting,
     type TranscriptPatch,
     type TranscriptRow,
     type TurnFact,
@@ -107,6 +108,19 @@ export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
  * failed turn does to the conversation, and turnRequest.ts states the turn on the wire. What a frame MEANS is
  * settled before it reaches this window, by the daemon's fold (sandbox-contract/transcript-fold.ts). What is left
  * here is the conversation itself: the selection, the queue, the cards, and the effects a frame has on all three. */
+/* WHO SERVES A HELD TURN'S RE-RUN, read off the conversation at the press (ResumeRoutingSchema). The model
+ * follows the same rule as an ordinary send (turnRequestBody): an empty pick is a catalog that hasn't loaded,
+ * not a choice, and the daemon keeps the held turn's model rather than blanking it. `carry` keeps the provider
+ * session across an account change, and rides only when the press said so, having been told what the re-read
+ * costs. */
+const heldRouting = (settings: TurnSettings, options: { readonly carry?: boolean }): ResumeRouting => ({
+    agent: settings.agent,
+    harness: settings.harness,
+    account: settings.account,
+    model: settings.model || undefined,
+    ...(options.carry === true ? { carry: true } : {}),
+});
+
 export class Conversation {
     /* The transcript and its clock. The run's entries are buffered into it and applied on the next paint; what
      * each one means for the conversation beyond its rows comes back through `applied` below, because what a
@@ -1857,8 +1871,8 @@ export class Conversation {
      * Returns the words that were sent, or undefined when the held turn was re-run instead and nothing was said.
      * The caller needs the difference: an actual message belongs in the composer's recall ring, so ↑ brings it
      * back for anyone who wants to continue with an instruction attached, and a re-run has no words to put there. */
-    async continueTurn(): Promise<string | undefined> {
-        if (await this.resumeHeldTurn()) {
+    async continueTurn(options: { readonly carry?: boolean } = {}): Promise<string | undefined> {
+        if (await this.resumeHeldTurn(options)) {
             return undefined;
         }
         const text = continuationFor(this.messages.value);
@@ -1935,7 +1949,7 @@ export class Conversation {
      * exactly as a send reads it at delivery: a spent allowance is one account's refusal, so the switcher in the
      * composer is what a person reaches for between the refusal and this button, and a press that replayed the
      * refused account bounced off the same limit and left typing the word by hand as the only way through. */
-    async resumeHeldTurn(): Promise<boolean> {
+    async resumeHeldTurn(options: { readonly carry?: boolean } = {}): Promise<boolean> {
         if (this.streaming.value || this.pickUp.value?.held === undefined) {
             return false;
         }
@@ -1944,8 +1958,10 @@ export class Conversation {
         }
         const settings = this.turnSettings();
         // The switch this press acts on is also a segment cut: the fresh session the daemon opens for it belongs
-        // to the new credential, so this window drops what belonged to the old one (see cutSegment).
-        if (!resumes(this.session.value, settings)) {
+        // to the new credential, so this window drops what belonged to the old one (see cutSegment). A CARRIED
+        // press is the exception, the session survives the account change and the head's `session` frame
+        // re-binds it to the account that now serves it.
+        if (!resumes(this.session.value, settings) && options.carry !== true) {
             this.cutSegment();
         }
         this.pendingSwitchNoticeId = undefined;
@@ -1953,17 +1969,7 @@ export class Conversation {
             const response = await sandboxRequestVia(this.at, `/agent/resume`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({
-                    conversationId: this.conversationId,
-                    routing: {
-                        agent: settings.agent,
-                        harness: settings.harness,
-                        account: settings.account,
-                        // Same rule as an ordinary send (turnRequestBody): an empty pick is a catalog that hasn't
-                        // loaded, not a choice, and the daemon keeps the held turn's model rather than blanking it.
-                        model: settings.model || undefined,
-                    },
-                }),
+                body: JSON.stringify({ conversationId: this.conversationId, routing: heldRouting(settings, options) }),
             });
             if (!response.ok) {
                 /* The daemon is not holding it after all: it restarted, or another window has since run a turn

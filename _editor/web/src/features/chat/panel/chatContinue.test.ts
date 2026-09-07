@@ -629,3 +629,64 @@ it(`keeps the press when the claim never landed, since nothing was spent and not
     expect(button(`Reset limit now`)).toEqual(expect.any(Object));
     expect(document.querySelector(`.chat-pane`)?.textContent).toContain(`503`);
 });
+
+/* THE OTHER ACCOUNT AT TWO PRICES. A turn that RAN has a session worth carrying, so the menu names both ways
+ * across with what each spends: keeping the session re-reads the whole context on their allowance, a fresh one
+ * pays the hand-off and loses what never reached the record. The press carries the choice to the daemon. */
+it(`offers the other account twice when the session is worth carrying, each with its price, and carries on request`, async () => {
+    twoAccounts(99, 10);
+    const conversation = limitChat();
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 } };
+    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    await mountPanel();
+
+    await openWays();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(`button`)].filter((element) => element.textContent?.includes(`Continue on second`));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain(`keeping this session`);
+    expect(rows[0]?.textContent).toContain(`85k`);
+    expect(rows[1]?.textContent).toContain(`in a fresh session`);
+    expect(rows[1]?.textContent).toContain(`6k`);
+
+    rows[0]?.click();
+    await settle();
+    expect(conversation.account.value).toBe(`acc-2`);
+    expect(resume).toHaveBeenCalledWith({ carry: true });
+});
+
+// A turn refused at the door has nothing worth carrying: one row, the fresh one, and the press says so.
+it(`offers only the fresh session when nothing ran`, async () => {
+    twoAccounts(99, 10);
+    const conversation = limitChat();
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false, handoffTokens: 6_000 } };
+    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    await mountPanel();
+
+    await openWays();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(`button`)].filter((element) => element.textContent?.includes(`Continue on second`));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).not.toContain(`keeping this session`);
+    rows[0]?.click();
+    await settle();
+    expect(resume).toHaveBeenCalledWith({ carry: false });
+});
+
+/* A BOOKED MOVE IS REPORTED, NOT OFFERED. The owner's policy is already taking the turn to the other account, so
+ * the line names where, and the appointment's own control stays out of the row: a Stop there would disarm the
+ * wrong thing. */
+it(`reports a booked move by name and keeps the appointment's control out of the row`, async () => {
+    twoAccounts(99, 10);
+    const conversation = limitChat();
+    conversation.pickUp.value = {
+        reason: `limit`,
+        readyAt: Date.now() + 3_600_000,
+        held: { ran: true, contextTokens: 85_000, moving: `second` },
+        automatic: { at: Date.now() },
+    };
+    await mountPanel();
+
+    expect(composerText()).toContain(`moving to second now`);
+    const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
+    expect(labels).not.toContainEqual(expect.stringContaining(`Send it when it's back`));
+    expect(labels).not.toContainEqual(expect.stringContaining(`Stop`));
+});

@@ -54,7 +54,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * the sending, which was fine for as long as continuing could only mean "say carry on"; now it can also mean
      * "run the held turn again" (Conversation.continueTurn), and that choice reads state no view should be asking
      * about. `continuation` above stays, the composer still shows the words the press would send. */
-    continueTurn: (): Promise<string | undefined> => {
+    continueTurn: (options?: { readonly carry?: boolean }): Promise<string | undefined> => {
         /* A continuation that gets SENT is a message like any other and belongs in the funnel; a held turn
          * re-run said nothing and must not inflate it. Predicted from the pick-up rather than read off the
          * answer, for the same reason `send` above fires before it awaits: both fields describe the conversation
@@ -63,7 +63,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         if (conversation.value.pickUp.value?.held === undefined) {
             track(`message_sent`, { agent: conversation.value.provider.value, queued: conversation.value.streaming.value });
         }
-        return conversation.value.continueTurn();
+        return conversation.value.continueTurn(options);
     },
     /* ...and the standing version of that press: whether this chat continues itself, and when the one it has
      * scheduled goes (Conversation.autoContinue). The instant is what the strip counts down to, the wait has to

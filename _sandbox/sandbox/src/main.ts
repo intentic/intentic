@@ -1203,7 +1203,8 @@ const main = async (): Promise<void> => {
     }
 
     // Resume scheduler: credential refusals and provider outages re-run the turn they killed, see
-    // turn-resume.ts. A spent usage limit is deliberately not among them; that allowance is the user's own.
+    // turn-resume.ts. A spent usage limit re-runs nothing unless the owner's policy says so: sent again at the
+    // reset (resumeAfterLimit), or moved to another account with room (moveAfterLimit), each off by default.
     const turnResume = createTurnResumeScheduler(services, streamAgent);
     shutdown.push(() => turnResume.stop());
     if (role.roots) {

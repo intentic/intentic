@@ -359,7 +359,18 @@ export const TurnEndingSchema = z.object({
         .optional()
         .describe("When the spent allowance reopens, in epoch seconds. Absent for every ending that names no instant, and for a provider that publishes none."),
     held: z
-        .object({ ran: z.boolean().describe("Whether the held turn got anywhere before it was refused, which is a different sentence from one refused at the door.") })
+        .object({
+            ran: z.boolean().describe("Whether the held turn got anywhere before it was refused, which is a different sentence from one refused at the door."),
+            contextTokens: z
+                .number()
+                .optional()
+                .describe("How much context a press that keeps the session re-reads once, on this account at the reset or carried to another. Absent when no usage frame measured it."),
+            handoffTokens: z
+                .number()
+                .optional()
+                .describe("What a press that opens a fresh session pays instead: the capped record plus the sandbox's measured brief, counted at the failure."),
+            moving: z.string().optional().describe("The account the owner's policy is already moving this turn to, when it is; the surface then reports the move rather than offering a press."),
+        })
         .optional()
         .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),
     scheduled: z

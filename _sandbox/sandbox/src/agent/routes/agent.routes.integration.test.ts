@@ -172,7 +172,8 @@ test("a spent allowance on a native runtime carries the reset the translator alr
             kind: "error",
             code: "rate_limit",
             message: "429 You've hit your usage limit.",
-            held: { ran: false },
+            // The costs ride beside `ran` (limit-way.ts); this suite pins the hold, the numbers have their own.
+            held: expect.objectContaining({ ran: false }),
             resetsAt: reopensAt,
         }),
     );
@@ -237,7 +238,7 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
     const { facts: first } = await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-held" });
     // The fact says the turn is HELD and that nothing ran, which is the whole of what the client needs: a press
     // now re-runs this turn, and the strip can stop claiming there is work behind it.
-    expect(first).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit", held: { ran: false } }));
+    expect(first).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit", held: expect.objectContaining({ ran: false }) }));
 
     refuse = false;
     const { run } = await client.agent.resume({ conversationId: "conv-held" });

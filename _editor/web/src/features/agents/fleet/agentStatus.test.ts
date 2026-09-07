@@ -15,6 +15,7 @@ import {
     unregistered,
     watchLine,
     watching,
+    effectiveLimitMove,
 } from "./agentStatus";
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
@@ -520,4 +521,12 @@ describe("a spent allowance", () => {
         expect(attentionReason(crashed)).toBe(`Error`);
         expect(limitCountdown(crashed, NOW)).toBeUndefined();
     });
+});
+
+// The fourth fold of the two-level posture, same precedence as its three neighbours.
+it(`effectiveLimitMove reads the conversation's override over the sandbox default`, () => {
+    expect(effectiveLimitMove(undefined, undefined)).toBe(false);
+    expect(effectiveLimitMove(undefined, true)).toBe(true);
+    expect(effectiveLimitMove({ moveAfterLimit: false }, true)).toBe(false);
+    expect(effectiveLimitMove({ moveAfterLimit: true }, false)).toBe(true);
 });

@@ -6,6 +6,7 @@ import {
     type ParkedCard,
     RESUME_NOTES,
     type ResumeRouting,
+    type TodoItem,
     withoutResumeNote,
     withResumeNote,
 } from "@intentic/sandbox-contract";
@@ -23,6 +24,7 @@ import { outageRetryDue, outageRetryFired } from "../providers/provider-health.j
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { TurnInput } from "./turn-actor.js";
+import type { VerificationStanding } from "../verification/agent-verification.js";
 
 /* RE-RUNNING A TURN WHOSE BLOCKER HAS CLEARED, three conditions, one mechanism.
  *
@@ -31,11 +33,14 @@ import type { TurnInput } from "./turn-actor.js";
  * the completion of a turn the user already asked for; leaving it dead means every open tab needs a human to
  * type "continue" into it, which is precisely the morning this module exists to prevent.
  *
- * A SPENT USAGE LIMIT is the condition deliberately absent from that list. The turn is not broken, it is EARLY,
- * and the reset instant rides on the failure, so it looks like the easiest of the four. It is not, because the
- * allowance is the user's OWN budget: every other blocker here clears at no cost to them, while this one clears
- * into a window they may have been saving. So a usage limit stops the turn, says when it resets, and re-runs
- * nothing; sending again is the user's call to make.
+ * A SPENT USAGE LIMIT is the condition deliberately absent from that list BY DEFAULT. The turn is not broken, it
+ * is EARLY, and the reset instant rides on the failure, so it looks like the easiest of the four. It is not,
+ * because the allowance is the user's OWN budget: every other blocker here clears at no cost to them, while this
+ * one clears into a window they may have been saving. So a usage limit stops the turn, says when it resets, and
+ * re-runs nothing unless the owner's policy says otherwise: send it again at the reset (resumeAfterLimit), or
+ * move it to another account of the same provider with room (moveAfterLimit, booked on the held entry as
+ * LimitFailure.move), each off until they switch it on. Sending again is otherwise the user's call to make, and
+ * the press that makes it says what it costs.
  *
  * AUTH. The access token the turn snapshotted at spawn stopped being accepted, almost always because a
  * rotation superseded it, which Anthropic answers with "401 OAuth access token has been revoked" on the old
@@ -228,6 +233,28 @@ export interface LimitFailure {
      * (see resumedTurn's `fresh`, and RESUME_NOTES.refused). True is a limit reached mid-flight, where the
      * session holds real work and throwing it away would make the press cost more than it saves. */
     readonly ran: boolean;
+    /* WHAT THE TURN LEFT BEHIND, read off its own ledgers at the moment it died, so a re-run that has to open a
+     * fresh session can be handed the truth rather than the transcript's account of it (agent/prompt/
+     * handoff-state.ts): which paths it edited and whether anything proved them, and the checklist as the fold
+     * last saw it. Absent on a turn refused at the door, which edited nothing. */
+    readonly standing?: VerificationStanding | undefined;
+    readonly checklist?: readonly TodoItem[] | undefined;
+    /* WHAT EACH WAY ON COSTS, as the failure frame said it: the context a same-session re-run re-reads, and the
+     * envelope-plus-brief a fresh session pays instead. Kept on the entry so the record a reopened tab reads can
+     * say the same numbers the live frame did (agents.routes' ending). */
+    readonly contextTokens?: number | undefined;
+    readonly handoffTokens?: number | undefined;
+    /* THE OWNER'S POLICY HAS ALREADY DECIDED WHERE THIS TURN GOES NEXT: another account of the same provider
+     * with room, and whether the session comes along (SandboxSettingsSchema.moveAfterLimit and
+     * .limitMoveCarryUnder). Decided ONCE, at the failure, where the frame that tells the card "moving to alice"
+     * is built; the pass below only performs it, because the failing run still owns the conversation at record
+     * time and a start inline would hit turn-runs' conflict. Absent ⇒ no policy, or nothing with room. */
+    readonly move?: { readonly account: string; readonly carry: boolean } | undefined;
+    /* THE OTHER ACCOUNT WOULD NOT TAKE THE CARRIED SESSION: the provider refused the re-run's first request
+     * outright, with nothing that reads as an allowance or a credential, which is what a replayed history the
+     * other organisation rejects looks like from here. The entry is re-recorded with this set so the one attempt
+     * that follows opens a fresh session with the brief instead of replaying the refusal. */
+    readonly carryRefused?: boolean | undefined;
 }
 
 /* `recordedAt` is what the automatic fire measures its one sanity check against, and `fired` is what stops it
@@ -277,17 +304,33 @@ const reroutedInput = (input: AgentTurn & { conversationId: string }, routing: R
     };
 };
 
-/* WHETHER THE HELD SESSION SURVIVES THE PRESS. A provider session belongs to the runtime and the credential that
- * minted it, so re-pointing any of those three retires it exactly as a mid-chat switch does, and the re-run opens
- * a fresh one seeded from the daemon's record (handoffHistory). The MODEL is deliberately not in the comparison:
+/* WHETHER THE HELD SESSION SURVIVES THE PRESS. A provider session belongs to the RUNTIME that minted it, so
+ * re-pointing the provider or the harness retires it exactly as a mid-chat switch does, and the re-run opens a
+ * fresh one seeded from the daemon's record (handoffHistory). The MODEL is deliberately not in the comparison:
  * a same-provider model swap keeps its session, which is the client's own rule for an ordinary send (`resumes`
  * in turnRequest.ts), and the two must not disagree about the same conversation.
  *
+ * THE ACCOUNT IS A CHOICE, NOT A RULE. A session is a file this daemon keeps and a credential is an env it
+ * passes per turn, so nothing about the provider binds one to the other; what a move to another account costs
+ * is one cold re-read of the whole context there (a prompt cache is per account, and has expired by then),
+ * which is the same price a same-account re-run at the reset pays. So `routing.carry` says whether the press
+ * keeps the session across the account change, and leaving it out keeps the older behaviour: a fresh session,
+ * cheaper, seeded from the record and the measured brief.
+ *
  * The defaults are the wire's: an absent `agent` is claude and an absent `harness` is native, so a press that
  * spells out what the held turn left implicit is not read as a switch. */
-const movedRouting = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
+const retiresSession = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
     routing !== undefined &&
-    (routing.agent !== (input.agent ?? "claude") || routing.harness !== (input.harness ?? "native") || routing.account !== input.account);
+    (routing.agent !== (input.agent ?? "claude") ||
+        routing.harness !== (input.harness ?? "native") ||
+        (routing.account !== input.account && routing.carry !== true));
+
+// A press that changes only WHO PAYS, on the same runtime: the case the `carried` note describes.
+const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
+    routing !== undefined &&
+    routing.agent === (input.agent ?? "claude") &&
+    routing.harness === (input.harness ?? "native") &&
+    routing.account !== input.account;
 
 /* RUN THE HELD TURN AGAIN, on a press. Undefined when there is nothing held (never stranded, superseded by a
  * later turn, or the daemon restarted and this map went with it) or when a turn is already running on the
@@ -317,12 +360,16 @@ export const fireLimitResume = async (
     // between them in any direction between presses (a refused turn that then runs and is cut off mid-flight; a
     // mid-flight failure whose re-run is refused at the door by a window that has since closed; either of them
     // moved onto a different account by the press that follows).
-    if (held.ran && !movedRouting(held.input, routing)) {
-        return startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.limit, { restate: true }));
+    if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
+        // Same session either way; the note says whether the account under it changed, which is the one fact
+        // the model cannot see and the reason its context is about to be read cold.
+        const note = movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
+        return startConversationTurn(services, wake, resumedTurn(failure, note, { restate: true }));
     }
-    /* FRESH ON BOTH REMAINING ARMS, for two different reasons. A turn that never ran left one unanswered message
-     * in a session that is worth less than the handoff (see resumedTurn's `fresh`); a turn that DID run cannot
-     * take its session onto another account at all. What separates them is only what the model is told. */
+    /* FRESH ON THE REMAINING ARMS, for different reasons. A turn that never ran left one unanswered message in
+     * a session that is worth less than the handoff (see resumedTurn's `fresh`); a turn that DID run is moving
+     * without its session, by the press's choice or because the other account refused to carry it. What
+     * separates them is only what the model is told. */
     return startConversationTurn(
         services,
         wake,
@@ -360,6 +407,19 @@ export const limitResumeArmed = async (services: Services, conversationId: strin
     }
     const { resumeAfterLimit } = await services.sandboxSettings.get();
     return resumeAfterLimit;
+};
+
+/* And the third, for the answer to a spent allowance that does not wait: whether this conversation's held turn
+ * may be moved to another account of the same provider with room. Same two levels, same precedence, and asked
+ * ONCE, at the failure, where the move is booked (agent.routes' limitFrame): the pass performs what was booked
+ * rather than re-deciding it, so the card's "moving to alice" and the fire that follows cannot disagree. */
+export const moveAfterLimitArmed = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string): Promise<boolean> => {
+    const override = services.agents.entry(conversationId)?.moveAfterLimit;
+    if (override !== undefined) {
+        return override;
+    }
+    const { moveAfterLimit } = await services.sandboxSettings.get();
+    return moveAfterLimit;
 };
 
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
@@ -668,6 +728,23 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
     }
 };
 
+// The booked move, performed: the held turn re-pointed at the account the policy chose, with or without its
+// session, through the same door a press uses.
+const fireBookedMove = async (
+    services: Services,
+    wake: WakeFn,
+    input: AgentTurn & { conversationId: string },
+    move: NonNullable<LimitFailure["move"]>,
+): Promise<void> => {
+    const routing: ResumeRouting = { agent: input.agent ?? "claude", harness: input.harness ?? "native", account: move.account, carry: move.carry };
+    if ((await fireLimitResume(services, wake, input.conversationId, routing)) !== undefined) {
+        services.logger.info(
+            { conversationId: input.conversationId, account: move.account, carry: move.carry },
+            "usage-limit move fired: the owner's policy moved the held turn to another account",
+        );
+    }
+};
+
 /* THE LIMIT PASS. Every conversation whose held turn is waiting on an allowance, sent again at the instant the
  * provider said the allowance comes back, and only for the conversations whose owner asked for that.
  *
@@ -696,6 +773,16 @@ const runLimitPass = async (services: Services, wake: WakeFn, now: number): Prom
     const stranded = [...pendingLimit.values()];
     for (const held of stranded) {
         const conversationId = held.input.conversationId;
+        /* A BOOKED MOVE GOES FIRST, and goes at once: the owner's policy already chose the account and whether the
+         * session comes along (LimitFailure.move), so there is no instant to wait for and no posture to re-read.
+         * Stamped `fired` before the start for the reason the appointment below is: it has to hold even if the
+         * start conflicts with a turn already running. A sibling that refuses in its turn re-records a fresh
+         * entry from its own exit, with a move booked against what is left, or none. */
+        if (!held.fired && held.move !== undefined) {
+            pendingLimit.set(conversationId, { ...held, fired: true });
+            await fireBookedMove(services, wake, held.input, held.move);
+            continue;
+        }
         const reopensAt = held.reopensAt;
         if (held.fired || reopensAt === undefined || reopensAt * 1000 > now || reopensAt * 1000 <= held.recordedAt) {
             continue;

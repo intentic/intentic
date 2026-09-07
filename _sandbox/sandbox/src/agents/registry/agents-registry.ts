@@ -126,6 +126,8 @@ interface RuntimeState {
     limitResetsAt: number | undefined;
     limitHeld: boolean;
     limitScheduled: boolean;
+    // Where a booked move is taking the held turn (the frame's `held.moving`), while it is booked.
+    limitMoving: string | undefined;
     /* THE USER ENDED THIS TURN and the abort has landed, it is on its way out but not out yet, in the two
      * flavours that end differently.
      *
@@ -200,6 +202,7 @@ const freshRuntime = (): RuntimeState => ({
     limitResetsAt: undefined,
     limitHeld: false,
     limitScheduled: false,
+    limitMoving: undefined,
     stopping: undefined,
     resuming: false,
     activity: undefined,
@@ -242,7 +245,9 @@ const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean =
  * and the hold at frame time, so taking them from it is the client and the card agreeing by construction.
  *
  * Pure and outside the closure, like statusOf below: a rule worth stating and testing without a registry. */
-const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled"> => {
+const failureOf = (
+    event: Extract<AgentEvent, { kind: "error" }>,
+): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving"> => {
     const limit = event.code === "rate_limit";
     return {
         failure: sanitizeFailure(event.message),
@@ -252,6 +257,7 @@ const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Pick<RuntimeS
         // The daemon's own verdict about this very failure (agent.routes' limitFrame), not a posture read back
         // later: the pass that performs the fire reads the same answer, so the card and the schedule agree.
         limitScheduled: limit && event.autoResume === "scheduled",
+        limitMoving: limit ? event.held?.moving : undefined,
     };
 };
 
@@ -318,7 +324,7 @@ const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, no
 const reportedFailure = (
     entry: PersistedAgent,
     status: AgentStatus,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled">> =>
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> =>
     status !== "error"
         ? {}
         : {
@@ -327,7 +333,20 @@ const reportedFailure = (
               ...(entry.limitResetsAt !== undefined ? { limitResetsAt: entry.limitResetsAt } : {}),
               ...(entry.limitHeld === true ? { limitHeld: true } : {}),
               ...(entry.limitScheduled === true ? { limitScheduled: true } : {}),
+              ...(entry.limitMoving !== undefined ? { limitMoving: entry.limitMoving } : {}),
           };
+
+/* THE FOUR STANDING CHOICES A CONVERSATION CAN MAKE FOR ITSELF, each a three-state override of a sandbox-wide
+ * default (absent ⇒ inherit): hold or land its work, retry through an outage, send again at the reset, move to
+ * another account when spent. Projected together because they are read together, by the card's menu and the
+ * chat's offers, and because a fifth would otherwise be one more conditional in a projection that already has
+ * more than it can carry. */
+const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" | "resumeAfterOutage" | "resumeAfterLimit" | "moveAfterLimit">> => ({
+    ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
+    ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
+    ...(entry.resumeAfterLimit !== undefined ? { resumeAfterLimit: entry.resumeAfterLimit } : {}),
+    ...(entry.moveAfterLimit !== undefined ? { moveAfterLimit: entry.moveAfterLimit } : {}),
+});
 
 /* WHAT THE CARD SAYS THE LAST TURN LEFT OPEN, which is what the entry says, EXCEPT WHILE A TURN IS RUNNING.
  *
@@ -347,7 +366,9 @@ const reportedUnfinished = (entry: PersistedAgent, state: RuntimeState | undefin
  *
  * A turn that did NOT error answers `{}`, and the caller's destructure has already dropped whatever the entry
  * was carrying, so the pair is what clears a previous turn's wall off a card that has since run clean. */
-const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled">> =>
+const endedFailure = (
+    state: RuntimeState | undefined,
+): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> =>
     state?.errored !== true
         ? {}
         : {
@@ -356,6 +377,7 @@ const endedFailure = (state: RuntimeState | undefined): Partial<Pick<PersistedAg
               ...(state.limitResetsAt !== undefined ? { limitResetsAt: state.limitResetsAt } : {}),
               ...(state.limitHeld ? { limitHeld: true } : {}),
               ...(state.limitScheduled ? { limitScheduled: true } : {}),
+              ...(state.limitMoving !== undefined ? { limitMoving: state.limitMoving } : {}),
           };
 
 /* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how the
@@ -567,6 +589,9 @@ export interface AgentsRegistry {
     // sharper version of the same reason: the press that writes it is made on a card whose turn died hours
     // ago, and what it arms is a fire scheduled hours further out. Undefined ⇒ unknown id.
     readonly setResumeAfterLimit: (id: string, resumeAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
+    // Set/clear THIS conversation's move-on-limit override (null ⇒ inherit), the third of the same grammar, for
+    // the answer to a spent allowance that does not wait. Undefined ⇒ unknown id.
+    readonly setMoveAfterLimit: (id: string, moveAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
     // Stamp a collaborator's ask for this work to be landed (AgentSummarySchema.landRequested). Like setTitle
     // it leaves updatedAt alone (asking is not the agent's activity) and needs no running guard, the ask is
     // about whatever the branch holds when a maintainer answers it. Re-asking re-stamps (latest asker wins;
@@ -777,9 +802,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.tier !== undefined ? { tier: entry.tier } : {}),
             ...(entry.tierHold !== undefined ? { tierHold: entry.tierHold } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
-            ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
-            ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
-            ...(entry.resumeAfterLimit !== undefined ? { resumeAfterLimit: entry.resumeAfterLimit } : {}),
+            ...postures(entry),
             ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
@@ -944,7 +967,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
              * Not migration and not compatibility, the flag is simply false at boot as a matter of fact, and
              * this is where the process learns it. The reset instant beside it is untouched: an allowance
              * reopening at four is still reopening at four, and saying so is what the card is for. */
-            entries = (await store.load()).map(({ limitHeld: _held, limitScheduled: _booked, ...carried }) => carried);
+            entries = (await store.load()).map(({ limitHeld: _held, limitScheduled: _booked, limitMoving: _moving, ...carried }) => carried);
             /* The roster goes out the moment it is loaded, an /events stream that connected during boot is
              * already holding an empty fleet and this frame is what fills it. Standings are probed BEHIND the
              * broadcast, not before it: a reboot's verdict cache is empty, so the probe is a git spawn per live
@@ -1310,6 +1333,18 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             return summaryOf(next);
         },
+        setMoveAfterLimit: async (id, moveAfterLimit) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            const { moveAfterLimit: _cleared, ...carried } = entry;
+            const next = { ...carried, ...(moveAfterLimit !== null ? { moveAfterLimit } : {}) };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
         requestLand: async (id, by, at) => {
             const entry = entryOf(id);
             if (entry === undefined) {
@@ -1560,6 +1595,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     limitResetsAt: _reopens,
                     limitHeld: _held,
                     limitScheduled: _booked,
+                    limitMoving: _moving,
                     // Dropped from the carried entry for the same reason as the four above it: this finish is
                     // the one that decides what the turn left behind, so the previous answer must not survive
                     // its own re-measurement. What is genuinely still true is carried by unfinishedOf itself,

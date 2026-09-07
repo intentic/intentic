@@ -17,6 +17,15 @@ export interface RuntimeHistoryMessage {
 const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
+/* What an OLDER assistant message may keep, in characters. The newest exchanges carry the decisions the next
+ * runtime needs whole (the last answer, the question it was asked); an assistant message from ten turns back
+ * is mostly narration of work whose result is on the tree, and the note that rides beside this envelope
+ * (agent/prompt/handoff-state.ts) says where that tree stands. So the two most recent exchanges keep the
+ * full cap above, and everything older keeps its opening, which is where a message says what it did. The
+ * user's own words are never cut by this: they are the shorter half and the half nothing else records. */
+const OLDER_ASSISTANT_CHAR_CAP = 1_500;
+// How many of the newest user/assistant rows keep the full cap: two exchanges, four rows.
+const RECENT_ROWS = 4;
 /* What the whole preamble may spend, in characters, roughly 8k tokens. A handoff is orientation, not an archive:
  * tool output is already excluded and the newest turns carry the decisions the next runtime needs. The old
  * 120k cap let this optional note consume ~30k tokens before the current request, enough to crowd out small
@@ -63,8 +72,8 @@ const trailerOf = (message: TranscriptRow): string => {
     return `${asked}\n[used: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}]`;
 };
 
-const rendered = (message: TranscriptRow): string => {
-    const body = message.text.length > MESSAGE_CHAR_CAP ? `${message.text.slice(0, MESSAGE_CHAR_CAP)}\n… (truncated)` : message.text;
+const rendered = (message: TranscriptRow, cap: number): string => {
+    const body = message.text.length > cap ? `${message.text.slice(0, cap)}\n… (truncated)` : message.text;
     return `${body}${trailerOf(message)}`;
 };
 
@@ -72,8 +81,9 @@ export const withRuntimeHistory = (prompt: string, history: readonly TranscriptR
     const lines: string[] = [];
     let used = 0;
     // Newest first, so a transcript over budget keeps the end of the conversation rather than its opening.
-    for (const message of history.toReversed()) {
-        const line = `${message.role === "user" ? "User" : "Assistant"}: ${rendered(message)}`;
+    for (const [fromEnd, message] of history.toReversed().entries()) {
+        const cap = message.role === "assistant" && fromEnd >= RECENT_ROWS ? OLDER_ASSISTANT_CHAR_CAP : MESSAGE_CHAR_CAP;
+        const line = `${message.role === "user" ? "User" : "Assistant"}: ${rendered(message, cap)}`;
         if (used + line.length > HISTORY_CHAR_CAP) {
             break;
         }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Button, Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Button, formatTokens, Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { pickUpStatus } from "../run/pickUp";
+import { pickUpStatus, pressCost } from "../run/pickUp";
 import { formatWait } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
@@ -46,7 +46,8 @@ const props = defineProps<{
     visible: boolean;
     ready: boolean;
 }>();
-const emit = defineEmits<{ (event: "continue"): void }>();
+// The press, and whether it keeps the provider session across an account change (the menu's carrying variant).
+const emit = defineEmits<{ (event: "continue", options?: { readonly carry?: boolean }): void }>();
 
 const { conversation, connected, pickUp, autoContinue, autoContinueAt, setAutoContinue, provider, model, account, accounts, selectAccount } =
     usePaneView();
@@ -79,10 +80,24 @@ const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pi
  *
  * The waiting hint survives for the endings with nothing held, which are the only ones a wait still gates
  * (pickUpReady). It owes the reader the one thing "disabled" never says: why, and until when. */
+/* WHAT THE PRESS COSTS, said on the press, because it is the one thing "Continue" used to hide: a held turn
+ * that ran resumes its session and re-reads the whole context, cold (the cache is per account and has expired
+ * by the time anyone presses); one refused at the door opens a fresh session with the sandbox's hand-off, a
+ * few thousand tokens. The daemon measured both at the failure (PickUp.held); a hold it did not measure says
+ * nothing rather than guessing. */
+const pressCostLine = computed(() => {
+    const cost = pressCost(pickUp.value?.held);
+    if (cost === undefined) {
+        return ``;
+    }
+    return cost.kind === `reread`
+        ? ` It re-reads ~${formatTokens(cost.tokens)} tokens of context, cold.`
+        : ` It opens a fresh session with a ~${formatTokens(cost.tokens)}-token hand-off.`;
+});
 const continueHint = computed(() => {
     const keyHint = !mobile.value && props.ready ? ` (Enter)` : ``;
     if (pickUp.value?.held !== undefined) {
-        return `Send this turn again, exactly as it was: nothing is added to the chat. The reset is a due date, not a wall — an earlier press may get through${keyHint}`;
+        return `Send this turn again, exactly as it was: nothing is added to the chat.${pressCostLine.value} The reset is a due date, not a wall — an earlier press may get through${keyHint}`;
     }
     return props.ready ? `Pick up where it left off, without retyping${keyHint}` : `Waiting: nothing gets through until the allowance resets`;
 });
@@ -129,7 +144,11 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
  * ONLY WITH AN INSTANT TO AIM AT. An armed limit is an appointment (the daemon's pass fires once, at the hour
  * the provider published), so with no hour there is nothing to arm and the button does not appear: an offer
  * that quietly does nothing is worse than no offer. */
-const limitWait = computed(() => (pickUp.value?.reason === `limit` && pickUp.value.readyAt !== undefined ? pickUp.value : undefined));
+// ...and never beside a booked MOVE: that wait is the policy's, not the appointment's, and a Stop here would
+// disarm the wrong thing.
+const limitWait = computed(() =>
+    pickUp.value?.reason === `limit` && pickUp.value.readyAt !== undefined && pickUp.value.held?.moving === undefined ? pickUp.value : undefined,
+);
 const setLimitResume = async (resume: boolean): Promise<void> => {
     if (!reachable.value || arming.value) {
         return;
@@ -269,16 +288,34 @@ watch(
  * a route of its own, because the daemon needs no new verb: `selectAccount` writes the credential the next turn
  * names and `resumeHeldTurn` sends the HELD turn under it (its `routing.account` is read from the conversation),
  * so the same work goes again on a pool that has room. The write is synchronous, so the emit below is already
- * carrying the new account rather than racing it. */
-const continueOnFallback = (): void => {
+ * carrying the new account rather than racing it.
+ *
+ * TWO WAYS ACROSS, and the menu names both with their price rather than choosing for the reader. `carry` keeps
+ * the provider session: the model keeps everything it knew, and their allowance re-reads all of it once, cold.
+ * Fresh opens a new session seeded from the record and the sandbox's measured brief: a few thousand tokens,
+ * and whatever never reached the record is gone. A turn refused at the door has nothing worth carrying, so it
+ * gets the fresh row alone. */
+const continueOnFallback = (carry: boolean): void => {
     const target = fallback.value;
     if (target === undefined || !reachable.value) {
         return;
     }
     waysOpen.value = false;
     selectAccount(target.id);
-    emit(`continue`);
+    emit(`continue`, { carry });
 };
+const canCarry = computed(() => pickUp.value?.held?.ran === true);
+const carryLine = computed(() => {
+    const tokens = pickUp.value?.held?.contextTokens;
+    return tokens === undefined
+        ? `Keeps this session: the model keeps everything, and re-reads all of it once on their allowance.`
+        : `Keeps this session: the model keeps everything, and re-reads ~${formatTokens(tokens)} tokens once on their allowance.`;
+});
+const freshLine = computed(() => {
+    const tokens = pickUp.value?.held?.handoffTokens;
+    const cost = tokens === undefined ? `a short hand-off` : `a ~${formatTokens(tokens)}-token hand-off`;
+    return `A fresh session on their allowance, seeded with ${cost} of the record and the measured state; detail not in the record is lost.`;
+});
 
 const armAutoContinue = (): void => {
     waysOpen.value = false;
@@ -359,7 +396,7 @@ const autoContinueLine = computed(() =>
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="'Send this turn again by itself, once the allowance comes back'"
+            v-tooltip.top="`Send this turn again by itself, once the allowance comes back.${pressCostLine}`"
             @click="() => setLimitResume(true)"
         >
             Send it when it's back
@@ -421,16 +458,31 @@ const autoContinueLine = computed(() =>
     <!-- THE PRESS'S VARIANTS: shown in the dropdown when multiple alternative ways on exist. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" header="Other ways on" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
+            <!-- The other account, twice where the session is worth carrying: the same press at two prices,
+                 each said on its row, so the reader chooses between fidelity and tokens rather than between
+                 two buttons that look alike. -->
+            <button
+                v-if="fallback !== undefined && canCarry"
+                type="button"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                @click="() => continueOnFallback(true)"
+            >
+                <Icon name="user" class="mt-0.5 text-xs text-subtle" />
+                <span class="flex min-w-0 flex-col">
+                    <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}, keeping this session</span>
+                    <span class="text-2xs text-subtle">{{ carryLine }}</span>
+                </span>
+            </button>
             <button
                 v-if="fallback !== undefined"
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
-                @click="continueOnFallback"
+                @click="() => continueOnFallback(false)"
             >
                 <Icon name="user" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}</span>
-                    <span class="text-2xs text-subtle">Sends this turn again now, on their allowance, instead of waiting for this one.</span>
+                    <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}{{ canCarry ? `, in a fresh session` : `` }}</span>
+                    <span class="text-2xs text-subtle">{{ freshLine }}</span>
                 </span>
             </button>
             <button

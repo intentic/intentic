@@ -745,11 +745,11 @@ const history = computed(() => (activeSandboxId.value === undefined ? undefined 
  * than plain; a re-run said nothing, and putting a word in the ring that nobody sent would hand them a message
  * to re-send that had never been a message. Down here beside the ring rather than up with the offer, so it
  * reads after the thing it writes to. */
-const continueTurn = (): void => {
+const continueTurn = (options?: { readonly carry?: boolean }): void => {
     if (!reachable.value) {
         return;
     }
-    void continueChat().then((sent) => {
+    void continueChat(options).then((sent) => {
         if (sent !== undefined) {
             history.value?.record(sent);
         }

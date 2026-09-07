@@ -10,8 +10,10 @@ import {
     type ContextUsage,
     type EditorContext,
     KeyedProviderSchema,
+    RESUME_NOTES,
     type SnapshotTurn,
     type TodoItem,
+    type TurnNote,
     type UsageWindow,
     type WorkspaceEvent,
     mentionPaths,
@@ -61,8 +63,10 @@ import {
     authResumable,
     clearPendingResume,
     fireLimitResume,
+    type LimitFailure,
     limitResumeArmed,
     outageResumeArmed,
+    pendingLimitFailure,
     recordAuthFailure,
     recordLimitFailure,
     recordOutageFailure,
@@ -72,6 +76,8 @@ import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply, composeSteerText } from "../run/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
+import { handoffStateNote } from "../prompt/handoff-state.js";
+import { type LimitWay, limitWayOf } from "../models/limit-way.js";
 import { turnRunOf } from "../run/turn-runs.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { createTurnMetrics } from "../run/turn-metrics.js";
@@ -1018,17 +1024,130 @@ const fileAccountUsage = async (
 const limitFrame = async (
     services: Services,
     event: Extract<AgentEvent, { kind: "error" }>,
-    params: { readonly conversationId: string | undefined; readonly resetsAt: number | undefined; readonly held: boolean; readonly ran: boolean },
+    params: {
+        readonly conversationId: string | undefined;
+        readonly resetsAt: number | undefined;
+        readonly held: boolean;
+        readonly ran: boolean;
+        // What each way on costs and where a policy is taking the turn (limit-way.ts); absent on an unheld frame.
+        readonly way: LimitWay | undefined;
+    },
 ): Promise<Extract<AgentEvent, { kind: "error" }>> => {
-    const { conversationId, resetsAt, held, ran } = params;
+    const { conversationId, resetsAt, held, ran, way } = params;
     const schedulable = held && resetsAt !== undefined && conversationId !== undefined;
     const armed = schedulable ? await limitResumeArmed(services, conversationId) : false;
+    /* A BOOKED MOVE IS A BOOKED FIRE. The card leaves the Attention lane on "scheduled" whether the thing
+     * bringing the turn back is the reset or the policy's move, and a move needs no instant to be booked, so
+     * it is scheduled on its own account rather than through the appointment's two conditions. */
+    const moving = held ? way?.move?.account : undefined;
+    const autoResume = autoResumeOf(moving !== undefined, schedulable, armed);
     return {
         ...event,
-        ...(held ? { held: { ran } } : {}),
+        ...(held ? { held: heldOf(ran, way, moving) } : {}),
         ...(resetsAt !== undefined ? { resetsAt } : {}),
-        ...(schedulable ? { autoResume: armed ? ("scheduled" as const) : ("available" as const) } : {}),
+        ...opt("autoResume", autoResume),
     };
+};
+
+// The entry a spent allowance is holding for this conversation, if any; nothing for a turn with no conversation.
+const heldTurnOf = (conversationId: string | undefined): LimitFailure | undefined =>
+    conversationId === undefined ? undefined : pendingLimitFailure(conversationId);
+
+// The frame's verdict on who brings the turn back: a booked move, the armed appointment, or an offer.
+const autoResumeOf = (moving: boolean, schedulable: boolean, armed: boolean): "scheduled" | "available" | undefined => {
+    if (moving) {
+        return "scheduled";
+    }
+    if (!schedulable) {
+        return undefined;
+    }
+    return armed ? "scheduled" : "available";
+};
+
+// The held turn as the frame states it: whether it ran, what each way on costs, where a policy is taking it.
+const heldOf = (ran: boolean, way: LimitWay | undefined, moving: string | undefined): NonNullable<Extract<AgentEvent, { kind: "error" }>["held"]> => ({
+    ran,
+    ...opt("contextTokens", way?.contextTokens),
+    ...opt("handoffTokens", way?.handoffTokens),
+    ...opt("moving", moving),
+});
+
+/* WHAT A FRESH SESSION IS TOLD BESIDE THE TRANSCRIPT: the sandbox's own reading of the tree, the proof and the
+ * checklist (agent/prompt/handoff-state.ts), for every turn seeded from the record and for none that resumes
+ * its session. The ledgers of the turn being handed off survive only on a held entry (a spent allowance); on
+ * every other hand-off the registry's last session id names the task store to read. */
+const handoffNoteFor = async (
+    services: Services,
+    input: TurnInput,
+    history: readonly unknown[],
+    held: LimitFailure | undefined,
+): Promise<TurnNote | undefined> =>
+    history.length === 0 || input.conversationId === undefined
+        ? undefined
+        : handoffStateNote(services, {
+              conversationId: input.conversationId,
+              standing: held?.standing,
+              checklist: held?.checklist,
+              retiredSessionId: held?.sessionId ?? services.agents.entry(input.conversationId)?.sessionId,
+          });
+
+/* THE HELD TURN'S TWO RECORDS, written from the turn's own exit (the failing run still owns the conversation, so
+ * the pass performs what is recorded here rather than anything starting inline).
+ *
+ * A SPENT ALLOWANCE holds the turn whole, with what it left behind and where the policy is taking it, exactly
+ * as the frame already said (limit-way.ts): the entry and the card read one decision.
+ *
+ * A CARRIED SESSION THE OTHER ACCOUNT WOULD NOT TAKE is the second. The policy (or a press) moved a held turn to
+ * a sibling account with its session, and the provider refused the re-run's first request outright, with
+ * nothing that reads as an allowance, a credential or an outage: from here that is what a replayed history the
+ * other organisation rejects looks like, and it is the one failure of a carry that is the carry's own fault.
+ * Its remedy is the fresh session the press could have chosen, on the same account, once: the entry is
+ * re-recorded with `carryRefused` and a move to where it already is, and the pass performs the fallback within
+ * seconds (turn-resume.ts fireLimitResume's fresh arm). Never for a turn that got an answer (the carry worked),
+ * and never twice (a fresh re-run's prompt no longer opens with the carried note). */
+const recordSpentAllowance = (params: {
+    readonly input: TurnInput;
+    readonly sessionId: string | undefined;
+    readonly limitHit: boolean;
+    readonly limitReopens: number | undefined;
+    readonly way: LimitWay | undefined;
+    readonly providerAnswered: boolean;
+    readonly failure: { readonly code: string | undefined } | undefined;
+    readonly standing: LimitWay["standing"];
+    readonly checklist: readonly TodoItem[] | undefined;
+    readonly contextTokens: number | undefined;
+}): void => {
+    const { input, sessionId, providerAnswered, failure } = params;
+    if (input.conversationId === undefined) {
+        return;
+    }
+    const turn = { ...input, conversationId: input.conversationId };
+    if (params.limitHit) {
+        recordLimitFailure({
+            input: turn,
+            ...opt("sessionId", sessionId),
+            ran: providerAnswered,
+            // The instant the frame already published, carried so the pass can keep the appointment the card
+            // is counting down to. Absent for a provider that names none, which leaves the entry press-only
+            // however the posture is set (runLimitPass says why a guess would be worse).
+            ...opt("reopensAt", params.limitReopens),
+            ...params.way,
+        });
+        return;
+    }
+    const carryRefused = !providerAnswered && failure !== undefined && failure.code === undefined && input.prompt.startsWith(RESUME_NOTES.carried);
+    if (carryRefused && input.account !== undefined) {
+        recordLimitFailure({
+            input: turn,
+            ...opt("sessionId", sessionId),
+            ran: true,
+            carryRefused: true,
+            move: { account: input.account, carry: false },
+            standing: params.standing,
+            ...opt("checklist", params.checklist),
+            ...opt("contextTokens", params.contextTokens),
+        });
+    }
 };
 
 /* The session this turn resumes: the one it named, or none, because the runtime serving it does not have that
@@ -1090,6 +1209,9 @@ async function* runTurn(
 ): AsyncGenerator<AgentEvent> {
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume, the user retrying by
     // hand (or the scheduler's own fire, which comes through here) must not be doubled by the scheduler later.
+    // Read before it is cleared: a fresh session seeded from the record is handed what the dead turn's ledgers
+    // measured (handoffNoteFor), and the held entry is the only place they survive.
+    const heldBefore = heldTurnOf(input.conversationId);
     if (input.conversationId !== undefined) {
         clearPendingResume(input.conversationId);
     }
@@ -1202,6 +1324,9 @@ async function* runTurn(
         resumed === undefined && input.conversationId !== undefined
             ? await handoffHistory(services, { ...input, conversationId: input.conversationId })
             : [];
+    // And what is TRUE beside what was said, measured by the sandbox (handoffNoteFor): the part of a hand-off no
+    // transcript can carry. Rides the request as one more note, serialized with the rest below.
+    const handoffNote = await handoffNoteFor(services, input, history, heldBefore);
     mark("history");
     /* AUTOMATIC TIER SELECTION, judged here because this is where the turn is still a request rather than a
      * plan: `input.model` is the user's own pick, unresolved, which is exactly the ceiling the judge needs, and
@@ -1349,7 +1474,8 @@ async function* runTurn(
      * reach the durable record, the transcript fold picks it out of the turn's own frame log
      * (sessions/turn-transcript.ts), which is what fixed the reopened tab losing every note the live tab had
      * shown. */
-    const notes = request.notes ?? [];
+    // The hand-off's measured state goes LAST, beside the envelope and the words it describes.
+    const notes = [...(request.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])];
     if (notes.length > 0) {
         yield { kind: "preamble", notes: [...notes] };
     }
@@ -1443,6 +1569,8 @@ async function* runTurn(
      * derivation would ask a snapshot that has since moved, so the card would count down to one instant while
      * the fire waited for another. */
     let limitReopens: number | undefined;
+    // And the way on from it, decided once at the frame and recorded on the held entry (limit-way.ts).
+    let limitWay: LimitWay | undefined;
     // Whether the provider has answered THIS turn at all. Any real content proves it is serving requests, which
     // is what clears a standing outage for every conversation stranded on it, recovery is detected off ordinary
     // traffic instead of a probe anyone has to pay for. Once per turn: the breaker only needs the first word.
@@ -1813,6 +1941,21 @@ async function* runTurn(
                 if (rateLimited) {
                     limitHit = input.conversationId !== undefined;
                     limitReopens = resetsAt;
+                    /* THE WAY ON, decided here and once (limit-way.ts): the frame two lines down tells the chat
+                     * what each press costs and where the policy is taking the turn, and the finally records the
+                     * same answer on the held entry the scheduler performs from. At frame time, like `ran`,
+                     * because it depends on it. */
+                    limitWay = await limitWayOf(services, {
+                        turn: input,
+                        provider,
+                        model: request.model,
+                        account: resolvedAccount,
+                        ran: providerAnswered,
+                        standing: verification.standing(),
+                        checklist,
+                        contextTokens: context?.tokens,
+                        sessionId,
+                    });
                 }
                 // A limit frame is worth dressing for either reason on its own, an instant to count down to or a
                 // turn being held for the press; a limit with neither says nothing more than the bare frame does,
@@ -1823,6 +1966,7 @@ async function* runTurn(
                         resetsAt,
                         held: limitHit,
                         ran: providerAnswered,
+                        way: limitWay,
                     });
                     continue;
                 }
@@ -1866,17 +2010,18 @@ async function* runTurn(
          * `ran` off `providerAnswered`, which is now final: false says the provider refused before the model read
          * a word, which is the ordinary shape of an already-spent allowance and the case where the session left
          * behind holds nothing but an unanswered message. */
-        if (limitHit && input.conversationId !== undefined) {
-            recordLimitFailure({
-                input: { ...input, conversationId: input.conversationId },
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                ran: providerAnswered,
-                // The instant the frame already published, carried so the pass can keep the appointment the
-                // card is counting down to. Absent for a provider that names none, which leaves the entry
-                // press-only however the posture is set (runLimitPass says why a guess would be worse).
-                ...(limitReopens !== undefined ? { reopensAt: limitReopens } : {}),
-            });
-        }
+        recordSpentAllowance({
+            input,
+            sessionId,
+            limitHit,
+            limitReopens,
+            way: limitWay,
+            providerAnswered,
+            failure,
+            standing: verification.standing(),
+            checklist,
+            contextTokens: context?.tokens,
+        });
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
         /* A ROUTED TURN JUST SPENT SOMETHING, and the only reading of what it spent is the one this re-read
          * takes. A Claude turn reads its own account's pools at settle (sdk-stream's account_usage frame); a

@@ -576,7 +576,24 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
          * is told (RESUME_NOTES.limit vs .refused, and telling a model to carry on from work that never happened
          * is how it comes to invent some) and what the strip can honestly say. A spent allowance refuses the
          * FIRST request most of the time, so false is the common case, not the corner. */
-        held: z.object({ ran: z.boolean() }).optional(),
+        held: z
+            .object({
+                ran: z.boolean(),
+                /* WHAT EACH WAY ON COSTS, so the offer can say it in tokens rather than imply it is free. A press
+                 * that re-runs the held turn in its own session, on this account at the reset or carried to
+                 * another, re-reads the whole context once (a prompt cache is per account and has expired by
+                 * then): `contextTokens` is that context, as the last usage frame measured it. A press that
+                 * opens a fresh session instead pays `handoffTokens`: the capped record plus the sandbox's
+                 * measured brief, rendered once at the failure and counted. Either is absent when nothing
+                 * measured it (a turn refused before its first usage frame has no context figure). */
+                contextTokens: z.number().optional(),
+                handoffTokens: z.number().optional(),
+                /* THE OWNER'S POLICY IS ALREADY MOVING THIS TURN to the named account (moveAfterLimit, with
+                 * a sibling that has room), so the surface reports the move instead of offering a press. Absent
+                 * when nothing is moving it: no policy, or no account with room. */
+                moving: z.string().optional(),
+            })
+            .optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
          * due, not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider
          * that is down only spends tokens on refusals, so each attempt waits longer than the last

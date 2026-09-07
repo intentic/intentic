@@ -290,6 +290,11 @@ export const AgentSummarySchema = z.object({
      * with no store to ask: threading a settings read through every caller of `laneOf` would put the answer in
      * five places and let them disagree. The daemon resolves it once, where the failure happened. */
     limitScheduled: z.boolean().optional().describe("Whether the held turn is already booked to go again at the reset, so nobody has to press anything."),
+    /* WHERE A BOOKED MOVE IS GOING: the account the owner's policy is moving the held turn to (moveAfterLimit
+     * with a sibling that has room). `limitScheduled` is set alongside it, since a booked move is a booked
+     * fire and the lanes need no second rule; this is only what the card's sentence names. Cleared by the turn
+     * the move starts, like every other pending-resume mark. */
+    limitMoving: z.string().optional().describe("The account the held turn is being moved to by the owner's policy, while that move is booked."),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // Which machine its turns execute on: a paired runner's id, absent for this sandbox (runners/). Latched
@@ -364,6 +369,10 @@ export const AgentSummarySchema = z.object({
      * buys is the case nothing else can reach, a turn that hit the wall at 2am on a board nobody is watching,
      * where the alternative is a card that waited eight hours for a press that was always going to come. */
     resumeAfterLimit: z.boolean().optional(),
+    /* THE SAME THREE-STATE OVERRIDE FOR THE OTHER ANSWER TO A SPENT ALLOWANCE: whether this conversation's
+     * held turn is moved to another connected account of the same provider that has room, the moment the
+     * refusal lands (SandboxSettingsSchema.moveAfterLimit has the policy and its cost). Absent ⇒ inherit. */
+    moveAfterLimit: z.boolean().optional(),
     // A collaborator asked for this agent's work to be landed (agents.requestLand), collaborators may drive
     // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
     // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
@@ -820,6 +829,18 @@ export const AgentResumeAfterLimitSchema = z.object({
         .nullable()
         .describe(
             "Whether the turn a spent allowance refused is sent again by itself once the window reopens. Null clears the override back to the sandbox-wide setting.",
+        ),
+});
+// moveAfterLimit's input, the third override in the same three states, for the answer to a spent allowance that
+// does not wait: another account of the same provider, now. Written from the card and the chat like its
+// neighbour; the settings toggle writes the default.
+export const AgentMoveAfterLimitSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    moveAfterLimit: z
+        .boolean()
+        .nullable()
+        .describe(
+            "Whether the turn a spent allowance refused is moved to another connected account of the same provider that has room, as soon as the refusal lands. Null clears the override back to the sandbox-wide setting.",
         ),
 });
 export const AgentFileDiffQuerySchema = z.object({

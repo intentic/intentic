@@ -82,3 +82,31 @@ test("carries the answer to a question the turn asked, and nothing for one nobod
     expect(prompt).toContain("Assistant: Again?\n\n---");
     expect(parseRuntimeHistory(prompt)?.prompt).toBe("go on");
 });
+
+/* THE NEWEST EXCHANGES CARRY THE DECISIONS, so they keep the full cap; an assistant message from further back is
+ * mostly narration of work whose result is on the tree, and keeps only its opening. The user's own words are
+ * never clipped by this rule: they are the shorter half and the half nothing else records. */
+test("keeps the newest two exchanges whole and clips older assistant messages to their opening", () => {
+    const long = (label: string): string => `${label} ${"x".repeat(3_000)}`;
+    const history: TranscriptRow[] = [
+        { role: "user", text: long("ask one") },
+        { role: "assistant", text: long("answer one") },
+        { role: "user", text: "ask two" },
+        { role: "assistant", text: long("answer two") },
+        { role: "user", text: "ask three" },
+        { role: "assistant", text: long("answer three") },
+    ];
+
+    const envelope = withRuntimeHistory("carry on", history);
+    // The oldest assistant message is cut at its opening.
+    expect(envelope).toContain("answer one");
+    expect(envelope).toMatch(/answer one x{1,}\n… \(truncated\)/u);
+    // The newest two are not.
+    expect(envelope).toContain(long("answer two"));
+    expect(envelope).toContain(long("answer three"));
+    // And a user message, however old, stays whole.
+    expect(envelope).toContain(long("ask one"));
+    // The envelope still comes apart on the way back into the session store.
+    expect(parseRuntimeHistory(envelope)?.prompt).toBe("carry on");
+    expect(parseRuntimeHistory(envelope)?.history).toHaveLength(6);
+});

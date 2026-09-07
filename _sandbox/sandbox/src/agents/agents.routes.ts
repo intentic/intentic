@@ -11,7 +11,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { opt } from "../agent/run/opt.js";
-import { pendingLimitFailure } from "../agent/run/turn-resume.js";
+import { type LimitFailure, pendingLimitFailure } from "../agent/run/turn-resume.js";
 import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
@@ -115,6 +115,13 @@ export const createAgentsRoutes = (services: Services) => {
      * Deliberately not the failures that name something to REPAIR (a dead credential, a seat nobody enabled, a
      * model the provider does not serve). Continuing those re-fails by construction, and an offer that re-fails
      * teaches people to stop trusting the offer. */
+    // The held turn as the ending states it: whether it ran, what each way on costs, where a policy is moving it.
+    const heldEnding = (held: LimitFailure): NonNullable<TurnEnding["held"]> => ({
+        ran: held.ran,
+        ...(held.contextTokens !== undefined ? { contextTokens: held.contextTokens } : {}),
+        ...(held.handoffTokens !== undefined ? { handoffTokens: held.handoffTokens } : {}),
+        ...(held.move !== undefined ? { moving: held.move.account } : {}),
+    });
     const endingOf = (id: string): TurnEnding | undefined => {
         const summary = services.agents.get(id);
         if (summary === undefined) {
@@ -141,7 +148,7 @@ export const createAgentsRoutes = (services: Services) => {
             return {
                 reason: "limit",
                 ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
-                ...(held !== undefined ? { held: { ran: held.ran } } : {}),
+                ...(held !== undefined ? { held: heldEnding(held) } : {}),
                 ...(summary.limitScheduled === true ? { scheduled: true } : {}),
             };
         }
@@ -390,6 +397,16 @@ export const createAgentsRoutes = (services: Services) => {
         resumeAfterLimit: i.resumeAfterLimit.handler(async ({ input }) => {
             entryOf(input.id);
             const summary = await services.agents.setResumeAfterLimit(input.id, input.resumeAfterLimit);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
+        // The third override of the same grammar: whether a spent allowance moves this conversation's held turn to
+        // another account of the same provider with room (SandboxSettingsSchema.moveAfterLimit has the policy).
+        moveAfterLimit: i.moveAfterLimit.handler(async ({ input }) => {
+            entryOf(input.id);
+            const summary = await services.agents.setMoveAfterLimit(input.id, input.moveAfterLimit);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
