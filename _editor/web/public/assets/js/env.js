@@ -1,5 +1,9 @@
 "use strict";
 (() => {
+  // ../../_tools/constants/dist/index.js
+  var GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
+  var GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
+
   // src/app/environments/environment.default.ts
   var defaultEnv = {
     production: false,
@@ -18,9 +22,10 @@
   window.env = {
     ...defaultEnv,
     api: { url: "https://localhost:6480" },
-    // Public web client id (authorize the dev origin, https://localhost:47145, as a JS origin on this client).
-    // Reach the SPA at exactly that host, https://127.0.0.1:47145 is a different origin to both Google and the
-    // API's CORS check, and the API answers its preflight 204 with no allow-origin header (sign-in then fails).
-    auth: { googleClientId: `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com` }
+    // Public web client id (@intentic/constants). Authorize the dev origin, https://localhost:47145, as a JS
+    // origin on this client, and reach the SPA at exactly that host: https://127.0.0.1:47145 is a different
+    // origin to both Google and the API's CORS check, and the API answers its preflight 204 with no
+    // allow-origin header (sign-in then fails).
+    auth: { googleClientId: GOOGLE_CLIENT_ID }
   };
 })();
