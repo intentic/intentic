@@ -76,6 +76,54 @@ describe("startIdleStop", () => {
         dispose();
     });
 
+    /* THE PROBE IS A SUBPROCESS, AND THE WORLD MOVES WHILE IT RUNS. Every test above resolves
+     * terminalActivityAt on an already-settled promise, so the check never actually suspends and the
+     * live probes it read a line earlier cannot go stale. Production's probe spawns `tmux list-panes`,
+     * which is milliseconds at best and seconds on the loaded box this feature exists for, and the
+     * verdict is reached on the far side of that await. Anything that becomes busy in between is
+     * invisible to the pass that is about to SIGTERM the daemon. */
+    const held = (): { probe: () => Promise<number>; settle: (at: number) => Promise<void> } => {
+        let resolve: ((at: number) => void) | undefined;
+        return {
+            probe: () =>
+                new Promise<number>((r) => {
+                    resolve = r;
+                }),
+            settle: async (at) => {
+                resolve?.(at);
+                // Let the suspended check resume and reach its verdict.
+                await vi.advanceTimersByTimeAsync(0);
+            },
+        };
+    };
+
+    it("a tab that connects while the terminal probe is in flight is not stopped under", async () => {
+        const stop = vi.fn();
+        let connected = 0;
+        const tmux = held();
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ connected: () => connected, terminalActivityAt: tmux.probe }), stop);
+        // Five quiet minutes: the streak has outlasted the window, so this pass would stop the machine.
+        await minutes(5);
+        // ...and while it is still waiting on tmux, somebody opens the workspace.
+        connected = 1;
+        await tmux.settle(0);
+        expect(stop).not.toHaveBeenCalled();
+        dispose();
+    });
+
+    it("a watch armed while the terminal probe is in flight is not stopped under", async () => {
+        const stop = vi.fn();
+        let watchers = 0;
+        const tmux = held();
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ watchers: () => watchers, terminalActivityAt: tmux.probe }), stop);
+        await minutes(5);
+        // An agent arms a condition watch in the gap; this daemon is the only thing that can ever fire it.
+        watchers = 1;
+        await tmux.settle(0);
+        expect(stop).not.toHaveBeenCalled();
+        dispose();
+    });
+
     it("terminal output advances the streak's start, one window after the last line, not two", async () => {
         const stop = vi.fn();
         let lastOutput = 0;

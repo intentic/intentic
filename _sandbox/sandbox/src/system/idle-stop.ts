@@ -80,15 +80,33 @@ export const startIdleStop = (
 ): (() => void) => {
     const windowMs = args.minutes * 60 * 1000;
     let quietSince = Date.now();
+    // The four live states, as one question, because it has to be asked twice (see below).
+    const busy = (): boolean => probes.connected() > 0 || probes.turns() > 0 || probes.delegates() > 0 || probes.watchers() > 0;
     const check = async (): Promise<void> => {
-        const now = Date.now();
         // The live states reset the streak outright; terminal activity is a TIMESTAMP, so it advances the
         // streak's start instead, one window after the last line of output, not two.
-        if (probes.connected() > 0 || probes.turns() > 0 || probes.delegates() > 0 || probes.watchers() > 0) {
+        if (busy()) {
+            quietSince = Date.now();
+            return;
+        }
+        const activityAt = await probes.terminalActivityAt();
+        /* ASKED AGAIN ON THE FAR SIDE OF THE AWAIT, and this is the whole reason `busy` is a function.
+         *
+         * The terminal probe is not a value, it is a SUBPROCESS: `tmux list-panes` on a box that is, by
+         * construction, the loaded one this feature bills for. The four questions above were answered
+         * before it was spawned and the verdict is reached after it returns, so everything that arrives in
+         * between, a tab opening, a turn starting, a delegate spawning, a watch being armed, was invisible
+         * to the pass that then SIGTERMs the daemon out from under it. That is the one outcome this module
+         * says it must never produce, and re-reading four map sizes costs nothing next to being wrong.
+         *
+         * The clock is re-read for the same reason: a verdict about "the whole window" must be measured
+         * against the present, not against whenever this pass happened to start. */
+        const now = Date.now();
+        if (busy()) {
             quietSince = now;
             return;
         }
-        quietSince = Math.max(quietSince, await probes.terminalActivityAt());
+        quietSince = Math.max(quietSince, activityAt);
         if (now - quietSince >= windowMs) {
             args.logger.info({ minutes: args.minutes }, "idle-stop: nobody connected and nothing running for the whole window, stopping");
             stop();
