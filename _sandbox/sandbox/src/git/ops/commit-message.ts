@@ -375,9 +375,14 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
          * told to flag "changes" flags every diff, because every diff changes something. What it is asked for is
          * the sentence the update card will show as a warning, so it must say what stops working and what to do
          *, and the "!" demand beside it is what ties the sentence to the major version bump the release
-         * tooling derives from the type. */
+         * tooling derives from the type.
+         *
+         * WHERE THE MARKER GOES IS SPELLED OUT, in both shapes, because "mark the type" plus a scopeless example
+         * is an instruction a model can follow to the letter and still land on `feat!(git):` — the one spelling
+         * commitlint reads as having no type and no subject at all (see HEADER). The repair below catches it;
+         * this is what keeps it from being written. */
         wantsNote && removedSurfaces.length === 0
-            ? `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
+            ? `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and put a "!" immediately before the colon: "feat!:" without a scope, "feat(scope)!:" with one, never "feat!(scope):". This is rare; when in doubt, omit it.`
             : undefined,
         /* THE FORCED CASE, replacing the judgment call above whenever the detector already knows the answer
          * (git/contract-shrink.ts): this commit removes named wire surfaces, so whether it breaks something is
@@ -389,7 +394,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
             ? [
                   `- This commit REMOVES these surfaces from the machine-read wire contract (the schemas other software parses):`,
                   ...removedSurfaces.slice(0, 10).map((surface) => `    ${surface}`),
-                  `- Because of that, two things are REQUIRED, not optional: mark the type with "!" (e.g. feat!:), and add a line spelled exactly: Breaking-Note: <what stops working for a user of the software and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>. Write the sentence about the removals listed above.`,
+                  `- Because of that, two things are REQUIRED, not optional: put a "!" immediately before the colon ("feat!:" without a scope, "feat(scope)!:" with one, never "feat!(scope):"), and add a line spelled exactly: Breaking-Note: <what stops working for a user of the software and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>. Write the sentence about the removals listed above.`,
               ]
             : []),
         // The output contract is stated first and last: this model is the cheap rung, and a preamble ("Sure!
@@ -537,18 +542,31 @@ const clipSubject = (subject: string): string => {
     return (boundary === -1 ? cut : cut.slice(0, boundary)).replace(/[\p{P}\s]+$/u, ``);
 };
 
-// The header taken apart so the repairs above land on the SUBJECT rather than on the `feat(scope):` in front of
-// it. Rebuilt with a lowercase type and exactly one space after the colon, which is `type-case` and
-// `header-trim` for free. A reply with no conventional type has no parts to take apart and is only clipped: the
-// hook refuses it whatever this did, and half-fixing it would hide which rung wrote it.
-const HEADER = new RegExp(String.raw`^(${TYPES.join(`|`)})(\([^)]*\))?(!?):\s*(.*)$`, `iu`);
+/* The header taken apart so the repairs above land on the SUBJECT rather than on the `feat(scope):` in front of
+ * it. Rebuilt with a lowercase type, the breaking marker in the one position git tooling reads it in, and
+ * exactly one space after the colon, which is `type-case` and `header-trim` for free. A reply with no
+ * conventional type has no parts to take apart and is only clipped: the hook refuses it whatever this did, and
+ * half-fixing it would hide which rung wrote it.
+ *
+ * THE MARKER IS READ ON EITHER SIDE OF THE SCOPE, though only one side is legal. Conventional Commits puts the
+ * `!` last, `feat(git)!:`, and the prompt's own example carries no scope to put it after (`feat!:`), so a model
+ * told to mark the TYPE writes exactly what it was shown and pushes the scope behind it: `feat!(git):`. That
+ * parses as no conventional header at all, which is why the refusal it earns is unreadable — commitlint says
+ * "subject may not be empty; type may not be empty" about a line that visibly has both, and the panel prints
+ * that verdict over a drafted message no amount of retrying can get past. Measured over this workspace's own
+ * history: 5 of 1056 landed subjects, each one a commit box its author could not use.
+ *
+ * So the marker is accepted where it was written and emitted where it belongs. Its MEANING was never in doubt
+ * (this change breaks something), and that is the part a repair must not lose. */
+const HEADER = new RegExp(String.raw`^(${TYPES.join(`|`)})(!?)(\([^)]*\))?(!?):\s*(.*)$`, `iu`);
 
 export const conventionalSubject = (header: string): string => {
     const parts = HEADER.exec(header);
     if (parts === null) {
         return clipSubject(header);
     }
-    const [, type = ``, scope = ``, breaking = ``, text = ``] = parts;
+    const [, type = ``, aheadOfScope = ``, scope = ``, afterScope = ``, text = ``] = parts;
+    const breaking = aheadOfScope === `` && afterScope === `` ? `` : `!`;
     const cased = isShout(text) ? text.toLowerCase() : leadingCase(text);
     return clipSubject(`${type.toLowerCase()}${scope}${breaking}: ${cased.replace(TRAILING_STOP, ``)}`);
 };
@@ -594,11 +612,14 @@ export const cleanBreakingNote = (reply: string): string => {
  * undeclared, and the whole point of detecting mechanically is that the declaration cannot depend on the model
  * having a good day. The subject marker is pure transformation; the note has a truthful floor. */
 
-// The `!` on a conventional subject, added when the type carries none. A subject that is not conventional is
+// The `!` on a conventional subject, added when the type carries none and MOVED when it carries one ahead of
+// the scope, the illegal spelling HEADER explains above. Reading it there matters most here: this is the
+// enforcer for a shrink the detector already proved, and a marker it could not see meant the removal shipped as
+// a minor bump, on a header the hook was going to refuse anyway. A subject that is not conventional at all is
 // returned untouched, the commit-msg hook rejects it before the marker could matter.
 // Re-clipped after the insert, not before: the marker is one character, and a subject already sitting on the
 // ceiling would leave here at 101 and be refused for a length the drafter never wrote.
-const TYPE_HEAD = new RegExp(String.raw`^(${TYPES.join(`|`)})(\([^)]*\))?:`, `i`);
+const TYPE_HEAD = new RegExp(String.raw`^(${TYPES.join(`|`)})!?(\([^)]*\))?!?:`, `i`);
 export const markSubjectBreaking = (subject: string): string => clipSubject(subject.replace(TYPE_HEAD, `$1$2!:`));
 
 /* The sentence used when the model wrote none: the removed surfaces' schema names, stated plainly. Weaker than

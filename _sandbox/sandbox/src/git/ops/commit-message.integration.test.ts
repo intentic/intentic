@@ -292,6 +292,27 @@ test("repairs the mechanical rules a commit-msg hook refuses, and leaves the sen
     expect(cleanCommitSubject("feat(access): show StatusBadge on the member roster")).toBe("feat(access): show StatusBadge on the member roster");
 });
 
+test("a breaking marker written ahead of the scope is moved rather than left for the hook to refuse", () => {
+    /* THE REFUSAL NOBODY COULD READ. `feat!(git): …` is not a conventional header at all — the `!` belongs after
+     * the scope — so commitlint reports "subject may not be empty; type may not be empty" about a line that
+     * plainly has both, and the panel prints that verdict over a drafted message the user cannot get past by
+     * retrying. It is the shape the prompt's own scopeless example (`feat!:`) invites, and it reached this
+     * workspace's commit box five times in a thousand landings.
+     *
+     * Moved, never dropped: the marker is what the release tooling majors on, so losing it would trade an
+     * unusable message for a wrong one. */
+    expect(cleanCommitSubject("feat!(git): bulk verbs take a scope")).toBe("feat(git)!: bulk verbs take a scope");
+    // With the other repairs, on one line, which is how they actually arrive.
+    expect(cleanCommitSubject("Fix!(api):  Drop the legacy token route.")).toBe("fix(api)!: drop the legacy token route");
+    // The legal spellings are already right and must come back untouched.
+    expect(cleanCommitSubject("feat(git)!: bulk verbs take a scope")).toBe("feat(git)!: bulk verbs take a scope");
+    expect(cleanCommitSubject("feat!: retire the legacy picker")).toBe("feat!: retire the legacy picker");
+    // Marked on both sides is one marker's worth of meaning, and only one is legal.
+    expect(cleanCommitSubject("feat!(git)!: bulk verbs take a scope")).toBe("feat(git)!: bulk verbs take a scope");
+    // Nothing breaking ⇒ no marker invented.
+    expect(cleanCommitSubject("feat(git): bulk verbs take a scope")).toBe("feat(git): bulk verbs take a scope");
+});
+
 test("a name leading the subject keeps its spelling instead of being mangled to fit the case rule", () => {
     /* THE FAILURE THIS EXISTS FOR, verbatim: the prompt tells the drafter to name things as the code spells
      * them, and `subject-case` reads a capital first letter as sentence-case and refuses the commit. Lowering
@@ -382,8 +403,12 @@ test("asks for a release note only when the repo keeps a changelog", () => {
     // The breaking note rides the same gate: no changelog, no breaking sentence either.
     expect(noNote).not.toContain("Breaking-Note:");
     expect(wantsNote).toContain("Breaking-Note:");
-    // …and the instruction ties the sentence to the "!" type marker the release tooling majors on.
-    expect(wantsNote).toContain(`mark the type with "!"`);
+    // …and the instruction ties the sentence to the "!" marker the release tooling majors on, spelled with the
+    // scoped shape beside it: "mark the type" plus a scopeless example is what produced `feat!(git):`, the one
+    // header commitlint reads as having neither.
+    expect(wantsNote).toContain(`put a "!" immediately before the colon`);
+    expect(wantsNote).toContain(`"feat(scope)!:" with one`);
+    expect(wantsNote).toContain(`never "feat!(scope):"`);
 });
 
 test("a detected wire-contract shrink turns the breaking ask from a judgment call into a requirement", () => {
@@ -392,6 +417,9 @@ test("a detected wire-contract shrink turns the breaking ask from a judgment cal
     // The removed surfaces are in front of the model, because the sentence has to be about THEM.
     expect(forced).toContain("OriginAgentSchema.properties.body");
     expect(forced).toContain("REQUIRED, not optional");
+    // The marker's position is stated on this path too: it is the one that cannot be skipped, so a header the
+    // hook refuses here costs the user the whole declaration, not just a note.
+    expect(forced).toContain(`never "feat!(scope):"`);
     // Forced even with no changelog: the declaration is what the push gate reads, not a changelog courtesy.
     expect(forced).toContain("Breaking-Note:");
     // …and the judgment-call spelling is gone, so the prompt never says both "when in doubt, omit" and "required".
@@ -404,6 +432,11 @@ test("markSubjectBreaking adds the marker the release tooling majors on, and onl
     expect(markSubjectBreaking("fix(contract): recut the lock")).toBe("fix(contract)!: recut the lock");
     // Already marked: nothing to add, and no second "!".
     expect(markSubjectBreaking("feat!: retire the legacy picker")).toBe("feat!: retire the legacy picker");
+    expect(markSubjectBreaking("fix(contract)!: recut the lock")).toBe("fix(contract)!: recut the lock");
+    /* Marked in the illegal position: relocated, not doubled and not ignored. This is the enforcer for a shrink
+     * the detector already proved, so a marker it could not see meant the removal shipped as a minor bump —
+     * under a header the commit-msg hook was going to refuse anyway. */
+    expect(markSubjectBreaking("feat!(git): bulk verbs take a scope")).toBe("feat(git)!: bulk verbs take a scope");
     // Not conventional: left for the commit-msg hook to reject rather than half-fixed here.
     expect(markSubjectBreaking("retire the legacy picker")).toBe("retire the legacy picker");
 });
