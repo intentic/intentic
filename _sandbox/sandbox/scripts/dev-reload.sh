@@ -13,6 +13,9 @@
 # container can only see new code through dev-sandbox.sh, and silently restarting it would look like a no-op.
 set -eu
 
+# Siblings only ($SCRIPT_DIR/dev-manifest-drift.mjs), so same-directory-relative like dev-sandbox.sh: no path
+# here depends on how deep this script sits.
+SCRIPT_DIR="$(dirname "$0")"
 ORIGIN_HOST_PREFIX="intentic-sandbox-"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -48,6 +51,14 @@ fi
 if ! docker inspect --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' "$CONTAINER" | grep -qx '/opt/sandbox/dist'; then
     echo "error: ${CONTAINER} was created without the dev mounts, so a restart would re-run the baked daemon." >&2
     echo "       Recreate it once with 'sh _sandbox/sandbox/scripts/dev-sandbox.sh' to enable fast reloads." >&2
+    exit 1
+fi
+
+# Do the baked manifests still describe the dists mounted over them? Only compiled output is mounted, never
+# node_modules, so a package.json that gained an export subpath since the image was built leaves the container
+# resolving the new dist against the old manifest — Node refuses a subpath whose file is sitting right there.
+# Checked before the build rather than after: nothing compiled can fix it, and the answer is an image rebuild.
+if ! node "$SCRIPT_DIR/dev-manifest-drift.mjs" "$CONTAINER"; then
     exit 1
 fi
 

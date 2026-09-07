@@ -15,59 +15,13 @@
 // Only compiled output is mounted, never node_modules: each baked package keeps the image's own installed
 // dependencies (including its native builds: node-pty is rebuilt inside the image against its ABI, and a host
 // copy would be wrong).
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+// A manifest is installed by an image build and by nothing else, so a package that gained an export subpath
+// since the image was baked mounts a dist its own package.json refuses to resolve: dev-manifest-drift.mjs is
+// the guard for that, and shares this file's idea of which packages are baked.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
-const SCRIPT_DIR = import.meta.dirname;
-const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
-
-// Where the image puts the daemon, and where it puts the workspace packages pruned in beside it.
-const SANDBOX_ROOT = "/opt/sandbox";
-const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
-
-// Every workspace package in the repo, by its declared name: the mapping from `@intentic/sandbox-contract` to
-// `_shared/sandbox-contract` is read, never assumed (`@intentic/lsp` lives in `_search/lsp`, not `_sandbox/lsp`).
-// Groups are discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml).
-const workspacePackages = () => {
-    const found = new Map();
-    const groups = readdirSync(REPO_ROOT, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && entry.name.startsWith("_"))
-        .map((entry) => entry.name);
-    for (const group of groups) {
-        const groupDir = join(REPO_ROOT, group);
-        if (!existsSync(groupDir)) {
-            continue;
-        }
-        for (const entry of readdirSync(groupDir, { withFileTypes: true })) {
-            if (!entry.isDirectory()) {
-                continue;
-            }
-            const dir = join(groupDir, entry.name);
-            const manifest = join(dir, "package.json");
-            if (!existsSync(manifest)) {
-                continue;
-            }
-            try {
-                const { name } = JSON.parse(readFileSync(manifest, "utf8"));
-                if (typeof name === "string") {
-                    found.set(name, dir);
-                }
-            } catch {
-                // An unparseable manifest is not this script's problem: it just can't contribute a mount.
-            }
-        }
-    }
-    return found;
-};
-
-// Which packages the image actually bakes beside the daemon. Read from the daemon's own dependency list rather
-// than hardcoded, so a new workspace dependency becomes hot-reloadable without touching this file.
-const bakedPackageNames = () => {
-    const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "_sandbox/sandbox/package.json"), "utf8"));
-    return Object.entries(manifest.dependencies ?? {})
-        .filter(([, spec]) => typeof spec === "string" && spec.startsWith("workspace:"))
-        .map(([name]) => name);
-};
+import { bakedPackageNames, packageDir, REPO_ROOT, SANDBOX_ROOT, workspacePackages } from "./dev-baked-packages.mjs";
 
 const mounts = [];
 const push = (hostPath, containerPath) => {
