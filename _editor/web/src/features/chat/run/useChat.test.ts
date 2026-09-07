@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { sandboxRouteName, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -85,7 +85,7 @@ const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes
 const { resetChat, useChat } = await import("./useChat");
 const { agentTabOf, draftConversation, openAgentConversation, reveal } = await import("../panel/useChat-reveal");
 const { hydrateOnce } = await import("./useChat-sessions");
-const { loadAccountStatus, refreshConnections } = await import("../accounts/useChat-accounts");
+const { loadAccountStatus, providerBase, refreshConnections } = await import("../accounts/useChat-accounts");
 // The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
@@ -340,6 +340,47 @@ describe(`native account connection`, () => {
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/accounts/cursor/login/start`, expect.objectContaining({ method: `POST` }));
         expect(chat.error.value).toBe(daemonMessage);
         expect(chat.accountBusy.value).toBeUndefined();
+    });
+
+    /* THE CARD FOLLOWS THE CHAT ONLY ONTO A PROVIDER IT CAN CONNECT, which a fresh sandbox is the whole reason
+     * for: with nothing connected the first chat is parked on the free trial, and the card, pointed there on
+     * open, drew an empty "endpoint/free-trial account · not connected" row with a Connect beside it. */
+    it(`keeps the account card on a connectable provider while the chat runs on the free trial`, async () => {
+        const chat = useChat();
+        await refreshConnections(true);
+        endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
+        endpointsLoaded.value = true;
+        trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
+        await nextTick();
+        expect(chat.provider.value).toBe(TRIAL_PROVIDER);
+
+        chat.showActiveProvider();
+
+        expect(chat.managedProvider.value).toBe(turnDefaults.provider.value);
+        expect(chat.managedProvider.value).not.toBe(TRIAL_PROVIDER);
+    });
+
+    // The other way in: the picker writes whatever provider was chosen, the trial included, and a sandbox
+    // switch re-seeds the card from that pick.
+    it(`does not seed the account card from a remembered pick that has no sign-in`, () => {
+        const chat = useChat();
+        chat.setManagedProvider(`cursor`);
+        turnDefaults.provider.value = TRIAL_PROVIDER;
+
+        resetChat();
+
+        expect(chat.managedProvider.value).toBe(`cursor`);
+    });
+
+    /* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. A provider id is an open vocabulary and some carry a slash;
+     * interpolated raw, that id adds a path SEGMENT, `{provider}` matches exactly one, and the request matched
+     * no route at all — a bare 404 the app could only report as "Request failed (404)", since there was no
+     * daemon sentence in it to quote. Encoded, the same call is refused in the daemon's own words. */
+    it(`keeps an account route on its route for a provider id carrying a slash`, () => {
+        expect(providerBase(TRIAL_PROVIDER)).toBe(`/accounts/${encodeURIComponent(TRIAL_PROVIDER)}`);
+        expect(sandboxRouteName(`POST`, `${providerBase(TRIAL_PROVIDER)}/login/start`)).toBe(`accounts.start`);
+        // The ids that carry no slash are untouched, which is what the Cursor call above still asserts verbatim.
+        expect(providerBase(`claude`)).toBe(`/accounts/claude`);
     });
 });
 

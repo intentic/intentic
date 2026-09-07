@@ -32,6 +32,7 @@ import {
 } from "../tabs/useChat-tabs";
 import { attachStarted, loadSessions, paintCachedTranscripts, sessions } from "./useChat-sessions";
 import { retireCommandReads } from "../models/useChat-catalog";
+import { hasSignIn } from "../session/access";
 import {
     accountBusy,
     accountUsage,
@@ -155,7 +156,14 @@ export const resetChat = (): void => {
     // answers: the same wait `accountsLoaded` above declares, for the other half of the same picture.
     endpointProviders.value = [];
     endpointsLoaded.value = false;
-    managedProvider.value = turnDefaults.provider.value;
+    /* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can
+     * connect. The picker writes whatever was chosen, the free trial and a model endpoint included, and neither
+     * holds a credential this card adds or drops; seeding one leaves the card showing rows for a provider that
+     * has no sign-in, under a raw id, with no chip lit. Keeping the previous value is safe by induction: every
+     * writer of `managedProvider` passes the same test. */
+    if (hasSignIn(turnDefaults.provider.value)) {
+        managedProvider.value = turnDefaults.provider.value;
+    }
     cancelConnect();
     cancelTranslatorConnect();
     accountBusy.value = undefined;

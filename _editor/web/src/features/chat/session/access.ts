@@ -104,6 +104,20 @@ export const accessStateFor = (provider: AgentProvider): ProviderAccessState => 
     needsReauth: accountsOf(provider).some((account) => account.needsReauth === true),
 });
 
+/* WHETHER THERE IS A SIGN-IN HERE AT ALL, which is a different question from whether this provider is ready,
+ * and the one a surface must ask BEFORE it offers a button.
+ *
+ * `accessFor` is already the product's answer to "is there something to connect", because it is a spec field
+ * and the two families that carry their own credentials have no spec row: an installed ACP agent, and a model
+ * endpoint, the free trial among them. Both are ready by existing, so a Connect on their row offers a handshake
+ * that does not exist.
+ *
+ * Derived here rather than asked by elimination, which is exactly how the account card came to offer one. It
+ * treated everything that was not a translator subscription as holding native accounts, so a provider with no
+ * spec fell through: a fresh sandbox parks its first chat on the free trial, the card followed the chat, and
+ * the empty row it drew read "endpoint/free-trial account · not connected" with a Connect beside it. */
+export const hasSignIn = (provider: AgentProvider): boolean => accessFor(provider) !== undefined;
+
 // How a locked provider states its price in one chip. `free` leads with the word that changes a decision, a
 // user who has connected nothing should be able to see, without connecting anything, that one of these rows
 // costs nothing; the others name what they'd have to already pay for.

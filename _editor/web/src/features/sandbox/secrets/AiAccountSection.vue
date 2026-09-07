@@ -13,7 +13,7 @@ import {
 import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { providerReady } from "../../chat/session/access";
+import { hasSignIn, providerReady } from "../../chat/session/access";
 import { relativeTime } from "../../chat/models/catalog";
 import { providerTabs } from "../../chat/accounts/providerCatalog";
 import { useChat } from "../../chat/run/useChat";
@@ -94,9 +94,14 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
     gemini: { title: `Google account` },
 };
 
-// Codex, Kimi and Gemini own no native account: the subscription row IS their connection. Read off the same
-// rule the composer's gate uses, so a provider is never offered an account row it has no store behind.
-const hasNativeAccounts = computed(() => !subscriptionOnly(managedProvider.value));
+/* Codex, Kimi and Gemini own no native account: the subscription row IS their connection. Read off the same
+ * rules the composer's gate uses, so a provider is never offered an account row it has no store behind.
+ *
+ * TWO exclusions, not one, and the second is the one this asked by elimination. A provider with no sign-in at
+ * all (an endpoint, an ACP agent: `hasSignIn`) is not a native provider either, and treating "not a
+ * subscription" as "has native accounts" put a Connect button on the free trial's row for a handshake that does
+ * not exist. */
+const hasNativeAccounts = computed(() => hasSignIn(managedProvider.value) && !subscriptionOnly(managedProvider.value));
 /* WHICH ESTATE TO SIGN IN TO, and the ONLY provider fact this card asks the user for before a sign-in starts.
  *
  * Z.ai sells one product through two entirely separate estates: an international plan signs in at z.ai and its

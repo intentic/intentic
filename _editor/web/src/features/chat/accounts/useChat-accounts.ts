@@ -30,8 +30,14 @@ export const managedAccounts = computed<readonly OauthAccount[]>(() => accountsO
 /* Where a provider's ACCOUNT rows live: one route family with the provider in the path (accounts.contract.ts),
  * which is what lets one set of helpers read, rename, disconnect and connect an account without knowing whose
  * it is. A provider whose only credential is the translator's subscription has no door there (subscriptionOnly
- * keeps those out of refreshConnections); catalogs are not here either, they come off /providers. */
-export const providerBase = (p: AgentProvider): string => `/accounts/${p}`;
+ * keeps those out of refreshConnections); catalogs are not here either, they come off /providers.
+ *
+ * ENCODED, because a provider id is an open vocabulary and some of them carry a slash (`endpoint/free-trial`).
+ * Interpolated raw, that id put an extra SEGMENT in the path, and `{provider}` matches exactly one, so the
+ * request walked off `/accounts/{provider}/login/start` and matched no route at all: a bare 404 with nothing in
+ * the body, reported as "Request failed (404)" because there was no daemon sentence to quote. Encoded, a call
+ * for a provider these routes do not serve lands ON the route and is refused in the daemon's own words. */
+export const providerBase = (p: AgentProvider): string => `/accounts/${encodeURIComponent(p)}`;
 
 /* Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
  * card shows the routed row alone and there is nothing for `startConnect` to arm. Their turns authenticate

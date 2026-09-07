@@ -10,7 +10,7 @@
  * So each test below asks one question of EVERY provider, and the answer has to be one a surface can render. */
 import { accessFor, modelsFor, NATIVE_PROVIDERS, PROVIDER_SPECS, providerLabel, providerSpec, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { beforeEach, expect, it } from "vitest";
-import { accessBadge, connectPitch, providerReady } from "../session/access";
+import { accessBadge, connectPitch, hasSignIn, providerReady } from "../session/access";
 import { accountsLoaded, noTranslatorAccounts, providerAccounts, translatorAccounts } from "./providerAccounts";
 import {
     acpProviders,
@@ -92,4 +92,21 @@ it.each(NATIVE_PROVIDERS)(`%s's browser-side model floor is Claude's alone`, (pr
 it(`the free trial is not a native provider`, () => {
     expect(NATIVE_PROVIDERS).not.toContain(TRIAL_PROVIDER);
     expect(providerSpec(TRIAL_PROVIDER)).toBeUndefined();
+});
+
+/* WHICH PROVIDERS MAY BE OFFERED A SIGN-IN, asked of the spec table rather than by elimination.
+ *
+ * The account card used to ask it the other way round, "is this a translator subscription?", and treat every
+ * other answer as a provider holding native accounts. A provider with no spec row is neither, and the free
+ * trial is one: a fresh sandbox parks its first chat on it, the card followed the chat there, and drew
+ * "endpoint/free-trial account · not connected" with a Connect button whose POST matched no route at all. */
+it.each(NATIVE_PROVIDERS)(`%s has a sign-in a card may offer`, (provider) => {
+    expect(hasSignIn(provider), `${provider} has nothing to connect`).toBe(true);
+});
+
+it(`the providers that carry their own credentials have no sign-in to offer`, () => {
+    expect(hasSignIn(TRIAL_PROVIDER)).toBe(false);
+    // An endpoint the user configured, and an installed ACP agent: same answer, and for the same reason.
+    expect(hasSignIn(`endpoint/my-gateway`)).toBe(false);
+    expect(hasSignIn(`some-acp-agent`)).toBe(false);
 });
