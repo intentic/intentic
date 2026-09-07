@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type RegistryInstall, RegistryInstallSchema, resolveSource } from "./source.js";
+import { FULL_SHA, type RegistryInstall, RegistryInstallSchema, resolveSource } from "./source.js";
 
 /* THE EXTENSION REGISTRY: a git repo of pointers, and the two files in it.
  *
@@ -38,8 +38,6 @@ export const OFFICIAL_SECURITY_REVIEWER = "intentic-agent-gate";
 export const OFFICIAL_DETERMINISTIC_SCAN_POLICY = "intentic-extension-deterministic-v1";
 export const OFFICIAL_DETERMINISTIC_SCANNER = "trivy";
 export const OFFICIAL_DETERMINISTIC_SCANNER_VERSION = "0.72.0";
-
-const FULL_SHA = /^[0-9a-f]{40}$/;
 
 export const RegistrySecurityReviewSchema = z.object({
     sha: z.string().regex(FULL_SHA, "must be a full lowercase commit sha"),

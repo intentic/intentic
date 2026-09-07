@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Rule } from "@intentic/sandbox-contract";
-import { plainText } from "../terminal/plain-text.js";
+import { plainText } from "@intentic/base/plain-text";
 import { conditionHolds, standing } from "./rules.js";
 import { workspaceRelative } from "./turn-ending.js";
 
@@ -75,7 +75,10 @@ const relativeTo = (file: string, roots: readonly string[] | undefined): string 
 /* What every standing `file.edited` rule has to say about one file, or nothing: the common answer. Returned as
  * a reviewer the diagnostics hook set runs beside the type check (agent/agent-diagnostics.ts), after an edit
  * tool AND after a shell command that changed the file, so one reader hears both. */
-export const fileEditedReviewer = (rules: readonly Rule[], deps: FileEditedDeps): ((file: string, how: string) => Promise<string | undefined>) | undefined => {
+export const fileEditedReviewer = (
+    rules: readonly Rule[],
+    deps: FileEditedDeps,
+): ((file: string, how: string) => Promise<string | undefined>) | undefined => {
     const armed = standing(rules, "file.edited");
     if (armed.length === 0) {
         return undefined;

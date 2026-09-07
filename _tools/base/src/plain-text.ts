@@ -4,9 +4,11 @@
  * they arrive as `▌[2m…▌[22m` litter that the model pays tokens for, the user reads as a corrupted message, and
  * the actual failure hides inside.
  *
- * WHY HERE AND NOT IN THE RUNNER. terminal-run.ts hands back what the command printed, and it has readers that
- * want exactly that (an ACP client renders it as terminal output). Cleaning belongs at the seam where output
- * stops being a terminal's and becomes text somebody reads, which is where each caller of this lives.
+ * WHY HERE AND NOT IN THE RUNNER. The daemon's terminal-run.ts hands back what the command printed, and it has
+ * readers that want exactly that (an ACP client renders it as terminal output). Cleaning belongs at the seam
+ * where output stops being a terminal's and becomes text somebody reads, which is where each caller of this
+ * lives — and those callers are in two tiers (the daemon's rules and CI readers, the deployments extension's
+ * container logs), which is why the rules sit in base rather than in either one.
  *
  * The three rules are the terminal's own, and none of them can throw information away: an escape sequence carries
  * no text, a `\r` frame that another frame overwrote was never on screen, and a control byte has no rendering.

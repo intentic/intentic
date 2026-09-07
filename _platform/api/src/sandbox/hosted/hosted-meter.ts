@@ -2,9 +2,9 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_METER, runExclusive } from "../../jobs-lock.js";
-import { getMachine, isFlyGone, stopMachine } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly.js";
 import { hostedEnabled } from "./hosted.js";
-import { hostedBudgetOf, LIVE_STATES, settleHostedStretches } from "./hosted-usage.js";
+import { hostedBudgetOf, settleHostedStretches } from "./hosted-usage.js";
 
 /* THE HOUR METER'S TICK, hourly: settle the stretch of every machine that has stopped since anyone looked, and
  * stop the machines of a metered owner whose month is spent.
@@ -70,7 +70,12 @@ const stopOwnerMachines = async (config: Config, logger: Logger, machines: reado
 
 /* One pass over every machine with an open stretch, grouped by owner so the budget is read once per owner and
  * a person with several machines sees them all stop together rather than one an hour. */
-export const stopOverBudgetHosted = async (prisma: PrismaClient, config: Config, logger: Logger, now: Date = new Date()): Promise<{ stopped: number }> => {
+export const stopOverBudgetHosted = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    now: Date = new Date(),
+): Promise<{ stopped: number }> => {
     if (!hostedEnabled(config) || config.hosted.monthlyHours === 0) {
         return { stopped: 0 };
     }

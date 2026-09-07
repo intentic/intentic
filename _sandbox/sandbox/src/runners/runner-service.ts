@@ -1,7 +1,7 @@
 import { mkdir, statfs, writeFile } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import { dirname, join, normalize } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
+import { narrate } from "@intentic/base/async";
 import {
     type AgentEvent,
     AgentHarnessSchema,
@@ -41,46 +41,10 @@ const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
     };
 };
 
-// The host router's streamFlow, retold for a sync: run the operation, yield its lines as they are produced,
-// end with one terminal frame carrying the outcome. Queued rather than dropped when the socket drains slower
-// than git prints.
-async function* narrated(run: (onLine: (line: string) => void) => Promise<void>): AsyncGenerator<RunnerSyncLine> {
-    const queued: string[] = [];
-    let wake: (() => void) | undefined;
-    const nudge = (): void => {
-        const pending = wake;
-        wake = undefined;
-        pending?.();
-    };
-    let settled: { readonly ok: boolean; readonly detail?: string } | undefined;
-    const finished = run((line) => {
-        queued.push(line);
-        nudge();
-    })
-        .then(() => ({ ok: true }))
-        .catch((error: unknown) => ({ ok: false, detail: errorMessage(error) }))
-        .then((outcome) => {
-            settled = outcome;
-            nudge();
-        });
-    for (;;) {
-        const next = queued.shift();
-        if (next !== undefined) {
-            yield { kind: "line", text: next };
-            continue;
-        }
-        if (settled !== undefined) {
-            break;
-        }
-        await new Promise<void>((resolve) => {
-            wake = resolve;
-        });
-    }
-    await finished;
-    yield settled?.ok === true
-        ? { kind: "done", ok: true }
-        : { kind: "done", ok: false, ...(settled?.detail !== undefined ? { detail: settled.detail } : {}) };
-}
+// A sync's callback-reported lines as the stream the parent reads, on the shared pump (@intentic/base's
+// `narrate`). What is here is only this wire's terminal frame: one `done`, carrying the reason when it failed.
+const narrated = (run: (onLine: (line: string) => void) => Promise<void>): AsyncGenerator<RunnerSyncLine> =>
+    narrate(run, (outcome): RunnerSyncLine => (outcome.ok ? { kind: "done", ok: true } : { kind: "done", ok: false, detail: outcome.error }));
 
 /* The dispatched turn as this daemon's own AgentTurn. Two refusals guard the translation: a provider or
  * harness this build does not know is answered as a readable error frame rather than a zod throw the parent

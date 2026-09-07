@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
+import { SANDBOX_ID } from "../ids/tunnel-ids.js";
 
 /* THE OWNER TICKET: the platform's signed word for who owns a HOSTED sandbox, so the browser that just signed in
  * to the platform can sign in to that sandbox's daemon without being asked for Google a second time.
@@ -32,7 +33,6 @@ export const OWNER_TICKET_TTL_MS = 5 * 60_000;
 export const ENV_PLATFORM_PUBLIC_KEY = "PLATFORM_PUBLIC_KEY";
 
 const base64url = (bytes: Buffer): string => bytes.toString("base64url");
-const SANDBOX_ID = /^[0-9a-f]{12}$/;
 
 // The signed claim, times in seconds like the grant's.
 export interface OwnerTicket {

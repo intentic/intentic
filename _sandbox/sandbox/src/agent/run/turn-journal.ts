@@ -1,6 +1,6 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { AgentOriginSchema, AgentTurnSchema, ParkedCardSchema } from "@intentic/sandbox-contract";
+import { AgentOriginSchema, AgentTurnSchema, isConversationId, ParkedCardSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../../store/json-file.js";
 
@@ -31,8 +31,6 @@ import { writeJsonFile } from "../../store/json-file.js";
 
 // The charset shared by ConversationIdSchema and the contract's entryId, so both kinds' ids are filename-safe.
 // A filename that doesn't match is ignored, never trusted, the same rule the approvals queue applies.
-const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
-
 // What every entry carries whatever started it: when the interrupted turn began (the resume's staleness test),
 // and how many times a boot has already re-run it, a turn whose own tool output OOM-kills the daemon would
 // otherwise resurrect it on every boot forever, so the resume spends this before it fires.
@@ -123,7 +121,7 @@ export const fileTurnJournal = (dir: string): TurnJournal => {
             const entries: JournalEntry[] = [];
             for (const name of names.filter((file) => file.endsWith(".json"))) {
                 const id = name.slice(0, -".json".length);
-                if (!FILE_ID.test(id)) {
+                if (!isConversationId(id)) {
                     continue;
                 }
                 // An entry that won't parse is SKIPPED, never deleted. Reading is not the moment to destroy a

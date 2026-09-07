@@ -33,8 +33,9 @@ import { useChanges } from "../changes/useChanges";
 import { useRepos } from "../explorer/useRepos";
 import { useUploadQueue } from "../files/useUploadQueue";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
-import { type SearchScope, useWorkspaceSearch } from "../search/useWorkspaceSearch";
-import { MATCH_TOGGLES, useSearchOptions } from "../search/useSearchOptions";
+import { useExplorerSearch } from "../search/useExplorerSearch";
+import type { SearchScope } from "../search/useWorkspaceSearch";
+import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
@@ -57,8 +58,22 @@ import { HOISTED_CONTEXT } from "../files/viewerChrome";
  * toggled from the rail: this view owns no control for it. */
 
 const layout = useLayout();
-const { tree, rootHidden, barren, error, isLoading, refetch, expanded, collapseAll, moveIntoMany, run, busy, actionError, canEditFiles, refuseWrite } =
-    useWorkspaceTree();
+const {
+    tree,
+    rootHidden,
+    barren,
+    error,
+    isLoading,
+    refetch,
+    expanded,
+    collapseAll,
+    moveIntoMany,
+    run,
+    busy,
+    actionError,
+    canEditFiles,
+    refuseWrite,
+} = useWorkspaceTree();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -98,23 +113,10 @@ const sidebarModeOptions = computed(() => [
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
-const filter = ref(``);
-/* One input, three scopes. `name` filters the loaded tree instantly (client-side); the other two search file
- * contents on the daemon (debounced, via useWorkspaceSearch) and swap the tree for a match list:
- *
- *   Text , what an editor's search box does: the query is one pattern, matched literally (or as a regex with
- *           .*), case-insensitively unless Aa, and every occurrence is marked in the results.
- *   Smart, iq's fused retrieval: the query is a question, its words scored separately against the index and
- *           reranked. Finds the file that ANSWERS the words; finds nothing to underline in them.
- *
- * The funnel beside the scopes holds what the list on screen leaves out: the tree's under Name, the search's
- * under Text/Smart, all off by default. The match switches inside the field belong to Text alone: they change
- * what the pattern means. */
-const searchScope = ref<"name" | SearchScope>(`name`);
-const contentMode = computed(() => searchScope.value !== `name`);
-const textMode = computed(() => searchScope.value === `text`);
-const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
-const search = useSearchOptions();
+/* The search box's state (useExplorerSearch documents the three scopes and what each searches). The funnel
+ * beside the scopes holds what the list on screen leaves out: the tree's under Name, the search's under
+ * Text/Smart, all off by default; the match switches sit inside the field, where they belong to Text alone. */
+const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -127,7 +129,7 @@ const {
     loadMore: searchLoadMore,
     error: searchError,
     note: searchNote,
-} = useWorkspaceSearch(filter, contentScope, contentMode);
+} = results;
 // The open tabs live in the useWorkspaceTabs singleton so they survive navigation; this component owns closing
 //: the dirty-confirm dialog and edit-buffer forget.
 const {
@@ -330,11 +332,6 @@ const sidebarSeamWidth = computed<number>({
     get: () => toScreenPx(layout.sidebarWidth.value),
     set: (px) => layout.setSidebarWidth(toAppPx(px)),
 });
-
-const clearFilter = (): void => {
-    filter.value = ``;
-    searchScope.value = `name`;
-};
 
 /* The explorer's filters, behind one funnel. They used to be a single "Ignored" chip that swapped meaning with
  * the scope; a menu takes that pair of long labels off a 256px-wide toolbar and gives the second filter: tests
@@ -817,7 +814,6 @@ const explorerTooltip = computed(() =>
     ),
 );
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
-
 </script>
 
 <template>
@@ -1158,7 +1154,11 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     :max="toScreenPx(maxSideWidth)"
                     :reset="toScreenPx(DEFAULT_SIDE_PANE_WIDTH)"
                 />
-                <div v-if="splitOpen && !scopeBroken" class="flex min-h-0 shrink-0 flex-col border-l border-line" :style="{ width: uiLength(sideWidth) }">
+                <div
+                    v-if="splitOpen && !scopeBroken"
+                    class="flex min-h-0 shrink-0 flex-col border-l border-line"
+                    :style="{ width: uiLength(sideWidth) }"
+                >
                     <EditorPane pane="side" @select="selectTab" @keep="keepTab" @close="closeTab" @contextmenu="openTabMenu" />
                 </div>
                 <!-- Drop-to-root hint over the editor, shown only for external file drags (an internal move is

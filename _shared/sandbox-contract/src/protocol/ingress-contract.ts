@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
+import { SANDBOX_ID } from "../ids/tunnel-ids.js";
 
 /* THE INGRESS CONTRACT: how a sandbox is reached now that the reachability fabric is the platform's OWN edge
  * (the `@intentic/ingress` app on Fly) instead of a zrok hub. Node-only (crypto), like ./tunnel-ids beside it;
@@ -51,8 +52,6 @@ export interface ReachabilityGrant {
     readonly sandboxId: string;
     readonly issuedAt: number;
 }
-
-const SANDBOX_ID = /^[0-9a-f]{12}$/;
 
 /* Mint a grant: Ed25519 over the canonical payload bytes. Ed25519 because node signs/verifies it with key
  * objects alone (no hash negotiation, no padding modes), signatures are 64 bytes, and the platform already

@@ -31,11 +31,9 @@ export const SEED = {
     name: `Onboarding User`,
 } as const;
 
-/* The public web client id, which must match the SPA's built-in one: it keys the localStorage slot the cached
- * Google ID token lives in. Drift shows up as a sign-in gate standing in front of the workspace in every spec.
- */
-const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
-export const GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
+// Re-exported so this seed stays the one import a harness needs; the value and why it has to be shared are in
+// @intentic/constants.
+export { GOOGLE_TOKEN_STORAGE_KEY } from "@intentic/constants";
 
 /* The api is served over TLS here (certs.ts says why the whole world has to be), so the cookie carries the
  * `__Secure-` prefix and is marked secure, the same branch the server itself takes, and the same name

@@ -1,4 +1,5 @@
-import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
+import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";

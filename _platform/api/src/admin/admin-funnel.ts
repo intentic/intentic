@@ -1,5 +1,6 @@
 import type { AdminFunnel } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
+import { DAY_MS } from "../durations.js";
 
 /* THE ACTIVATION FUNNEL — where the product loses people, stage by stage. Every stage counts DISTINCT
  * ACCOUNTS through Prisma relation filters (`sandboxes: { some: … }`), so each is a superset of the next by
@@ -8,8 +9,6 @@ import type { PrismaClient } from "@intentic/prisma";
  * `setupEngaged` is the union of the lanes' different stamps on purpose: the command lane claims a setup
  * code, the hosted lane creates a machine and claims nothing, and a daemon that announced proves engagement
  * whatever the lane. Anything narrower silently undercounts a whole lane. */
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SERIES_DAYS = 30;
 

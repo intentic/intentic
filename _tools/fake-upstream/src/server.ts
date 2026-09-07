@@ -1,5 +1,6 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readBody, sendJson } from "@intentic/testing/http-fake";
 
 /* A STAND-IN FOR THE MODEL THE FREE TRIAL SPENDS. Google's two surfaces, served locally, deterministically.
  *
@@ -44,20 +45,6 @@ export interface FakeUpstream {
     readonly received: readonly string[];
     close(): Promise<void>;
 }
-
-const json = (response: ServerResponse, status: number, body: unknown): void => {
-    const text = JSON.stringify(body);
-    response.writeHead(status, { "content-type": `application/json`, "content-length": Buffer.byteLength(text) });
-    response.end(text);
-};
-
-const readBody = async (request: IncomingMessage): Promise<string> => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) {
-        chunks.push(chunk as Buffer);
-    }
-    return Buffer.concat(chunks).toString(`utf8`);
-};
 
 /* The credential each surface accepts, and the refusal each gives the OTHER one's.
  *
@@ -109,12 +96,12 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
             if (route === `GET /v1beta/models`) {
                 const { key, refusal } = nativeKey(request);
                 if (refusal !== undefined || key === undefined) {
-                    return json(response, 401, { error: { code: 401, message: refusal, status: `UNAUTHENTICATED` } });
+                    return sendJson(response, 401, { error: { code: 401, message: refusal, status: `UNAUTHENTICATED` } });
                 }
                 if (refuseKeys.has(key)) {
-                    return json(response, 429, { error: { code: 429, message: `quota exceeded`, status: `RESOURCE_EXHAUSTED` } });
+                    return sendJson(response, 429, { error: { code: 429, message: `quota exceeded`, status: `RESOURCE_EXHAUSTED` } });
                 }
-                return json(response, 200, {
+                return sendJson(response, 200, {
                     models: models.map((id) => ({
                         name: `models/${id}`,
                         // The capability the trial actually spends. Without it the platform reads the model as
@@ -127,32 +114,32 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
             if (route === `GET /v1beta/openai/models`) {
                 const { key, refusal } = compatKey(request);
                 if (refusal !== undefined || key === undefined) {
-                    return json(response, 401, { error: { message: refusal, type: `invalid_request_error` } });
+                    return sendJson(response, 401, { error: { message: refusal, type: `invalid_request_error` } });
                 }
                 if (refuseKeys.has(key)) {
-                    return json(response, 429, { error: { message: `quota exceeded`, type: `rate_limit_error` } });
+                    return sendJson(response, 429, { error: { message: `quota exceeded`, type: `rate_limit_error` } });
                 }
                 // Prefixed the way Google prefixes them, so the platform's `bareId` strip is exercised rather
                 // than bypassed by a fake that helpfully answered in the shape the platform wanted.
-                return json(response, 200, { object: `list`, data: models.map((id) => ({ id: `models/${id}`, object: `model` })) });
+                return sendJson(response, 200, { object: `list`, data: models.map((id) => ({ id: `models/${id}`, object: `model` })) });
             }
 
             if (route === `POST /v1beta/openai/chat/completions`) {
                 const { key, refusal } = compatKey(request);
                 if (refusal !== undefined || key === undefined) {
-                    return json(response, 401, { error: { message: refusal, type: `invalid_request_error` } });
+                    return sendJson(response, 401, { error: { message: refusal, type: `invalid_request_error` } });
                 }
                 const body = await readBody(request);
                 if (refuseKeys.has(key)) {
                     // Recorded even when refused: a test asserting the pool walked every key needs to see them.
                     received.push(body);
-                    return json(response, 429, { error: { message: `quota exceeded`, type: `rate_limit_error` } });
+                    return sendJson(response, 429, { error: { message: `quota exceeded`, type: `rate_limit_error` } });
                 }
                 received.push(body);
                 const asked = JSON.parse(body === `` ? `{}` : body) as { model?: unknown; stream?: unknown };
                 const model = typeof asked.model === `string` ? asked.model : (models[0] ?? `fake-flash-latest`);
                 if (asked.stream !== true) {
-                    return json(response, 200, {
+                    return sendJson(response, 200, {
                         id: `chatcmpl-fake`,
                         object: `chat.completion`,
                         created: Math.floor(Date.now() / 1000),
@@ -175,13 +162,13 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
             // Liveness, for whatever is waiting on this container. Unauthenticated on purpose: a readiness probe
             // that needs a credential is a probe that reports the credential's health, not the server's.
             if (route === `GET /health`) {
-                return json(response, 200, { ok: true, models });
+                return sendJson(response, 200, { ok: true, models });
             }
 
-            return json(response, 404, { error: { message: `no such route: ${route}`, type: `invalid_request_error` } });
+            return sendJson(response, 404, { error: { message: `no such route: ${route}`, type: `invalid_request_error` } });
         })().catch(() => {
             if (!response.headersSent) {
-                json(response, 500, { error: { message: `fake upstream failed`, type: `server_error` } });
+                sendJson(response, 500, { error: { message: `fake upstream failed`, type: `server_error` } });
             } else {
                 response.end();
             }

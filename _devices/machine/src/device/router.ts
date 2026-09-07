@@ -1,4 +1,4 @@
-import { errorMessage } from "@intentic/base/errors";
+import { narrate } from "@intentic/base/async";
 import { type HostScopes, type DeviceFlowLine, type DeviceSandboxFlow, hostContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
@@ -21,56 +21,10 @@ export interface HostRuntime {
     readonly log: (message: string) => void;
 }
 
-/* A flow that reports through a callback, turned into the stream the browser reads.
- *
- * The flow functions take an `onLine` because their OTHER caller is an MCP tool, which wants one answer at the
- * end and has no use for a line as it arrives. This adapts those same calls rather than adding a second
- * implementation of any of them, so what a person watches and what the agent is told can never describe the
- * same run differently.
- *
- * Lines are queued rather than dropped when the consumer is slower than the machine: an image pull prints
- * faster than a WebSocket drains, and a progress log with holes in it is worse than one that lags. */
-async function* streamFlow(run: (onLine: (line: string) => void) => Promise<string>): AsyncGenerator<DeviceFlowLine> {
-    const queued: string[] = [];
-    let wake: (() => void) | undefined;
-    const nudge = (): void => {
-        const pending = wake;
-        wake = undefined;
-        pending?.();
-    };
-    let settled: { readonly ok: boolean; readonly message: string } | undefined;
-    // Started here rather than awaited, so the loop below can yield what it prints while it is still running.
-    // The rejection is captured as a value: it is this stream's terminal frame, not this generator's failure.
-    const finished = run((line) => {
-        queued.push(line);
-        nudge();
-    })
-        .then((message) => ({ ok: true, message }))
-        .catch((error: unknown) => ({ ok: false, message: errorMessage(error) }))
-        .then((outcome) => {
-            settled = outcome;
-            nudge();
-        });
-
-    for (;;) {
-        const next = queued.shift();
-        if (next !== undefined) {
-            yield { kind: "line", text: next };
-            continue;
-        }
-        // Drained AND finished, every line the flow produced has been sent, so the terminal frame is next.
-        if (settled !== undefined) {
-            break;
-        }
-        await new Promise<void>((resolve) => {
-            wake = resolve;
-        });
-    }
-    await finished;
-    yield settled?.ok === true
-        ? { kind: "result", message: settled.message }
-        : { kind: "error", message: settled?.message ?? "The operation stopped without saying why." };
-}
+// A flow's callback-reported lines as the stream the browser reads (@intentic/base's `narrate` says why
+// the flows report that way and why lines are queued). What is here is only this wire's terminal frame.
+const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): AsyncGenerator<DeviceFlowLine> =>
+    narrate(run, (outcome): DeviceFlowLine => (outcome.ok ? { kind: "result", message: outcome.value } : { kind: "error", message: outcome.error }));
 
 // Which function each op is. Start/stop/restart are a docker call and say one sentence, `logs` is a read whose
 // lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a

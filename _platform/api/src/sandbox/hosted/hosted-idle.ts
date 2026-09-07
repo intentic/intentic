@@ -3,8 +3,9 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { onHostedPlan } from "./hosted-plan.js";
-import { getMachine, isFlyGone } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES } from "./fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
+import { DAY_MS } from "../../durations.js";
 
 /* COLLECTING THE MACHINES NOBODY CAME BACK TO, the free hosted lane's largest cost and its least useful one.
  *
@@ -29,11 +30,7 @@ import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
  *   - a machine whose owner we could not ask about, because Fly was unreachable. Tomorrow's sweep retries;
  *     a provider we cannot reach is not evidence of anything. */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 // The states in which a machine is alive and must not be collected. Same set the meter and the wake path use.
-const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
-
 // How long a machine has gone unopened. `lastSeenAt` is the daemon's last boot announce; a machine that has
 // never announced at all is measured from its own creation, which is what catches a provision that failed to
 // come up and was then abandoned, the exact case that leaves a disk billing for nothing.

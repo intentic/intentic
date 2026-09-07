@@ -4,6 +4,7 @@ import { looksLikeUrl, parseSwayTree, parseWmctrl } from "./parse.js";
 import { has, run } from "./run.js";
 import { isWayland } from "./screen.js";
 import { DesktopError, type WindowInfo } from "./types.js";
+import { XDOTOOL_INSTALL } from "./input-linux.js";
 
 /* Linux: what is open, and how to open more of it.
  *
@@ -16,7 +17,6 @@ import { DesktopError, type WindowInfo } from "./types.js";
  * that reads as "nothing is open". */
 
 const WMCTRL_INSTALL = "sudo apt install wmctrl  (or your distro's package)";
-const XDOTOOL_INSTALL = "sudo apt install xdotool  (or your distro's package)";
 const CLIP_INSTALL_X11 = "sudo apt install xclip";
 const CLIP_INSTALL_WAYLAND = "sudo apt install wl-clipboard";
 

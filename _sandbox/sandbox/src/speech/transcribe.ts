@@ -6,6 +6,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { downloadFile } from "@huggingface/hub";
 import { statePath } from "../workspace/layout/state-paths.js";
 
@@ -29,7 +30,6 @@ import { statePath } from "../workspace/layout/state-paths.js";
 // instead of 466MB. Full `large-v3` is NOT the next rung up, on a shared sample it scored no better while
 // running 2× slower again on a 3.1GB model, so turbo is the top of this curve rather than a midpoint on it.
 const MODEL_FILE = "ggml-large-v3-turbo.bin";
-const MODEL_REPO = "ggerganov/whisper.cpp";
 
 // whisper-cli uses 4 threads whatever the box has, which on a 16-core sandbox left most of the speedup on the
 // table: 11s of speech took 13.2s at 4 threads, 7.7s at 8, 6.7s at 16, the knee is 8, past which hyperthreads
@@ -66,18 +66,6 @@ const whisperCliMissing = async (exec: ExecFn): Promise<boolean> => {
 export const whisperLanguage = (locale: string | undefined): string => {
     const primary = (locale ?? "").trim().toLowerCase().split("-")[0] ?? "";
     return /^[a-z]{2,3}$/.test(primary) ? primary : "auto";
-};
-
-// Whisper's stdout for one utterance → clean single-line text, or undefined for silence/noise-only output
-// (whisper renders non-speech as bracketed annotations like [BLANK_AUDIO] or (wind blowing)).
-export const cleanTranscription = (stdout: string): string | undefined => {
-    const text = stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "" && !/^[[(].*[\])]$/.test(line))
-        .join(" ")
-        .trim();
-    return text === "" ? undefined : text;
 };
 
 export type ModelState = "absent" | "downloading" | "ready";
@@ -120,7 +108,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
     // Under cache/ because that is what the model IS: 1.6 GB re-downloadable by content, exactly what the
     // cache entry's `derived` promises exports and the watcher. Its old top-level home is a retired dir.
     const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
-    const download = fetchModel ?? ((file: string) => downloadFile({ repo: MODEL_REPO, path: file }));
+    const download = fetchModel ?? ((file: string) => downloadFile({ repo: WHISPER_MODEL_REPO, path: file }));
 
     // The provisioning probe's answer, cached per process: the binary arrives via image rebuild, which
     // restarts the daemon, so neither answer can go stale within one daemon's life.
@@ -143,7 +131,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             log(`downloading ${MODEL_FILE} (first voice use)`);
             const blob = await download(MODEL_FILE);
             if (blob === null) {
-                throw new Error(`speech model download failed: ${MODEL_REPO} has no ${MODEL_FILE}`);
+                throw new Error(`speech model download failed: ${WHISPER_MODEL_REPO} has no ${MODEL_FILE}`);
             }
             await mkdir(dirname(modelPath), { recursive: true });
             // Stream straight to disk (~1.6GB, never buffer it), landing BESIDE the model and only then taking

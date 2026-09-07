@@ -1,4 +1,5 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { isAncestor } from "./agent-refs.js";
 
 /* WHERE IN YOUR OWN HISTORY AN AGENT'S WORK ENDED UP, the question that only exists once the answer to "does
  * this still differ from main?" is no.
@@ -46,18 +47,6 @@ export interface HistoryCommit {
  * The same bound, for the same reason, as the hash probe in agent-changes.ts. A commit spanning two chunks
  * comes back twice and is merged by sha below. */
 const PATH_CHUNK = 100;
-
-// `git merge-base --is-ancestor` answers by exit code, which the runner surfaces as a throw. Same shape as
-// agent-changes.ts's own, kept local rather than shared: that one is about a branch tip, this one is about a
-// recorded head, and folding them would put a general helper between two callers that mean different things.
-const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
-    try {
-        await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 /* THE NEAR END OF THE SPAN, which is `landedHead` whenever it is still on the main line and something honest
  * whenever it is not.

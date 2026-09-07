@@ -158,3 +158,20 @@ export const LOCAL_PORT = 8788;
  * three inside this container. The Dockerfile bakes it into TRANSLATOR_URL, which is why the value has to be
  * legible from here rather than only from there. */
 export const TRANSLATOR_PORT = 8789;
+
+/* THE PUBLIC GOOGLE WEB CLIENT ID the browser signs in against, and the localStorage slot it keys.
+ *
+ * Public by construction — it is in every page the SPA serves and in Google's own consent screen — so it is a
+ * constant rather than a secret, and its pair (the client SECRET) lives in the platform's config and never
+ * here. What makes it worth stating once is that FOUR places have to agree on it and none of them can detect
+ * disagreement: the two SPA environment bundles authorize it as a JS origin, and the two test harnesses plant
+ * a cached token in the slot it keys. Drift does not fail anything loudly; it puts a sign-in gate in front of
+ * the workspace in every spec, at the point where the harness has already decided the run is fine.
+ *
+ * Changing it means re-authorizing the dev and deployment origins on the new client in Google Cloud first.
+ */
+export const GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
+
+// Where useGoogleIdentity caches the ID token. Keyed by client id so a rotation invalidates the cache rather
+// than restoring a token minted for a client that no longer authorizes this origin.
+export const GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;

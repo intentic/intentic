@@ -66,10 +66,6 @@ export const readStackState = (): StackState => {
     }
 };
 
-// The public web client id, must match _editor/web/src/environments/environment.local.ts (it keys the cached
-// Google ID token's localStorage slot). Drift shows up as the sign-in gate in every spec's trace.
-const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
-
 export const SEED = {
     userId: `e2e-user`,
     email: `e2e@intentic.dev`,
@@ -93,7 +89,7 @@ export const signedSessionCookie = (sessionToken: string): string =>
 // fetch), but useGoogleIdentity restores a cached one from localStorage without touching Google when its exp
 // is >60s out, and the loopback daemon never verifies the bearer. So the seed plants a well-formed fake JWT
 // (only the payload's exp/email are ever read) and no FedCM prompt or sign-in gate can appear.
-export const GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
+export { GOOGLE_TOKEN_STORAGE_KEY } from "@intentic/constants";
 
 const base64Json = (value: object): string => Buffer.from(JSON.stringify(value)).toString(`base64url`);
 

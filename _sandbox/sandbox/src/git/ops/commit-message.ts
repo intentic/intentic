@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
+import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
 /* THE MATERIAL A COMMIT MESSAGE IS DRAFTED FROM, and the one rule that matters here: it describes what a commit
  * WOULD RECORD, not what the repo happens to contain. Those differ constantly, a partially staged file, an
@@ -414,9 +415,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
 // Wrappers a model reaches for even when told not to. Stripped rather than rejected: the message is right and
 // only its packaging is wrong, and a helper that refuses a good answer over a pair of backticks is worse than
 // one that unwraps it.
-const FENCE = /^```[\w-]*\n?|\n?```$/g;
 const LABEL = /^(?:subject|commit message|message)\s*:\s*/i;
-const BULLET = /^[-*]\s+/;
 
 /* WHAT A NOTE IS CARRIED ON: git's own trailer convention, rather than a shape invented here. `git log
  * --format=%(trailers:key=Release-Note,valueonly)` reads it back at release time, `git interpret-trailers`

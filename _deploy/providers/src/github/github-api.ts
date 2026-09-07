@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
+import { restClient } from "../core/rest-client.js";
 
 // Thin wrapper over the GitHub REST API. Each function takes a token + the minimum inputs, returns only the
 // fields the providers consume. Like forgejo-api.ts: pure HTTP, no state, injectable for tests.
@@ -9,19 +10,6 @@ const headers = (token: string): Record<string, string> => ({
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 });
-
-const json = async (url: string, init: RequestInit): Promise<unknown> => {
-    // Timeout bounds a stalled connection (undici's default headers timeout is ~5 minutes).
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`GitHub API ${init.method ?? "GET"} ${url}: ${response.status} ${body}`);
-    }
-    if (response.status === 204) {
-        return undefined;
-    }
-    return response.json();
-};
 
 // --- Schemas for the fields we consume ---
 
@@ -61,6 +49,8 @@ export interface GitHubApi {
 
 const BASE = "https://api.github.com";
 
+const { json, maybe } = restClient("GitHub");
+
 export const githubApi: GitHubApi = {
     getAuthenticatedUser: async ({ token }) => {
         const data = await json(`${BASE}/user`, { headers: headers(token) });
@@ -68,12 +58,9 @@ export const githubApi: GitHubApi = {
     },
 
     findRepo: async ({ token, owner, name }) => {
-        const response = await fetch(`${BASE}/repos/${owner}/${name}`, { headers: headers(token), signal: AbortSignal.timeout(30_000) });
-        if (response.status === 404) {
+        const response = await maybe(`${BASE}/repos/${owner}/${name}`, { headers: headers(token) });
+        if (response === undefined) {
             return undefined;
-        }
-        if (!response.ok) {
-            throw new Error(`GitHub API GET /repos/${owner}/${name}: ${response.status}`);
         }
         const data = parseResponse(repoSchema, await response.json(), "GitHub /repos");
         return { cloneUrl: data.clone_url, sshUrl: data.ssh_url };
@@ -88,30 +75,15 @@ export const githubApi: GitHubApi = {
         });
     },
 
+    // Already gone is the outcome asked for, so a 404 is success rather than a failure to report.
     deleteRepo: async ({ token, owner, name }) => {
-        const response = await fetch(`${BASE}/repos/${owner}/${name}`, {
-            method: "DELETE",
-            headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 404) {
-            return;
-        }
-        if (!response.ok) {
-            throw new Error(`GitHub API DELETE /repos/${owner}/${name}: ${response.status}`);
-        }
+        await maybe(`${BASE}/repos/${owner}/${name}`, { method: "DELETE", headers: headers(token) });
     },
 
     readFile: async ({ token, owner, repo, path, branch }) => {
-        const response = await fetch(`${BASE}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-            headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 404) {
+        const response = await maybe(`${BASE}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, { headers: headers(token) });
+        if (response === undefined) {
             return undefined;
-        }
-        if (!response.ok) {
-            throw new Error(`GitHub API GET /repos/${owner}/${repo}/contents/${path}: ${response.status}`);
         }
         const data = parseResponse(contentSchema, await response.json(), "GitHub /contents");
         return { content: Buffer.from(data.content, "base64").toString("utf8"), sha: data.sha };
@@ -178,16 +150,6 @@ export const githubApi: GitHubApi = {
     },
 
     deleteRepoSecret: async ({ token, owner, repo, secretName }) => {
-        const response = await fetch(`${BASE}/repos/${owner}/${repo}/actions/secrets/${secretName}`, {
-            method: "DELETE",
-            headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 404) {
-            return;
-        }
-        if (!response.ok) {
-            throw new Error(`GitHub API DELETE secret ${secretName}: ${response.status}`);
-        }
+        await maybe(`${BASE}/repos/${owner}/${repo}/actions/secrets/${secretName}`, { method: "DELETE", headers: headers(token) });
     },
 };

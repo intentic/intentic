@@ -10,6 +10,7 @@
  * ships a different set of image/audio/embedding endpoints alongside them), and which endpoints to ask in
  * what order. Those stay next to the provider that knows them.
  */
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 
 // Ids whose case is the vendor's, not English's. Title-casing these reads as a typo in a picker row.
 const ACRONYMS = new Set(["gpt", "oss", "api"]);
@@ -32,6 +33,20 @@ export const humanizeModelId = (id: string): string =>
             return ACRONYMS.has(token.toLowerCase()) ? token.toUpperCase() : token[0]!.toUpperCase() + token.slice(1);
         })
         .join(" ");
+
+/* Bare ids → the wire shape ({ models, default }), for the providers whose discovery answers nothing but ids.
+ * Neither xAI's REST catalog nor the Codex translator's `/v1/models` publishes a ranking (see model-order.ts),
+ * so the app imposes the order, which is what makes `default` the frontier newest rather than whichever id the
+ * endpoint happened to name first. Unranked, so same-tier same-release siblings break their tie on the id: an
+ * endpoint reorders its rows between requests, and this catalog's head is the model a fresh conversation opens
+ * on. `ids` must be non-empty, which every caller's ladder guarantees, so `default` is always defined.
+ *
+ * The providers that get more than ids back (Cursor's names, Gemini's, the minted seeds) order their own: the
+ * shape they carry is richer than this, and which field to sort on is theirs to know. */
+export const idCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
+    const ordered = ids.toSorted(compareUnrankedModelIds);
+    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
+};
 
 export const authHeader = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
@@ -56,11 +71,7 @@ export interface ListedModel {
 // An OpenAI-compatible model list, unwrapped. `data` is the standard key; xAI's native endpoint says `models`
 // instead, and answering both here is cheaper than a second helper. [] on any failure.
 export const listModels = async (url: string, token: string, fetchImpl: typeof fetch): Promise<readonly ListedModel[]> => {
-    const json = await getJson<{ data?: { id: string; owned_by?: string }[]; models?: { id: string; owned_by?: string }[] }>(
-        url,
-        token,
-        fetchImpl,
-    );
+    const json = await getJson<{ data?: { id: string; owned_by?: string }[]; models?: { id: string; owned_by?: string }[] }>(url, token, fetchImpl);
     return (json?.data ?? json?.models ?? []).map((model) => ({ id: model.id, ...(model.owned_by === undefined ? {} : { owner: model.owned_by }) }));
 };
 

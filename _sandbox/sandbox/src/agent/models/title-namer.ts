@@ -2,6 +2,7 @@ import type { Services } from "../../composition.js";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../providers/failure-sentences.js";
 import { sentenceAnswer } from "./role-answer.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
+import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
 /* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn, the second half of the
  * naming rule that starts in the contract's title.ts.
@@ -78,9 +79,7 @@ const namePrompt = (prompt: string): string =>
 
 // Wrappers a model reaches for even when told not to, same instinct as cleanCommitSubject: the name is right
 // and only its packaging is wrong, so unwrap rather than refuse.
-const FENCE = /^```[\w-]*\n?|\n?```$/g;
 const LABEL = /^(?:title|name|session\s*(?:title|name)?)\s*:\s*/i;
-const BULLET = /^[-*]\s+/;
 
 /* The separator the shape asks for, against the ones a model reaches for instead, normalised for the same
  * reason the wrappers above are stripped, so that a right name in wrong punctuation still lands as one column
@@ -139,8 +138,7 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
      * again over it (the registry's ranking forfeits its rank the same way; see promoteTitle) and the entry heals
      * on its next turn rather than wearing `[tool_call: glob for pattern '**']` or `Claude Haiku` forever. */
     const poisoned =
-        entry.title !== undefined &&
-        (isFailureSentence(entry.title) || isToolCallStandIn(entry.title) || isSelfIdentityAnswer(entry.title));
+        entry.title !== undefined && (isFailureSentence(entry.title) || isToolCallStandIn(entry.title) || isSelfIdentityAnswer(entry.title));
     if ((entry.titleSource ?? "derived") !== "derived" && !poisoned) {
         return;
     }

@@ -1,8 +1,7 @@
-import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
+import { idCatalog } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { jsonFile } from "../../store/json-file.js";
-import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import { discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
 /* The Codex model catalog service, on the shared ladder (agent/model-catalog.ts): live, then the persisted
@@ -19,17 +18,6 @@ export interface CodexCatalog {
 }
 
 const MODELS_TTL_MS = 60_000;
-
-// The OpenAI-compatible /v1/models both discovery sources speak publishes a SET, not a ranking (see
-// model-order.ts), so the app imposes the order here, on every rung alike, since the persisted list inherits
-// whatever order a turn's rejection named its ids in. That is what makes `default` the frontier newest rather
-// than whichever id the endpoint happened to list first, and it is the order the picker's groups render in.
-// Unranked, so same-tier same-release siblings (the gpt-5.6-* line) break their tie on the id: the translator
-// reorders its rows between requests, and this catalog's head is the model a fresh conversation opens on.
-const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareUnrankedModelIds);
-    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
-};
 
 export const createCodexCatalog = (config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): CodexCatalog => {
     const catalog = discoveredCatalog({
@@ -53,8 +41,8 @@ export const createCodexCatalog = (config: Config, persistPath: string, fetchImp
         }),
         toStored: (ids) => [...ids],
         seed: SEED_CODEX_MODELS,
-        fromLive: toCatalog,
-        fromStored: toCatalog,
+        fromLive: idCatalog,
+        fromStored: idCatalog,
     });
     return {
         models: catalog.models,

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { cleanTranscription, createTranscriber, type ExecFn, to16kMonoPcm, wavOf, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
+import { createTranscriber, type ExecFn, to16kMonoPcm, wavOf, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 
 // 48kHz stereo s16le frames of a constant sample value.
 const stereoFrames = (frames: number, value: number): Buffer => {
@@ -44,14 +44,6 @@ test("wavOf emits a valid 16kHz mono s16le RIFF header", () => {
     expect(wav.readUInt32LE(24)).toBe(16_000);
     expect(wav.readUInt16LE(34)).toBe(16); // bits per sample
     expect(wav.readUInt32LE(40)).toBe(data.length);
-});
-
-test("cleanTranscription flattens whisper output and drops noise-only annotations", () => {
-    expect(cleanTranscription(" Hello there.\n General Kenobi.\n")).toBe("Hello there. General Kenobi.");
-    expect(cleanTranscription(" [BLANK_AUDIO]\n")).toBeUndefined();
-    expect(cleanTranscription("(wind blowing)")).toBeUndefined();
-    expect(cleanTranscription("")).toBeUndefined();
-    expect(cleanTranscription("[music] \nreal words")).toBe("real words");
 });
 
 test("the transcriber serializes whisper runs, drops blanks, reports lines live, and returns them in speech order", async () => {

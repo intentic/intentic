@@ -16,6 +16,7 @@ import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
+import { sizeLabel } from "@intentic/base/format";
 
 /* A BUNDLE ARRIVING: this sandbox's own export format, taken in as a plan the owner ticks rather than as a
  * write that happens on file pick.
@@ -133,12 +134,6 @@ export interface HeldBundle {
     readonly index: BundleIndex;
 }
 
-const sizeLabel = (bytes: number): string => {
-    const units = ["B", "KB", "MB", "GB"];
-    const index = Math.min(units.length - 1, bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024)));
-    return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-};
-
 const countLabel = (tally: Tally | undefined): string =>
     tally === undefined ? "nothing" : `${tally.files.toLocaleString()} file${tally.files === 1 ? "" : "s"}, ${sizeLabel(tally.bytes)}`;
 
@@ -153,7 +148,6 @@ const walkBundle = async (
     const ex = extract();
     let manifest: BundleManifest | undefined;
     let repos: ReadonlySet<string> = new Set();
-
 
     const readEntry = (stream: Readable): Promise<Buffer> =>
         new Promise((resolve, reject) => {
@@ -280,7 +274,12 @@ export const bundleItems = (index: BundleIndex): ArrivalItem[] => {
             : { id, group, label, detail: `${detail} — ${countLabel(tally)}`, applicable: true, recommended: true, secrets: [] };
     };
     return [
-        row(FILES_ITEM, "files", "Workspace files", "Everything in /work that is not one of the repositories below, and the workspace repo's own history"),
+        row(
+            FILES_ITEM,
+            "files",
+            "Workspace files",
+            "Everything in /work that is not one of the repositories below, and the workspace repo's own history",
+        ),
         ...index.manifest.repos.toSorted().flatMap((id) => {
             const item = row(repoItem(id), "repo", `Repository ${id}`, "Its working tree and its full git history");
             return item === undefined ? [] : [item];

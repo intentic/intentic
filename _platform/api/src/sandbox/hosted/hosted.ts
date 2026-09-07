@@ -24,6 +24,7 @@ import {
     listVolumes,
     startMachine,
     updateMachine,
+    LIVE_STATES,
 } from "./fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 
@@ -46,8 +47,7 @@ import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCa
 
 // The lane needs BOTH its own switch and the edge: a hosted machine is reached by the edge's replay under the
 // edge's wildcard, so Fly credentials on a platform with no ingress would build machines nobody can reach.
-export const hostedEnabled = (config: Config): boolean =>
-    config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
+export const hostedEnabled = (config: Config): boolean => config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
 
 /* WHICH PLATFORM THIS IS, as the twelve hex characters every machine it creates carries in its Fly metadata
  * (fly.ts), and the thing the orphan sweep checks before it destroys anything.
@@ -152,7 +152,13 @@ export interface HostedOverlay {
 }
 export const STOCK_OVERLAY: HostedOverlay = { image: null, environmentHash: null };
 
-export const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string, overlay: HostedOverlay = STOCK_OVERLAY) => {
+export const hostedMachineConfig = (
+    config: Config,
+    args: HostedProvisionArgs,
+    machineName: string,
+    volumeId: string,
+    overlay: HostedOverlay = STOCK_OVERLAY,
+) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
     return {
         ...flyMachineConfig({
@@ -195,7 +201,6 @@ export interface HostedProvisioned {
  * mid-`replacing` (the state an update passes through), and every one of those answers IS success here — the
  * browser's daemon probe is what decides when the sandbox is actually back. Only a refusal over a machine Fly
  * still reports as stopped/failed is a real refusal. */
-const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
 export const wakeHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
     try {
         await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId);
@@ -312,7 +317,12 @@ const claimPoolMachine = async (
             const connectToken = decryptSecret(config, row.token);
             const adopted: HostedProvisionArgs = { ...args, connectToken };
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await updateMachine(config.hosted.flyApiToken, row.appName, row.machineId, hostedMachineConfig(config, adopted, row.appName, row.volumeId));
+            await updateMachine(
+                config.hosted.flyApiToken,
+                row.appName,
+                row.machineId,
+                hostedMachineConfig(config, adopted, row.appName, row.volumeId),
+            );
             // oxlint-disable-next-line eslint/no-await-in-loop
             await startAfterUpdate(config, row);
             // oxlint-disable-next-line eslint/no-await-in-loop
@@ -363,7 +373,12 @@ const claimPoolMachine = async (
  * anything this cleanup misses is an app with no HostedMachine row, which is precisely what the reaper
  * deletes. A pool claim that fails falls through to the cold path: the reader asked for a machine, not for a
  * pool hit. */
-export const provisionHosted = async (prisma: PrismaClient, config: Config, logger: Logger, args: HostedProvisionArgs): Promise<HostedProvisioned> => {
+export const provisionHosted = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    args: HostedProvisionArgs,
+): Promise<HostedProvisioned> => {
     const { flyApiToken, flyOrg, volumeGb } = config.hosted;
     const { region } = args;
     const claimed = await claimPoolMachine(prisma, config, logger, args);
@@ -398,7 +413,9 @@ export const provisionHosted = async (prisma: PrismaClient, config: Config, logg
         // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
         // so the free lane's clock starts here rather than at the first wake, which is the only version that
         // does not hand out an uncounted first session to everyone who ever provisions one.
-        await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() } });
+        await prisma.hostedMachine.create({
+            data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
+        });
         return { appName, region, warm: false };
     } catch (error) {
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>

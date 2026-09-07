@@ -30,6 +30,10 @@
         "./stripe-fake": {
             "types": "./src/stripe-fake.ts",
             "default": "./src/stripe-fake.ts"
+        },
+        "./http-fake": {
+            "types": "./src/http-fake.ts",
+            "default": "./src/http-fake.ts"
         }
     },
     "scripts": {

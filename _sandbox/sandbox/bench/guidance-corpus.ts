@@ -6,12 +6,12 @@
  * elsewhere, so every share computed here is a share OF THE CLAUDE ARM.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 // The PRODUCTION classifiers, not a copy of them: `walksTreeWithGrep` is the same predicate the search-hygiene
 // hook fires on, so the figure quoted for SEARCH_GUIDANCE cannot drift away from the notice it argues for.
 import { agentCommand } from "../src/agent/providers/agent-installs.js";
 import { walksTreeWithGrep } from "../src/agent/verification/agent-search.js";
+import { transcriptFiles } from "./transcripts.js";
 
 /* ---- the corpus ------------------------------------------------------------------------------------------
  *
@@ -64,22 +64,6 @@ interface TranscriptEvent {
     readonly message?: { readonly id?: string; readonly model?: string; readonly content?: readonly ContentBlock[] | string };
     readonly toolUseResult?: { readonly structuredPatch?: readonly { readonly newStart?: number; readonly newLines?: number }[] };
 }
-
-const transcriptFiles = (root: string): string[] => {
-    const found: string[] = [];
-    const walk = (dir: string): void => {
-        for (const entry of readdirSync(dir)) {
-            const path = join(dir, entry);
-            if (statSync(path).isDirectory()) {
-                walk(path);
-            } else if (entry.endsWith(".jsonl")) {
-                found.push(path);
-            }
-        }
-    };
-    walk(root);
-    return found;
-};
 
 // Only text is content the model read. A non-text block (an image) contributes nothing rather than a synthetic
 // "[image]", which would be counted as characters the model was billed for reading.

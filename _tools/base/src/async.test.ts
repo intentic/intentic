@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Coalescer, createBackoff, Delayer, pollUntil, retry, sleep, SingleFlight } from "./async.js";
+import { Coalescer, createBackoff, Delayer, narrate, pollUntil, retry, sleep, SingleFlight } from "./async.js";
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -300,6 +300,35 @@ describe(`pollUntil`, () => {
         await expect(pollUntil(() => true, { intervalMs: 50, timeoutMs: 0 })).resolves.toBe(true);
         await expect(pollUntil(() => false, { intervalMs: 50, timeoutMs: 0 })).resolves.toBe(false);
     });
+
+    it(`runs onRetry only when another probe is coming`, async () => {
+        const onRetry = vi.fn();
+        const missed = pollUntil(() => false, { intervalMs: 50, timeoutMs: 120, onRetry });
+        await vi.advanceTimersByTimeAsync(200);
+        await expect(missed).resolves.toBe(false);
+        // Probes at 0, 50, 100 and 150; the one at 150 is the first to find the deadline past, so it announces
+        // nothing and the three before it each announce a retry.
+        expect(onRetry).toHaveBeenCalledTimes(3);
+
+        onRetry.mockClear();
+        await expect(pollUntil(() => true, { intervalMs: 50, timeoutMs: 10_000, onRetry })).resolves.toBe(true);
+        expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it(`runs on an injected clock, so a long wait costs a test nothing`, async () => {
+        let clock = 0;
+        const wait = vi.fn(async (ms: number) => {
+            clock += ms;
+        });
+        let answers = 0;
+        await expect(pollUntil(() => ++answers >= 4, { intervalMs: 30_000, timeoutMs: 600_000, now: () => clock, wait })).resolves.toBe(true);
+        expect(wait).toHaveBeenCalledTimes(3);
+        expect(clock).toBe(90_000);
+
+        clock = 0;
+        await expect(pollUntil(() => false, { intervalMs: 30_000, timeoutMs: 60_000, now: () => clock, wait })).resolves.toBe(false);
+        expect(clock).toBe(60_000);
+    });
 });
 
 describe(`createBackoff`, () => {
@@ -329,5 +358,68 @@ describe(`createBackoff`, () => {
         expect([floors.next(), floors.next(), floors.next()]).toEqual([1_000, 1_000, 1_000]);
         const halfway = createBackoff({ floorMs: 1_000, capMs: 30_000, random: () => 0.5 });
         expect(halfway.next()).toBe(1_500);
+    });
+});
+
+describe(`narrate`, () => {
+    type Frame = { kind: "line"; text: string } | { kind: "done"; ok: boolean; detail?: string };
+    const end = (outcome: { ok: true; value: string } | { ok: false; error: string }): Frame =>
+        outcome.ok ? { kind: `done`, ok: true, detail: outcome.value } : { kind: `done`, ok: false, detail: outcome.error };
+
+    const drain = async (stream: AsyncGenerator<Frame>): Promise<Frame[]> => {
+        const frames: Frame[] = [];
+        for await (const frame of stream) {
+            frames.push(frame);
+        }
+        return frames;
+    };
+
+    it(`yields every line in order, then one terminal frame`, async () => {
+        const frames = await drain(
+            narrate(async (onLine) => {
+                onLine(`pulling`);
+                onLine(`extracting`);
+                return `up`;
+            }, end),
+        );
+        expect(frames).toEqual([
+            { kind: `line`, text: `pulling` },
+            { kind: `line`, text: `extracting` },
+            { kind: `done`, ok: true, detail: `up` },
+        ]);
+    });
+
+    /* The failure this shape exists for: a rejection is the stream's LAST FRAME, not the generator's own
+     * throw, so a consumer reading frames never has to also catch. Lines printed before the failure survive
+     * it — they are usually the only account of what went wrong. */
+    it(`reports a rejection as a terminal frame, keeping the lines that came before it`, async () => {
+        const frames = await drain(
+            narrate(async (onLine) => {
+                onLine(`starting`);
+                throw new Error(`no such image`);
+            }, end),
+        );
+        expect(frames).toEqual([
+            { kind: `line`, text: `starting` },
+            { kind: `done`, ok: false, detail: `no such image` },
+        ]);
+    });
+
+    // Lines printed while the consumer is away are queued, not dropped: an image pull prints faster than a
+    // socket drains, and a progress log with holes in it is worse than one that lags.
+    it(`queues lines produced while nothing is reading`, async () => {
+        let emit: ((line: string) => void) | undefined;
+        const stream = narrate((onLine) => {
+            emit = onLine;
+            return sleep(50).then(() => `done`);
+        }, end);
+        const first = stream.next();
+        emit!(`a`);
+        emit!(`b`);
+        expect((await first).value).toEqual({ kind: `line`, text: `a` });
+        expect((await stream.next()).value).toEqual({ kind: `line`, text: `b` });
+        const rest = drain(stream as AsyncGenerator<Frame>);
+        await vi.advanceTimersByTimeAsync(50);
+        expect(await rest).toEqual([{ kind: `done`, ok: true, detail: `done` }]);
     });
 });

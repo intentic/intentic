@@ -71,6 +71,28 @@
                 "@intentic/src": "./src/errors.ts",
                 "default": "./dist/errors.js"
             }
+        },
+        "./format": {
+            "types": "./dist/format.d.ts",
+            "import": {
+                "@intentic/src": "./src/format.ts",
+                "default": "./dist/format.js"
+            },
+            "require": {
+                "@intentic/src": "./src/format.ts",
+                "default": "./dist/format.js"
+            }
+        },
+        "./plain-text": {
+            "types": "./dist/plain-text.d.ts",
+            "import": {
+                "@intentic/src": "./src/plain-text.ts",
+                "default": "./dist/plain-text.js"
+            },
+            "require": {
+                "@intentic/src": "./src/plain-text.ts",
+                "default": "./dist/plain-text.js"
+            }
         }
     },
     "scripts": {

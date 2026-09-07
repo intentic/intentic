@@ -5,6 +5,14 @@ import { createHash } from "node:crypto";
 // anchors. node:crypto → this subpath is node-only.
 export const sha256Hex = (value: string): string => createHash("sha256").update(value).digest("hex");
 
+/* THE SHAPE OF THAT ID, beside the thing that mints it. Twelve lowercase hex characters and nothing else.
+ *
+ * This is a validation gate rather than a description: a sandbox id lands in a hostname label, in a signed
+ * ticket's subject and in a grant, and everything that reads one from OUTSIDE (a claim in a token, a label off
+ * the wire) has to refuse anything that is not this before using it. Two verifiers with two copies of the
+ * pattern is two chances for one of them to be laxer than the other about what it will dereference. */
+export const SANDBOX_ID = /^[0-9a-f]{12}$/;
+
 // The sandbox's stable 12-hex id, digested from the connect token. Used by:
 //   • the hostname builders beside it (hostnames.ts) — every public name embeds this id
 //   • the platform's reachability grant mint and tunnelId lookup (reachability.ts, ingress-contract.ts)

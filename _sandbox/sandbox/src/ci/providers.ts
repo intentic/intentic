@@ -1,6 +1,6 @@
 import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
-import { plainText } from "../terminal/plain-text.js";
+import { plainText } from "@intentic/base/plain-text";
 import type { CiProject } from "./projects.js";
 import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 

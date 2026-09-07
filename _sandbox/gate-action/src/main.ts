@@ -10,7 +10,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { clientTimeoutMs, conversationIdFor, dialOf, readVerdict, RunExchangeError, type RunOutcome, runExchange } from "@intentic/gate";
+import { clientTimeoutMs, conversationIdFor, detailOf, dialOf, readVerdict, RunExchangeError, type RunOutcome, runExchange } from "@intentic/gate";
 import {
     annotationOf,
     defaultRequest,
@@ -39,17 +39,6 @@ function wiring(message: string): never {
     console.error(`::error::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
     process.exit(2);
 }
-
-// The daemon's own sentence when it has one ({"error": ...}), the raw body when it does not (a proxy or
-// tunnel answered, the raw body is the only clue there is).
-const detailOf = (text: string): string => {
-    try {
-        const body = JSON.parse(text) as { error?: unknown };
-        return typeof body.error === "string" ? body.error : text;
-    } catch {
-        return text;
-    }
-};
 
 const parsed = parseInputs(process.env);
 if (parsed.kind === "error") {

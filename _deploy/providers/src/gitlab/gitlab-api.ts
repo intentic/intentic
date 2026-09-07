@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
+import { restClient } from "../core/rest-client.js";
 
 // Thin wrapper over the GitLab REST API v4. Each function takes the instance url + token + the minimum inputs
 // and returns only the fields the providers consume. Like github-api.ts / forgejo-api.ts: pure HTTP, no state,
@@ -12,18 +13,7 @@ const base = (url: string): string => `${url.replace(/\/+$/, "")}/api/v4`;
 // A project is addressed by its URL-encoded "owner/name" path everywhere the API takes an :id.
 const projectPath = (owner: string, name: string): string => encodeURIComponent(`${owner}/${name}`);
 
-const json = async (url: string, init: RequestInit): Promise<unknown> => {
-    // Timeout bounds a stalled connection (undici's default headers timeout is ~5 minutes).
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`GitLab API ${init.method ?? "GET"} ${url}: ${response.status} ${body}`);
-    }
-    if (response.status === 204) {
-        return undefined;
-    }
-    return response.json();
-};
+const { json, maybe } = restClient("GitLab");
 
 // --- Schemas for the fields we consume ---
 
@@ -74,15 +64,9 @@ export const gitlabApi: GitLabApi = {
     },
 
     findProject: async ({ url, token, owner, name }) => {
-        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, {
-            headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 404) {
+        const response = await maybe(`${base(url)}/projects/${projectPath(owner, name)}`, { headers: headers(token) });
+        if (response === undefined) {
             return undefined;
-        }
-        if (!response.ok) {
-            throw new Error(`GitLab API GET /projects/${owner}/${name}: ${response.status}`);
         }
         const data = parseResponse(projectSchema, await response.json(), "GitLab /projects");
         return { httpUrlToRepo: data.http_url_to_repo, sshUrlToRepo: data.ssh_url_to_repo };
@@ -107,28 +91,16 @@ export const gitlabApi: GitLabApi = {
         });
     },
 
+    // Already gone is the outcome asked for, so a 404 is success rather than a failure to report.
     deleteProject: async ({ url, token, owner, name }) => {
-        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, {
-            method: "DELETE",
-            headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 404) {
-            return;
-        }
-        if (!response.ok) {
-            throw new Error(`GitLab API DELETE /projects/${owner}/${name}: ${response.status}`);
-        }
+        await maybe(`${base(url)}/projects/${projectPath(owner, name)}`, { method: "DELETE", headers: headers(token) });
     },
 
     readFile: async ({ url, token, owner, name, path, branch }) => {
         const endpoint = `${base(url)}/projects/${projectPath(owner, name)}/repository/files/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-        const response = await fetch(endpoint, { headers: headers(token), signal: AbortSignal.timeout(30_000) });
-        if (response.status === 404) {
+        const response = await maybe(endpoint, { headers: headers(token) });
+        if (response === undefined) {
             return undefined;
-        }
-        if (!response.ok) {
-            throw new Error(`GitLab API GET file ${path}: ${response.status}`);
         }
         const data = parseResponse(fileSchema, await response.json(), "GitLab /repository/files");
         return { content: Buffer.from(data.content, "base64").toString("utf8") };
@@ -148,18 +120,11 @@ export const gitlabApi: GitLabApi = {
 
     deleteFile: async ({ url, token, owner, name, path, branch, message }) => {
         const endpoint = `${base(url)}/projects/${projectPath(owner, name)}/repository/files/${encodeURIComponent(path)}`;
-        const response = await fetch(endpoint, {
+        await maybe(endpoint, {
             method: "DELETE",
             headers: { ...headers(token), "Content-Type": "application/json" },
             body: JSON.stringify({ branch, commit_message: message }),
-            signal: AbortSignal.timeout(30_000),
         });
-        if (response.status === 404) {
-            return;
-        }
-        if (!response.ok) {
-            throw new Error(`GitLab API DELETE file ${path}: ${response.status}`);
-        }
     },
 
     setCiVariable: async ({ url, token, owner, name, key, value }) => {
@@ -167,11 +132,7 @@ export const gitlabApi: GitLabApi = {
         // secrets). Same POST=create / PUT=update split as files. protected:false so all branches see it;
         // masked:false because multi-line values (SSH keys) fail GitLab's masking constraints.
         const varsBase = `${base(url)}/projects/${projectPath(owner, name)}/variables`;
-        const probe = await fetch(`${varsBase}/${encodeURIComponent(key)}`, { headers: headers(token), signal: AbortSignal.timeout(30_000) });
-        if (!probe.ok && probe.status !== 404) {
-            throw new Error(`GitLab API GET variable ${key}: ${probe.status}`);
-        }
-        const exists = probe.status !== 404;
+        const exists = (await maybe(`${varsBase}/${encodeURIComponent(key)}`, { headers: headers(token) })) !== undefined;
         await json(exists ? `${varsBase}/${encodeURIComponent(key)}` : varsBase, {
             method: exists ? "PUT" : "POST",
             headers: { ...headers(token), "Content-Type": "application/json" },
@@ -180,16 +141,9 @@ export const gitlabApi: GitLabApi = {
     },
 
     deleteCiVariable: async ({ url, token, owner, name, key }) => {
-        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}/variables/${encodeURIComponent(key)}`, {
+        await maybe(`${base(url)}/projects/${projectPath(owner, name)}/variables/${encodeURIComponent(key)}`, {
             method: "DELETE",
             headers: headers(token),
-            signal: AbortSignal.timeout(30_000),
         });
-        if (response.status === 404) {
-            return;
-        }
-        if (!response.ok) {
-            throw new Error(`GitLab API DELETE variable ${key}: ${response.status}`);
-        }
     },
 };

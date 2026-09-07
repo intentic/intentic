@@ -1,5 +1,6 @@
 import { createHash, type KeyObject } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { pollUntil } from "@intentic/base/async";
 import { calculateJwkThumbprint, exportJWK, FlattenedSign } from "jose";
 import { resolveTxtAuthoritatively } from "./authoritative-dns.js";
 import { base64Url, buildCsr } from "./csr.js";
@@ -216,7 +217,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
              * validates within a second or two of the POST below, so without this it looks into that gap, and
              * `NXDOMAIN looking up TXT` is not a retryable "not yet": the authorization is `invalid` for good. */
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await pollUntil(async () => (await resolveTxt(recordName)).includes(digest), {
+            await awaitOrThrow(async () => (await resolveTxt(recordName)).includes(digest), {
                 wait,
                 now,
                 what: `publication of ${recordName}`,
@@ -230,7 +231,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
                 throw new Error(`the CA refused the dns-01 challenge for ${identifier}: ${await problemOf(accepted)}`);
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await pollUntil(
+            await awaitOrThrow(
                 async () => {
                     const state = await jsonOf(await signedPost(authzUrl, undefined));
                     if (state["status"] === "invalid") {
@@ -251,7 +252,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
         let certificateUrl =
             typeof (await jsonOf(finalized.clone()))["certificate"] === "string" ? String((await jsonOf(finalized))["certificate"]) : undefined;
         if (certificateUrl === undefined) {
-            await pollUntil(
+            await awaitOrThrow(
                 async () => {
                     const state = await jsonOf(await signedPost(orderUrl, undefined));
                     if (state["status"] === "invalid") {
@@ -278,22 +279,17 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     }
 };
 
-// Ask until it is true, or until the deadline. Distinct from a retry loop: the predicate throws on a terminal
-// state (the CA said `invalid`), so a definitive no fails immediately rather than waiting out the timeout.
-const pollUntil = async (
+/* Ask until it is true, or throw naming what was waited for. The loop itself is @intentic/base's; what this
+ * adds is the throw, because every wait in an order flow has a caller that can only carry on if it happened.
+ * The injected clock is what lets acme.test.ts run a ten-minute publication wait instantly.
+ *
+ * Distinct from a retry loop: the predicate throws on a terminal state (the CA said `invalid`), so a
+ * definitive no fails immediately rather than waiting out the timeout. */
+const awaitOrThrow = async (
     predicate: () => Promise<boolean>,
     context: { wait: (ms: number) => Promise<void>; now: () => number; what: string; timeoutMs: number; intervalMs: number },
 ): Promise<void> => {
-    const deadline = context.now() + context.timeoutMs;
-    for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
-        if (await predicate()) {
-            return;
-        }
-        if (context.now() >= deadline) {
-            throw new Error(`timed out waiting for ${context.what}`);
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await context.wait(context.intervalMs);
+    if (!(await pollUntil(predicate, context))) {
+        throw new Error(`timed out waiting for ${context.what}`);
     }
 };

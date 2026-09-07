@@ -1,6 +1,6 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { AgentHarnessSchema, AgentProviderSchema, ModelRoleSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentProviderSchema, isConversationId, ModelRoleSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../../store/json-file.js";
 
@@ -38,8 +38,6 @@ import { writeJsonFile } from "../../store/json-file.js";
 
 // The charset ConversationIdSchema and the watch ids (`watch-3`) share; a filename that doesn't match is
 // ignored, never trusted, the same rule the turn journal and the approvals queue apply.
-const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
-
 const JournalledWatchSchema = z.object({
     id: z.string(),
     conversationId: z.string(),
@@ -108,7 +106,7 @@ export const fileWatchJournal = (dir: string): WatchJournal => ({
         }
         const entries: JournalledWatch[] = [];
         for (const name of names.filter((file) => file.endsWith(".json"))) {
-            if (!FILE_ID.test(name.slice(0, -".json".length))) {
+            if (!isConversationId(name.slice(0, -".json".length))) {
                 continue;
             }
             // An entry that won't parse is SKIPPED, never deleted, the turn journal's rule and its reason: a
@@ -130,7 +128,7 @@ export const fileWatchJournal = (dir: string): WatchJournal => ({
     record: (watch) => writeJsonFile(join(dir, `${watch.id}.json`), watch),
     // A drop that finds nothing has nothing to do: the watch ended twice, or a boot pass already took it.
     drop: async (id) => {
-        if (!FILE_ID.test(id)) {
+        if (!isConversationId(id)) {
             return;
         }
         await unlink(join(dir, `${id}.json`)).catch(() => undefined);

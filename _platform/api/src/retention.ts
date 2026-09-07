@@ -8,12 +8,12 @@ import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
+import { DAY_MS } from "./durations.js";
 
 // Data-retention sweep (GDPR storage limitation): expired sessions, verifications and desktop sign-in
 // handoffs, plus sandbox-share invites older than 90 days whose email never became an account
 // (grant-before-signup emails must not linger forever). Runs at boot, then daily. The privacy policy
 // documents these windows, keep in sync.
-const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
 
 const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; handoffs: number; invites: number }> => {

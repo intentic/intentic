@@ -1,6 +1,6 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { normalize, starterDockerfile } from "../core/ci-yaml.js";
+import { normalize, SECRET_KOMODO, starterDockerfile } from "../core/ci-yaml.js";
 import { parseInputs } from "../core/inputs.js";
 import type { GitHubApi } from "./github-api.js";
 import { githubApi } from "./github-api.js";
@@ -24,7 +24,6 @@ const ghCiSchema = z.object({
 type GhCiInputs = z.infer<typeof ghCiSchema>;
 const parse = (inputs: ResolvedInputs): GhCiInputs => parseInputs(ghCiSchema, inputs, "gh-ci");
 
-const SECRET_KOMODO = "KOMODO_PASSWORD";
 const workflowPath = (tag: string): string => `.github/workflows/build-${tag}.yml`;
 const DOCKERFILE_PATH = "Dockerfile";
 

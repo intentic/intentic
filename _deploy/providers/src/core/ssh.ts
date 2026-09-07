@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { createServer, connect as tcpConnect } from "node:net";
 import type { Readable } from "node:stream";
-import { pollUntil } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
 import { Client } from "ssh2";
 
 export interface SshResult {

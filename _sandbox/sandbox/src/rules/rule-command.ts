@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
-import { plainText } from "../terminal/plain-text.js";
+import { plainText } from "@intentic/base/plain-text";
 
 /* RUNNING ONE RULE'S COMMAND, the engine under every `command` action, lifted out of the pre-push check
  * because the check was the only thing that had one and `turn.ending` needs the same guarantees.

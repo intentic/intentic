@@ -1,4 +1,5 @@
-import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
+import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { formatStamp, parseStamp, STAMP_KEY } from "@intentic/graph";
 import { z } from "zod";
 import { parseInputs } from "../core/inputs.js";

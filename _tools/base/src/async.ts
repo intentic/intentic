@@ -1,3 +1,4 @@
+import { errorMessage } from "./errors.js";
 import type { IDisposable } from "./lifecycle.js";
 
 /* THE FOUR SHAPES OF "DON'T DO THAT AGAIN YET", WRITTEN ONCE.
@@ -231,26 +232,45 @@ export const sleep = (ms: number, options?: { readonly signal?: AbortSignal | un
         signal?.addEventListener("abort", done, { once: true });
     });
 
-/* Ask until it is true, or until the deadline. Always probes once BEFORE consulting the clock, so a wait is
- * never skipped by a deadline that has already passed, and answers whether the check passed rather than
- * throwing: what a miss MEANS ("dockerd did not come up", "the display never answered") belongs to the caller,
- * which is the one that can name it. A check that throws propagates: some waits (a process that already
- * exited) must fail fast rather than burn the whole deadline. An aborted signal ends the wait as a miss. */
-export const pollUntil = async (
-    check: () => boolean | Promise<boolean>,
-    options: { readonly intervalMs: number; readonly timeoutMs: number; readonly signal?: AbortSignal | undefined },
-): Promise<boolean> => {
-    const deadline = Date.now() + options.timeoutMs;
+export interface PollOptions {
+    readonly intervalMs: number;
+    readonly timeoutMs: number;
+    readonly signal?: AbortSignal | undefined;
+    /* Runs only when another probe is coming, so a caller that narrates the wait ("still waiting for the
+     * tunnel…") says nothing extra on the attempt that gave up. */
+    readonly onRetry?: (() => void) | undefined;
+    /* The clock, injectable as a pair so a test can run a ten-minute wait instantly. Both or neither: a fake
+     * `now` with a real sleep spins, and a fake sleep with a real `now` never reaches its deadline. An
+     * injected `wait` owns its own cancellation — the `signal` is still consulted between probes, but it is
+     * the real `sleep` that returns EARLY on abort. */
+    readonly now?: (() => number) | undefined;
+    readonly wait?: ((ms: number) => Promise<void>) | undefined;
+}
+
+/* THE ONE WAITING LOOP. Every "is it up yet" in the daemon, the engine and the providers is the same three
+ * lines — probe, give up at a deadline, sleep between tries — and when they were each spelled out again they
+ * drifted on the edges (one gave up at `>` its deadline where the rest used `>=`).
+ *
+ * Always probes once BEFORE consulting the clock, so a wait is never skipped by a deadline that has already
+ * passed, and answers whether the check passed rather than throwing: what a miss MEANS ("dockerd did not come
+ * up", "the display never answered") belongs to the caller, which is the one that can name it. A check that
+ * throws propagates: some waits (a process that already exited, a CA that said `invalid`) must fail fast
+ * rather than burn the whole deadline. An aborted signal ends the wait as a miss. */
+export const pollUntil = async (check: () => boolean | Promise<boolean>, options: PollOptions): Promise<boolean> => {
+    const now = options.now ?? Date.now;
+    const wait = options.wait ?? ((ms: number) => sleep(ms, { signal: options.signal }));
+    const deadline = now() + options.timeoutMs;
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
         if (await check()) {
             return true;
         }
-        if (Date.now() >= deadline || options.signal?.aborted === true) {
+        if (now() >= deadline || options.signal?.aborted === true) {
             return false;
         }
+        options.onRetry?.();
         // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
-        await sleep(options.intervalMs, { signal: options.signal });
+        await wait(options.intervalMs);
     }
 };
 
@@ -300,3 +320,63 @@ export const createBackoff = ({ floorMs, capMs, stableMs, random }: BackoffOptio
         },
     };
 };
+
+export interface NarratedLine {
+    readonly kind: "line";
+    readonly text: string;
+}
+
+/* A CALLBACK-REPORTING OPERATION, TURNED INTO THE STREAM SOMEBODY WATCHES.
+ *
+ * The operations this adapts (a sandbox flow on a connected machine, a repo sync on a runner) take an `onLine`
+ * because their OTHER caller is an MCP tool, which wants one answer at the end and has no use for a line as it
+ * arrives. This adapts those same calls rather than having a second implementation of any of them, so what a
+ * person watches and what an agent is told can never describe the same run differently.
+ *
+ * LINES ARE QUEUED, NOT DROPPED, when the consumer is slower than the machine: an image pull prints faster
+ * than a WebSocket drains, and a progress log with holes in it is worse than one that lags.
+ *
+ * The run is STARTED rather than awaited, so the loop can yield what it prints while it is still running, and
+ * its rejection is captured as a value: a failure is this stream's terminal frame, not this generator's own
+ * failure — a consumer reading frames must not have to also catch. `end` builds that frame, because what
+ * "finished" and "failed" are called is the caller's wire shape and not this primitive's business. */
+export async function* narrate<Value, Frame>(
+    run: (onLine: (line: string) => void) => Promise<Value>,
+    end: (outcome: { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: string }) => Frame,
+): AsyncGenerator<NarratedLine | Frame> {
+    const queued: string[] = [];
+    let wake: (() => void) | undefined;
+    const nudge = (): void => {
+        const pending = wake;
+        wake = undefined;
+        pending?.();
+    };
+    let settled: { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: string } | undefined;
+    const finished = run((line) => {
+        queued.push(line);
+        nudge();
+    })
+        .then((value) => ({ ok: true, value }) as const)
+        .catch((error: unknown) => ({ ok: false, error: errorMessage(error) }) as const)
+        .then((outcome) => {
+            settled = outcome;
+            nudge();
+        });
+
+    for (;;) {
+        const next = queued.shift();
+        if (next !== undefined) {
+            yield { kind: "line", text: next };
+            continue;
+        }
+        // Drained AND finished: every line the run produced has been sent, so the terminal frame is next.
+        if (settled !== undefined) {
+            break;
+        }
+        await new Promise<void>((resolve) => {
+            wake = resolve;
+        });
+    }
+    await finished;
+    yield end(settled);
+}

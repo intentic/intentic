@@ -22,4 +22,5 @@ export const fileqHome = (): string => {
 export const defaultOutDir = (): string => join(fileqHome(), "out");
 
 /** The one token estimate everything reports: ~4 chars per token, the usual English-prose rule of thumb. */
-export const tokensOf = (text: string): number => Math.ceil(text.length / 4);
+// The budget unit, shared with iq and the daemon so a cap and the thing it cut are counted the same way.
+export { estimateTokens as tokensOf } from "@intentic/base/format";

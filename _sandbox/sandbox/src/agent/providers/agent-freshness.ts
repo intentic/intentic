@@ -3,6 +3,7 @@ import type { DependencyFreshness } from "@intentic/sandbox-contract";
 import type { Ecosystem, Freshness, FreshnessResolver, PinnedPackage, RangeOperator } from "../../dependencies/registry-freshness.js";
 import { successorFor } from "../../dependencies/successors.js";
 import type { WorkspacePins } from "../../dependencies/workspace-pins.js";
+import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 import { agentCommand, commandWords } from "./agent-installs.js";
 
 /* THE VERSION ABOUT TO BE WRITTEN, CHECKED AGAINST THE REGISTRY THAT PUBLISHES IT.
@@ -70,7 +71,11 @@ const NOT_DEPENDENCIES = new Set([
 // A workspace's own packages are not on any registry, and asking after them would be a guaranteed miss on
 // every edit of every manifest in a monorepo.
 const isLocal = (specifier: string): boolean =>
-    specifier.startsWith("workspace:") || specifier.startsWith("catalog:") || specifier.startsWith("file:") || specifier.startsWith("link:") || specifier.startsWith("git");
+    specifier.startsWith("workspace:") ||
+    specifier.startsWith("catalog:") ||
+    specifier.startsWith("file:") ||
+    specifier.startsWith("link:") ||
+    specifier.startsWith("git");
 
 const RANGES: readonly RangeOperator[] = ["^", "~", ">="];
 
@@ -136,7 +141,9 @@ const jsonEntries = (body: string): RawEntry[] => {
     const entries: RawEntry[] = [];
     let block: RegExpExecArray | null;
     while ((block = JSON_BLOCK.exec(body)) !== null) {
-        entries.push(...matchesOf(JSON_ENTRY, blockBody(body, block.index + block[0].length - 1), (match) => ({ name: match[1], specifier: match[2] })));
+        entries.push(
+            ...matchesOf(JSON_ENTRY, blockBody(body, block.index + block[0].length - 1), (match) => ({ name: match[1], specifier: match[2] })),
+        );
     }
     return entries;
 };
@@ -211,7 +218,10 @@ const installTargets = (command: string): InstallTargets[] =>
 
 /* One argument split into the package it names and the version it pins, in whichever spelling its ecosystem
  * uses. `@scope/name@1.2.3` splits at the LAST `@`, because the first one is the scope. */
-const splitArgument = (ecosystem: Ecosystem, argument: string): { readonly name: string; readonly version?: string; readonly range?: RangeOperator } | undefined => {
+const splitArgument = (
+    ecosystem: Ecosystem,
+    argument: string,
+): { readonly name: string; readonly version?: string; readonly range?: RangeOperator } | undefined => {
     if (ecosystem === "pypi") {
         const [name, version] = argument.split("==");
         if (name === undefined || name === "") {
@@ -291,7 +301,9 @@ const lineFor = (pinned: PinnedPackage, freshness: Freshness, mode: DependencyFr
 
 const suggestionFor = (name: string, ecosystem: Ecosystem): string | undefined => {
     const successor = successorFor(ecosystem, name);
-    return successor?.kind === "superseded" ? `  ${name} works, but ${successor.to} is what this would usually reach for now — ${successor.reason}.` : undefined;
+    return successor?.kind === "superseded"
+        ? `  ${name} works, but ${successor.to} is what this would usually reach for now — ${successor.reason}.`
+        : undefined;
 };
 
 /* TWO SECTIONS THAT ARE NEVER MERGED, because they are not the same kind of statement and a notice that ran
@@ -355,9 +367,6 @@ const bashCommand = (input: unknown): string | undefined => {
     return typeof command === "string" && command !== "" ? command : undefined;
 };
 
-// The same matcher agent-verification.ts uses, so a workspace running hashline edits is covered too.
-const EDIT_TOOLS = "Edit|Write|NotebookEdit|mcp__hashline__edit|mcp__hashline__write";
-
 /* Created once per turn, which is what the `told` set is scoped to: the model needs the fact once, and a
  * manifest edited five times must not produce five identical notices. */
 export const freshnessHooks = (
@@ -372,13 +381,18 @@ export const freshnessHooks = (
     }
     const told = new Set<string>();
 
-    const report = async (pins: readonly PinnedPackage[], adding: readonly { readonly ecosystem: Ecosystem; readonly name: string }[]): Promise<string | undefined> => {
+    const report = async (
+        pins: readonly PinnedPackage[],
+        adding: readonly { readonly ecosystem: Ecosystem; readonly name: string }[],
+    ): Promise<string | undefined> => {
         /* Two filters before anything is asked, and the second is what keeps this feature bearable in a
          * monorepo: a version the workspace ALREADY uses for that package is a decision the project has made,
          * so writing it again is the correct answer rather than a stale one. Applied before the lookup, not
          * after, so the suppressed case costs no request either. */
         const fresh = pins.filter(
-            (pinned) => !told.has(`${pinned.ecosystem} ${pinned.name} ${pinned.version}`) && known?.(pinned.ecosystem, pinned.name).has(pinned.version) !== true,
+            (pinned) =>
+                !told.has(`${pinned.ecosystem} ${pinned.name} ${pinned.version}`) &&
+                known?.(pinned.ecosystem, pinned.name).has(pinned.version) !== true,
         );
         const resolved = await Promise.all(
             fresh.map(async (pinned) => {

@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
+import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
 
 /* THE TRANSCRIPT RECORD, what each conversation actually said, written down by the daemon that streamed it.
  *
@@ -23,8 +23,6 @@ import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contr
 
 // Ids are filename-safe by construction (conversation ids are UUIDs); a name that isn't is ignored rather than
 // trusted into a path, the same rule turn-journal and the approvals queue apply.
-const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
-
 /* HOW MUCH OF A CONVERSATION AN OPEN ASKS FOR. Counted in user turns rather than rows, because a row count
  * cuts wherever it lands: a chat that opens on the back half of an answer, with the question that prompted it
  * above the fold, reads as the agent talking to itself. A turn is the unit a reader actually scrolls by.
@@ -175,12 +173,14 @@ const scanBack = (at: (index: number) => TranscriptRow[], end: number, turns: nu
 /* THE SAME WINDOW OVER ROWS ALREADY IN HAND, for a caller holding the record rather than the file: the route
  * fake in route-services.testing.ts, so its `page` cannot answer a different shape than the daemon's, and any
  * reader that has already paid for the whole record and wants the tail of it. */
-export const windowOf = (rows: readonly TranscriptRow[], { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS }: TranscriptWindow): TranscriptPage =>
-    scanBack((index) => (rows[index] === undefined ? [] : [rows[index]]), pageEnd(before, rows.length), turns, maxRows);
+export const windowOf = (
+    rows: readonly TranscriptRow[],
+    { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS }: TranscriptWindow,
+): TranscriptPage => scanBack((index) => (rows[index] === undefined ? [] : [rows[index]]), pageEnd(before, rows.length), turns, maxRows);
 
 export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
     fork: async (conversationId, source, keep) => {
-        if (!FILE_ID.test(conversationId) || !FILE_ID.test(source) || keep <= 0) {
+        if (!isConversationId(conversationId) || !isConversationId(source) || keep <= 0) {
             return;
         }
         const path = join(dir, `${conversationId}.jsonl`);
@@ -205,20 +205,20 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         });
     },
     append: async (conversationId, messages) => {
-        if (!FILE_ID.test(conversationId) || messages.length === 0) {
+        if (!isConversationId(conversationId) || messages.length === 0) {
             return;
         }
         await mkdir(dir, { recursive: true });
         await appendFile(join(dir, `${conversationId}.jsonl`), lines(messages));
     },
     read: async (conversationId) => {
-        if (!FILE_ID.test(conversationId)) {
+        if (!isConversationId(conversationId)) {
             return [];
         }
         return (await rawRows(join(dir, `${conversationId}.jsonl`))).flatMap(row);
     },
     window: async (conversationId, { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS }) => {
-        if (!FILE_ID.test(conversationId)) {
+        if (!isConversationId(conversationId)) {
             return { rows: [], from: 0, more: false };
         }
         // Raw rows throughout, the same position `count`, `truncate` and `fork` mean, so a `from` handed to a
@@ -227,9 +227,9 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         // Only the rows the page returns are parsed: splitting the file is cheap and JSON.parse is not.
         return scanBack((index) => row(raw[index] ?? ""), pageEnd(before, raw.length), turns, maxRows);
     },
-    count: async (conversationId) => (FILE_ID.test(conversationId) ? (await rawRows(join(dir, `${conversationId}.jsonl`))).length : 0),
+    count: async (conversationId) => (isConversationId(conversationId) ? (await rawRows(join(dir, `${conversationId}.jsonl`))).length : 0),
     size: async (conversationId) => {
-        if (!FILE_ID.test(conversationId)) {
+        if (!isConversationId(conversationId)) {
             return undefined;
         }
         return stat(join(dir, `${conversationId}.jsonl`)).then(
@@ -238,7 +238,7 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         );
     },
     truncate: async (conversationId, keep) => {
-        if (!FILE_ID.test(conversationId)) {
+        if (!isConversationId(conversationId)) {
             return 0;
         }
         const path = join(dir, `${conversationId}.jsonl`);

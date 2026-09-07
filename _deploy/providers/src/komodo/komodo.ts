@@ -1,5 +1,6 @@
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
+import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";

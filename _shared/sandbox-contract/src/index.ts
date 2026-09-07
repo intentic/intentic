@@ -205,6 +205,8 @@ export * from "./state/starter.js";
 export * from "./protocol/terminal-protocol.js";
 export * from "./text/title.js";
 export * from "./state/versions.js";
+export * from "./text/model-answer.js";
+export * from "./text/whisper.js";
 export * from "./text/workflow-faults.js";
 
 // The aggregated contract, implemented on the server by the per-domain route factories and consumed by the

@@ -2,6 +2,12 @@
 // gitlab/gl-ci.ts): the placeholder Dockerfile seeded into a fresh repo, and the whitespace-normalizer the
 // diff uses so trailing-space drift in a committed CI file doesn't read as a change.
 
+/* THE CI SECRET NAMES, which are a contract in two directions and so cannot be spelled twice. Each is written
+ * into the repo's secret store by the provider AND referenced by name inside the workflow YAML the same
+ * provider commits, so a rename that reached one and not the other produces a pipeline that builds fine and
+ * fails at push time with an empty credential. */
+export const SECRET_KOMODO = "KOMODO_PASSWORD";
+
 // A minimal, immediately-buildable starter committed ONLY when the repo has no Dockerfile, so a fresh repo is
 // live with a placeholder until the author pushes their real Dockerfile (busybox httpd on $PORT, matching the
 // deterministic PORT the deployment injects).

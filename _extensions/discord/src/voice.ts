@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errorMessage } from "@intentic/base/errors";
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import { STATE_DIR, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
 import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
@@ -33,8 +33,6 @@ import type { DiscordConnectorConfig } from "./client.js";
  *
  * A module singleton: one session per sandbox. ponytail, a map per channel if concurrent calls ever matter. */
 
-const MODEL_REPO = "ggerganov/whisper.cpp";
-
 const fileExists = async (path: string): Promise<boolean> =>
     stat(path).then(
         () => true,
@@ -53,9 +51,9 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
     }
     ctx.log.info({ model: file }, "downloading whisper model (first voice session)");
     // HF's CAS bridge 403s anonymous plain-HTTP fetches, downloadFile speaks the Xet protocol instead.
-    const blob = await downloadFile({ repo: MODEL_REPO, path: file });
+    const blob = await downloadFile({ repo: WHISPER_MODEL_REPO, path: file });
     if (blob === null) {
-        throw new Error(`whisper model download failed: ${MODEL_REPO} has no ${file}`);
+        throw new Error(`whisper model download failed: ${WHISPER_MODEL_REPO} has no ${file}`);
     }
     await mkdir(dirname(path), { recursive: true });
     // Stream straight to disk (up to ~1.5GB, never buffer it), landing BESIDE the model and only then taking

@@ -26,13 +26,9 @@ import { makeResolver } from "./lib/resolve.mjs";
 import { buildTree } from "./lib/tree.mjs";
 import { runLookupSim } from "./lookup.mjs";
 import { measureShape } from "./metrics.mjs";
+import { arg } from "./lib/args.mjs";
 
 const root = repoRoot(import.meta.url);
-
-const arg = (name, fallback) => {
-    const index = process.argv.indexOf(`--${name}`);
-    return index === -1 || index === process.argv.length - 1 ? fallback : process.argv[index + 1];
-};
 
 const n = (value) => (typeof value === "number" ? value.toLocaleString("en-US") : String(value));
 const pct = (before, after) => {

@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { open, mkdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import type { FortinetVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
-import { activeResolvers, interfaceAddress, interfaceRoutes, logTail, processAlive, readPid, toolMissing } from "../tunnel/net-probe.js";
+import { activeResolvers, interfaceAddress, interfaceRoutes, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDialOptions, VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { interfaceName, logPath, pidPath, vpnDir } from "./vpn-paths.js";
 
@@ -87,12 +87,8 @@ const dial = async (id: string, raw: FortinetVpnConfig, otp: string | undefined)
     }
 };
 
-// The pid openconnect left behind, but only when it is still a live openconnect, a recycled pid must never
-// read as a connected tunnel.
-const livePid = async (id: string): Promise<number | undefined> => {
-    const pid = await readPid(pidPath(id));
-    return pid !== undefined && (await processAlive(pid, "openconnect")) ? pid : undefined;
-};
+// This driver's two constants (where the pidfile is, what must still be running) bound to the shared pair.
+const livePid = (id: string): Promise<number | undefined> => livePidOf(pidPath(id), "openconnect");
 
 export const fortinetDriver: VpnDriver = {
     gateway: (raw) => fortinetGateway(config(raw)),

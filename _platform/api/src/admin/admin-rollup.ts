@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@intentic/prisma";
+import { DAY_MS } from "../durations.js";
 
 /* THE DAILY ROLLUP — one admin_daily_stat row per closed UTC day, written by the retention sweep, so the
  * panel's trend lines survive the sweeps that take the raw rows. WINDOW columns are exact facts about
@@ -8,8 +9,6 @@ import type { PrismaClient } from "@intentic/prisma";
  *
  * Upsert on `day`: the sweep runs at boot AND daily, so a redeploy morning would otherwise double-write.
  * `created` reports whether this run was the day's FIRST — the latch the operator digest sends on. */
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const utcDayOf = (at: Date): string => at.toISOString().slice(0, 10);
 

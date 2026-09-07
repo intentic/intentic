@@ -6,6 +6,7 @@ import { linkEmail, sendMail } from "../../mail.js";
 import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedFleet } from "./hosted-fleet.js";
 import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
+import { HOUR_MS } from "../../durations.js";
 
 /* IS THE HOSTED LANE ACTUALLY WORKING, asked on a timer instead of by a person who happened to look.
  *
@@ -43,7 +44,7 @@ import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 // One alert per this window per problem shape, so a standing fault is a daily reminder rather than a mailbox
 // full of the same sentence. The log line is written every tick regardless: the mail is for a human, the log
 // is for the record.
-const ALERT_EVERY_MS = 6 * 60 * 60 * 1000;
+const ALERT_EVERY_MS = 6 * HOUR_MS;
 
 export interface HostedHealth {
     /* THE LANE HAS RUN OUT OF MACHINES (hosted-capacity.ts): the fleet is on the ceiling its provider allows,
@@ -133,11 +134,15 @@ const alertMail = (config: Config, health: HostedHealth) => ({
         heading: health.capacity.full ? `The hosted lane has run out of machines` : `The hosted fleet and the database disagree`,
         body: [
             health.capacity.full ? capacityLine(health.capacity) : ``,
-            health.missing.length > 0 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.` : ``,
+            health.missing.length > 0
+                ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.`
+                : ``,
             health.strangers.length > 0
                 ? `${health.strangers.length} app(s) under this platform's prefix are running machines stamped by a DIFFERENT deployment: ${health.strangers.join(`, `)}. Another deployment is sharing this Fly org and credential, which is how a fleet gets destroyed out from under its rows.`
                 : ``,
-            ...health.stock.filter((entry) => entry.warm < entry.target).map((entry) => `The ${entry.region} warm pool is at ${entry.warm} of ${entry.target}.`),
+            ...health.stock
+                .filter((entry) => entry.warm < entry.target)
+                .map((entry) => `The ${entry.region} warm pool is at ${entry.warm} of ${entry.target}.`),
         ]
             .filter((line) => line !== ``)
             .join(` `),

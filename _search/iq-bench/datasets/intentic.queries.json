@@ -7,7 +7,7 @@
             "verb": "q",
             "query": "where is the output token budget estimated and enforced when rendering search results?",
             "expected": [{ "file": "_search/iq-engine/src/render/budget.ts" }, { "file": "_search/iq-engine/src/render/text.ts" }],
-            "notes": "estimateTokens lives in budget.ts; renderText spends the budget."
+            "notes": "budget.ts re-exports estimateTokens from @intentic/base and holds the ceilings; renderText spends the budget."
         },
         {
             "id": "feature-toggles",
@@ -154,7 +154,7 @@
             "id": "def-estimate-tokens",
             "verb": "def",
             "query": "estimateTokens",
-            "expected": [{ "file": "_search/iq-engine/src/render/budget.ts" }]
+            "expected": [{ "file": "_tools/base/src/format.ts" }]
         },
         {
             "id": "def-chunk-file",

@@ -63,7 +63,9 @@ export const runRequestBody = (call: RunCall): Record<string, unknown> => ({
 export const conversationIdFor = (env: Readonly<Record<string, string | undefined>>, random: () => string): string => {
     const runId = env["GITHUB_RUN_ID"] ?? "";
     if (runId === "") {
-        return `ci-${random().replaceAll(/[^a-zA-Z0-9_-]/g, "").slice(0, 24)}`;
+        return `ci-${random()
+            .replaceAll(/[^a-zA-Z0-9_-]/g, "")
+            .slice(0, 24)}`;
     }
     const attempt = env["GITHUB_RUN_ATTEMPT"] ?? "1";
     return `ci-${runId}-${attempt}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64);
@@ -210,7 +212,10 @@ const waitOf = (raw: string | undefined): number | { readonly error: string } =>
 };
 
 // Where and as whom: the option first, the environment second, and the sentence that says which one is missing.
-const addressOf = (scanned: ScannedRun, env: Readonly<Record<string, string | undefined>>): { readonly origin: string; readonly token: string } | { readonly error: string } => {
+const addressOf = (
+    scanned: ScannedRun,
+    env: Readonly<Record<string, string | undefined>>,
+): { readonly origin: string; readonly token: string } | { readonly error: string } => {
     const url = scanned.values.get("--url") ?? env["INTENTIC_URL"] ?? "";
     const token = scanned.values.get("--token") ?? env["INTENTIC_TOKEN"] ?? "";
     if (url === "") {
@@ -265,7 +270,10 @@ export const originOf = (url: string): string | undefined => {
 // ---- the exchange itself, with its two effects injected so the CLI and the action share it and a test drives it ----
 
 export interface RunDeps {
-    readonly fetch: (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+    readonly fetch: (
+        url: string,
+        init: { method: string; headers: Record<string, string>; body?: string },
+    ) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
     readonly sleep: (ms: number) => Promise<void>;
     readonly now: () => number;
 }
@@ -274,7 +282,10 @@ export interface RunDeps {
 // was not a card). Reported with the daemon's own sentence when it had one.
 export class RunExchangeError extends Error {}
 
-const detailOf = (text: string): string => {
+/* The daemon's own sentence when it has one ({"error": ...}), the raw body when it does not (a proxy or a
+ * tunnel answered, and then the raw body is the only clue there is). Exported because the GitHub Action reads
+ * the same failures from the same daemon: two readings of one error shape is two things to keep in step. */
+export const detailOf = (text: string): string => {
     try {
         const body = JSON.parse(text) as { error?: unknown };
         return typeof body.error === "string" ? body.error : text;
@@ -285,7 +296,12 @@ const detailOf = (text: string): string => {
 
 const headersFor = (call: RunCall): Record<string, string> => ({ "x-intentic-control": call.token, "content-type": "application/json" });
 
-const answerOf = async (deps: RunDeps, what: string, url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<unknown> => {
+const answerOf = async (
+    deps: RunDeps,
+    what: string,
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string },
+): Promise<unknown> => {
     const response = await deps.fetch(url, init).catch((error: unknown) => {
         throw new RunExchangeError(`${what} could not be reached: ${error instanceof Error ? error.message : String(error)}`);
     });
@@ -306,7 +322,11 @@ const answerOf = async (deps: RunDeps, what: string, url: string, init: { method
  * an ending of the agent's own; every ending, including a timeout, comes back as an outcome. */
 export const runExchange = async (call: RunCall, deps: RunDeps): Promise<RunOutcome> => {
     const cardUrl = `${call.origin}/agents/${encodeURIComponent(call.conversationId)}`;
-    await answerOf(deps, "the agent", `${call.origin}/agent`, { method: "POST", headers: headersFor(call), body: JSON.stringify(runRequestBody(call)) });
+    await answerOf(deps, "the agent", `${call.origin}/agent`, {
+        method: "POST",
+        headers: headersFor(call),
+        body: JSON.stringify(runRequestBody(call)),
+    });
     const deadline = deps.now() + call.waitS * 1_000;
     let card: AgentCard | undefined;
     let status: RunStatus | undefined;
@@ -326,11 +346,14 @@ export const runExchange = async (call: RunCall, deps: RunDeps): Promise<RunOutc
         status,
         conversationId: call.conversationId,
         branch,
-        summary: status === "timeout" ? `Still running after ${call.waitS}s; it keeps working in the sandbox.` : summaryOfCard(card as AgentCard, status),
+        summary:
+            status === "timeout" ? `Still running after ${call.waitS}s; it keeps working in the sandbox.` : summaryOfCard(card as AgentCard, status),
     };
     if (!call.land || status !== "completed") {
         return outcome;
     }
-    const landed = (await answerOf(deps, "the land", `${cardUrl}/land`, { method: "POST", headers: headersFor(call), body: "{}" })) as { landed?: unknown };
+    const landed = (await answerOf(deps, "the land", `${cardUrl}/land`, { method: "POST", headers: headersFor(call), body: "{}" })) as {
+        landed?: unknown;
+    };
     return { ...outcome, landed: landed.landed === true };
 };

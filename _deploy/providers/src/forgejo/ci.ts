@@ -1,6 +1,6 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { normalize, starterDockerfile } from "../core/ci-yaml.js";
+import { normalize, SECRET_KOMODO, starterDockerfile } from "../core/ci-yaml.js";
 import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
@@ -38,7 +38,6 @@ type CiInputs = z.infer<typeof ciSchema>;
 const parse = (inputs: ResolvedInputs): CiInputs => parseInputs(ciSchema, inputs, "ci");
 
 const SECRET_REGISTRY = "REGISTRY_TOKEN";
-const SECRET_KOMODO = "KOMODO_PASSWORD";
 const workflowPath = (tag: string): string => `.forgejo/workflows/build-${tag}.yaml`;
 const DOCKERFILE_PATH = "Dockerfile";
 

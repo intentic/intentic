@@ -1,8 +1,7 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import type { IntenticLine } from "@intentic/sandbox-contract";
-import { logTail, processAlive, readPid, toolMissing } from "../tunnel/net-probe.js";
+import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import { rankCountries, VPNGATE_FALLBACK } from "./exit-countries.js";
 import type { ExitDriver, ExitProbe } from "./exit-driver.js";
 import { observeThroughAddress } from "./exit-observe.js";
@@ -24,8 +23,6 @@ import { dropProxy, ensureProxy, proxyBound, tunnelAddress, tunnelResolver } fro
  * end-to-end encrypted, and the project keeps connection logs by policy. This is precisely why an exit never
  * carries the sandbox's own traffic: the operator sees what was deliberately pointed at them and nothing else.
  */
-
-const exec = promisify(execFile);
 
 const CATALOG_URL = "https://www.vpngate.net/api/iphone/";
 // Short: the pool churns and a stale entry is a dial that fails slowly. Long enough that browsing the country
@@ -136,10 +133,8 @@ const ovpnFor = (id: string, server: VpngateServer): string => {
     ].join("\n");
 };
 
-const livePid = async (id: string): Promise<number | undefined> => {
-    const pid = await readPid(pidPath(id));
-    return pid !== undefined && (await processAlive(pid, "openvpn")) ? pid : undefined;
-};
+// This driver's two constants (where the pidfile is, what must still be running) bound to the shared pair.
+const livePid = (id: string): Promise<number | undefined> => livePidOf(pidPath(id), "openvpn");
 
 // OpenVPN backgrounds itself once the tunnel is established, so the FOREGROUND exit code is the dial's
 // verdict, the fortinet driver's pattern. Output goes straight to the log file rather than a pipe so the
@@ -161,13 +156,7 @@ const dial = async (id: string): Promise<number> => {
     }
 };
 
-const halt = async (id: string): Promise<void> => {
-    const pid = await livePid(id);
-    if (pid !== undefined) {
-        await exec("kill", ["-TERM", String(pid)]).catch(() => undefined);
-    }
-    await rm(pidPath(id), { force: true });
-};
+const halt = (id: string): Promise<void> => haltClient(pidPath(id), "openvpn");
 
 // Bring one server up: tear down whatever was there, write its config, dial, then publish the proxy. Shared
 // by start and rotate because "move this exit to that server" is the same operation either way.

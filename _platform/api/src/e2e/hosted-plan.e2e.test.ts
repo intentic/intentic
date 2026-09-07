@@ -16,6 +16,7 @@ import { configSchema, type Config } from "../config.js";
 import { testIngressConfig } from "../testing.js";
 import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
+import { DAY_MS } from "../durations.js";
 
 /* THE MONEY PATH AS ONE SYSTEM. hosted-plan.test.ts pins each module against a hand-written Prisma; this
  * suite runs the real api (createApp, the real router, Better Auth's real session and deletion hook) on a
@@ -46,7 +47,6 @@ const BETTER_AUTH_SECRET = `hosted-plan-e2e-secret`;
 const SESSION_COOKIE = `better-auth.session_token`;
 const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e_hosted_plan`, priceId: `price_e2e_hosted` };
 const MONTHLY_HOURS = 40;
-const DAY_MS = 86_400_000;
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 
@@ -62,7 +62,14 @@ const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
         ingress: testIngressConfig,
         // The hosted lane on, so the offer, the wake and the slot gate exist; Fly is answered by the stub below.
         hosted: { flyApiToken: `fly-e2e`, flyOrg: `e2e`, monthlyHours: MONTHLY_HOURS, perUser: 1 },
-        hostedPlan: { ...STRIPE, stripeSecretKey: STRIPE.secretKey, stripeWebhookSecret: STRIPE.webhookSecret, stripePriceId: STRIPE.priceId, stripeApiUrl, priceUsd: 20 },
+        hostedPlan: {
+            ...STRIPE,
+            stripeSecretKey: STRIPE.secretKey,
+            stripeWebhookSecret: STRIPE.webhookSecret,
+            stripePriceId: STRIPE.priceId,
+            stripeApiUrl,
+            priceUsd: 20,
+        },
         api: { url: API_ORIGIN, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
         log: { level: `silent`, pretty: `false` },
     });
@@ -75,7 +82,8 @@ interface Person {
 
 // Better Auth's session cookie as the server signs it (better-call signCookieValue): the token, a dot, and
 // HMAC-SHA256(secret, token) in base64. Proven against the real session read before any test rests on it.
-const sessionCookie = (token: string): string => `${SESSION_COOKIE}=${token}.${createHmac(`sha256`, BETTER_AUTH_SECRET).update(token).digest(`base64`)}`;
+const sessionCookie = (token: string): string =>
+    `${SESSION_COOKIE}=${token}.${createHmac(`sha256`, BETTER_AUTH_SECRET).update(token).digest(`base64`)}`;
 
 const seedPerson = async (prisma: PrismaClient, name: string): Promise<Person> => {
     const id = `e2e-${name}`;
@@ -96,7 +104,13 @@ const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: stri
         select: { id: true },
     });
     await prisma.hostedMachine.create({
-        data: { sandboxId: sandbox.id, appName: `e2e-${digest.slice(0, 10)}`, machineId: `m-${digest.slice(0, 8)}`, volumeId: `vol-${digest.slice(0, 8)}`, region: `iad` },
+        data: {
+            sandboxId: sandbox.id,
+            appName: `e2e-${digest.slice(0, 10)}`,
+            machineId: `m-${digest.slice(0, 8)}`,
+            volumeId: `vol-${digest.slice(0, 8)}`,
+            region: `iad`,
+        },
     });
     return sandbox;
 };
@@ -133,7 +147,10 @@ const rpc = async <T = Record<string, unknown>>(
 ): Promise<Answer<T>> => {
     const response = await app.request(`${API_ORIGIN}/rpc${path}`, {
         method: opts.method ?? `GET`,
-        headers: { ...(opts.as === undefined ? {} : { cookie: opts.as.cookie }), ...(opts.body === undefined ? {} : { "content-type": `application/json` }) },
+        headers: {
+            ...(opts.as === undefined ? {} : { cookie: opts.as.cookie }),
+            ...(opts.body === undefined ? {} : { "content-type": `application/json` }),
+        },
         ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
     });
     const text = await response.text();
@@ -178,10 +195,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             .start();
         const databaseUrl = `postgresql://app:app@${container.getHost()}:${container.getMappedPort(5432)}/app`;
         // The real migration history, replayed the way a deployment replays it.
-        await exec(`pnpm`, [`--filter`, `@intentic/prisma`, `migrate:deploy`], { cwd: repoRoot(import.meta.url), env: { ...process.env, DATABASE_URL: databaseUrl } });
+        await exec(`pnpm`, [`--filter`, `@intentic/prisma`, `migrate:deploy`], {
+            cwd: repoRoot(import.meta.url),
+            env: { ...process.env, DATABASE_URL: databaseUrl },
+        });
 
         // Webhooks reach the api in-process, exactly as Stripe's would reach its port.
-        stripe = await startFakeStripe({ ...STRIPE, webhookUrl: `${API_ORIGIN}/hosted-plan/webhook`, deliver: async (request) => app.request(request) });
+        stripe = await startFakeStripe({
+            ...STRIPE,
+            webhookUrl: `${API_ORIGIN}/hosted-plan/webhook`,
+            deliver: async (request) => app.request(request),
+        });
         config = configFor(databaseUrl, stripe.url);
         prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
         ({ app, auth } = createApp(config, prisma, logger));
@@ -285,7 +309,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(woken.status).toBe(200);
         expect(woken.body).toEqual({ ok: true });
         expect(flyCalls).toEqual([expect.stringMatching(/^POST \/v1\/apps\/e2e-[0-9a-f]+\/machines\/m-[0-9a-f]+\/start$/)]);
-        expect((await state(alice)).body.hosted?.machines).toEqual([expect.objectContaining({ sandboxId, name: `alice-box`, region: `iad`, wokeAt: expect.any(String) })]);
+        expect((await state(alice)).body.hosted?.machines).toEqual([
+            expect.objectContaining({ sandboxId, name: `alice-box`, region: `iad`, wokeAt: expect.any(String) }),
+        ]);
     });
 
     it(`refuses a second checkout while the plan is live, before Stripe is asked`, async () => {
@@ -335,7 +361,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const portal = await rpc<{ url: string }>(app, `/hosted-plan/portal`, { as: alice, method: `POST` });
         expect(portal.status).toBe(200);
         expect(portal.body.url.startsWith(`${stripe.origin}/portal/${customerId}`)).toBe(true);
-        expect(lastCall(stripe, `POST`, `/billing_portal/sessions`)?.params).toEqual({ customer: customerId, return_url: `${WEB_ORIGIN}/settings/billing` });
+        expect(lastCall(stripe, `POST`, `/billing_portal/sessions`)?.params).toEqual({
+            customer: customerId,
+            return_url: `${WEB_ORIGIN}/settings/billing`,
+        });
     });
 
     it(`mirrors a cancel made in the portal as an end date, still on the plan until then`, async () => {
@@ -358,7 +387,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it(`refuses a webhook without Stripe's signature, with another secret, or from outside the replay window`, async () => {
         const object = { id: subscriptionId, customer: customerId, status: `active` };
-        const unsigned = await app.request(`${API_ORIGIN}/hosted-plan/webhook`, { method: `POST`, body: JSON.stringify({ type: `customer.subscription.updated`, data: { object } }) });
+        const unsigned = await app.request(`${API_ORIGIN}/hosted-plan/webhook`, {
+            method: `POST`,
+            body: JSON.stringify({ type: `customer.subscription.updated`, data: { object } }),
+        });
         expect(unsigned.status).toBe(400);
         expect((await stripe.emit(`customer.subscription.updated`, object, { secret: `whsec_somebody_else` })).status).toBe(400);
         expect((await stripe.emit(`customer.subscription.updated`, object, { at: new Date(Date.now() - 10 * 60_000) })).status).toBe(400);

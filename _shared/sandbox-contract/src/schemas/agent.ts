@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONVERSATION_ID } from "../ids/conversation-ids.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/runner-protocol.js";
@@ -56,7 +57,7 @@ export type EditorContext = z.infer<typeof EditorContextSchema>;
 // The client-minted stable conversation identity. Constrained because isolated conversations also use it in
 // branch names (agent/<id>) and filesystem paths, the regex is the injection guard. Shared by turn + attach,
 // and by the workspace scope (WorkspaceScopeSchema), which names a conversation to read a file tree AS.
-export const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+export const ConversationIdSchema = z.string().regex(CONVERSATION_ID);
 // Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
 // from OUTSIDE the sandbox (a Discord mention, a web-chat visitor, a webhook). Such a wake runs as an ordinary
 // isolated conversation, registry entry, worktree, chat tab, land flow, and this is the only thing that

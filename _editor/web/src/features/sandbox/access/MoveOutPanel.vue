@@ -16,6 +16,7 @@ import { sandboxJson } from "../client/sandboxClient";
 import { bundleDownloadUrl, useBundleExports } from "./useBundleExports";
 import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
+import { sizeLabel } from "@intentic/base/format";
 
 /* THE OUTBOUND HALF OF <MoveCard>: everything that LEAVES this sandbox, at all three fidelities, because it is
  * one job.
@@ -135,12 +136,6 @@ const compare = (event: Event): Promise<void> =>
         }
         diff.value = DefinitionDiffSchema.parse(await sandboxJson(`/definition/diff`, { method: `POST`, body: await file.text() }));
     }, `Could not compare against that definition.`);
-
-const sizeLabel = (bytes: number): string => {
-    const units = [`B`, `KB`, `MB`, `GB`];
-    const index = Math.min(units.length - 1, bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024)));
-    return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-};
 </script>
 
 <template>

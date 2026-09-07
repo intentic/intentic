@@ -169,3 +169,20 @@ export const dropOrphanParkedRefs = async (main: string, known: ReadonlySet<stri
     }
     return dropped;
 };
+
+/* Whether `ancestor` is reachable from `descendant`. `git merge-base --is-ancestor` answers by exit code,
+ * which the runner surfaces as a throw, so the whole helper is that translation.
+ *
+ * Shared by the two land-side readers deliberately: agent-changes.ts asks it about a branch TIP and
+ * landed-history.ts about a RECORDED HEAD, and while those are different questions this is not — it is
+ * `git merge-base` and nothing else, and two copies of it are two things that can disagree about what
+ * "reachable" means. What each caller MEANS by the answer stays in the caller, where it is documented.
+ */
+export const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
+    try {
+        await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
+        return true;
+    } catch {
+        return false;
+    }
+};

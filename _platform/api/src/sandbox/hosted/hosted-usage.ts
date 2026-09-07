@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { onHostedPlan } from "./hosted-plan.js";
-import { getMachine, isFlyGone } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES } from "./fly.js";
 
 /* THE FREE HOSTED LANE'S HOUR METER, what a machine we run costs its owner's monthly allowance, and whether
  * there is any left to wake it with.
@@ -34,11 +34,6 @@ export const usageMonth = (at: Date): string => at.toISOString().slice(0, 7);
 // When the month the meter is keyed by rolls over: the first of the next month, UTC. What the Billing page
 // says after "resets".
 export const usageResetsAt = (at: Date): Date => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1));
-
-// Fly states in which the machine is burning money. Mirrors hosted.ts's LIVE_STATES: a machine that is
-// starting has already begun to cost, and one that is replacing is a machine. Exported for the meter tick,
-// which asks the same question before it stops anything.
-export const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
 
 export interface HostedBudget {
     // False when this owner is not metered at all: on the hosted plan, or a platform with the ceiling off.

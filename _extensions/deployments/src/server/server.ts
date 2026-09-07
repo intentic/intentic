@@ -9,7 +9,7 @@ import { type FetchFn, komodoClient, type KomodoConnection } from "./komodo-clie
 import { deployAlerts, deploymentResource, serverEntry, stackResource } from "./komodo-overview.js";
 import { repoLinks } from "./komodo-repos.js";
 import { fileKomodoStore, komodoStorePath } from "./komodo-store.js";
-import { plainText } from "./plain-text.js";
+import { plainText } from "@intentic/base/plain-text";
 
 /* The Deployments rail view's whole backend, over one connected `komodo` capability, ext-deployments' server
  * half, moved out of the daemon core. The credential still never reaches a browser: the backend reads it

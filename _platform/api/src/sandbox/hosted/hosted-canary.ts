@@ -10,6 +10,7 @@ import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted-capacity.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
+import { HOUR_MS } from "../../durations.js";
 
 /* DOES SIGNING UP STILL GET YOU A WORKING MACHINE? Asked by doing it, on a timer, rather than by waiting for
  * somebody to report that it doesn't.
@@ -45,7 +46,7 @@ const STARTER_DEADLINE_MS = 3 * 60 * 1000;
 const PREVIEW_PROBE_PATH = `/__intentic/preview-probe`;
 // One alert per this window, the same latch shape as the health sweep: a standing fault should be a reminder,
 // not a mailbox.
-const ALERT_EVERY_MS = 6 * 60 * 60 * 1000;
+const ALERT_EVERY_MS = 6 * HOUR_MS;
 
 export interface CanaryResult {
     readonly ok: boolean;

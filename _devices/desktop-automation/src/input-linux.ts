@@ -15,7 +15,9 @@ import { DesktopError, type MouseButton, type Point, type ScrollDirection } from
  * almost always one package or one `usermod -aG input` away, and that is a sentence the user can act on rather
  * than a capability they conclude is broken. */
 
-const XDOTOOL_INSTALL = "sudo apt install xdotool  (or your distro's package)";
+// The one sentence a missing xdotool gets, shared with apps-linux so a user told to install it on one path is
+// told the same thing on the other. Both paths are xdotool; the distro hint is because it is not apt everywhere.
+export const XDOTOOL_INSTALL = "sudo apt install xdotool  (or your distro's package)";
 const YDOTOOL_INSTALL = "sudo apt install ydotool, then add yourself to the input group: sudo usermod -aG input $USER (log out and back in)";
 const WTYPE_INSTALL = "sudo apt install wtype";
 

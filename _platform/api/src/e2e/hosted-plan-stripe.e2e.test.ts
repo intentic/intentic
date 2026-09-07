@@ -1,6 +1,7 @@
 import { e2eTier } from "@intentic/testing/e2e";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type StripeClientConfig, type StripeGateway, stripeGateway, subscriptionIdOfEvent } from "../sandbox/hosted/hosted-plan-stripe.js";
+import { DAY_MS } from "../durations.js";
 
 /* THE STRIPE CLIENT AGAINST STRIPE. Every other test of the money path, unit or hermetic, talks to shapes WE
  * wrote down: a hand-built payload, a stand-in that answers what the client expects. This is the one that asks
@@ -20,7 +21,6 @@ const tier = e2eTier(`the Stripe client against Stripe's own test mode`, {
 });
 
 const STRIPE_API_URL = `https://api.stripe.com/v1`;
-const DAY_MS = 86_400_000;
 const RETURN_URL = `https://example.com/settings/billing`;
 
 interface StripeObject {
@@ -31,10 +31,18 @@ interface StripeObject {
 /* The setup calls the client itself never makes (a customer with a card, a subscription outside checkout, the
  * cleanup, the event log), in Stripe's own form encoding. Kept apart from the gateway on purpose: the gateway
  * is what is under test, and it must not grow calls for the sake of its test. */
-const stripeCall = async (client: StripeClientConfig, method: `GET` | `POST` | `DELETE`, path: string, params: Record<string, string> = {}): Promise<StripeObject> => {
+const stripeCall = async (
+    client: StripeClientConfig,
+    method: `GET` | `POST` | `DELETE`,
+    path: string,
+    params: Record<string, string> = {},
+): Promise<StripeObject> => {
     const response = await fetch(`${client.stripeApiUrl}${path}`, {
         method,
-        headers: { authorization: `Bearer ${client.stripeSecretKey}`, ...(method === `POST` ? { "content-type": `application/x-www-form-urlencoded` } : {}) },
+        headers: {
+            authorization: `Bearer ${client.stripeSecretKey}`,
+            ...(method === `POST` ? { "content-type": `application/x-www-form-urlencoded` } : {}),
+        },
         ...(method === `POST` ? { body: new URLSearchParams(params).toString() } : {}),
         signal: AbortSignal.timeout(30_000),
     });
@@ -56,7 +64,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     beforeAll(async () => {
         const secretKey = tier.secrets.HOSTED_PLAN_E2E_STRIPE_SECRET_KEY;
         if (!/^(sk|rk)_test_/.test(secretKey)) {
-            throw new Error(`HOSTED_PLAN_E2E_STRIPE_SECRET_KEY must be a TEST-mode key (sk_test_… or rk_test_…): this suite creates and cancels subscriptions`);
+            throw new Error(
+                `HOSTED_PLAN_E2E_STRIPE_SECRET_KEY must be a TEST-mode key (sk_test_… or rk_test_…): this suite creates and cancels subscriptions`,
+            );
         }
         priceId = tier.secrets.HOSTED_PLAN_E2E_STRIPE_PRICE_ID;
         client = { stripeSecretKey: secretKey, stripeApiUrl: STRIPE_API_URL };

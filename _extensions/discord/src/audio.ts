@@ -4,6 +4,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { cleanTranscription } from "@intentic/sandbox-contract";
 
 // Audio + whisper primitives for the voice session: PCM downsampling, WAV framing, whisper-cli transcription,
 // and a serialized transcriber queue. Pure of Discord and of the daemon, so they unit-test in isolation.
@@ -65,18 +66,6 @@ export const wavOf = (pcm16kMono: Buffer): Buffer => {
     header.write("data", 36);
     header.writeUInt32LE(pcm16kMono.length, 40);
     return Buffer.concat([header, pcm16kMono]);
-};
-
-// Whisper's stdout for one utterance → clean single-line text, or undefined for silence/noise-only output
-// (whisper renders non-speech as bracketed annotations like [BLANK_AUDIO] or (wind blowing)).
-export const cleanTranscription = (stdout: string): string | undefined => {
-    const text = stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "" && !/^[[(].*[\])]$/.test(line))
-        .join(" ")
-        .trim();
-    return text === "" ? undefined : text;
 };
 
 const elapsedLabel = (ms: number): string => {

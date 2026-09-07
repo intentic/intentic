@@ -5,6 +5,7 @@ import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/changes/code-counts.js";
 import { readModules } from "../../workspace/deps/modules.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
+import { isAncestor } from "./agent-refs.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 /* WHAT DID THIS AGENT CHANGE, asked once, answered here, for every surface that reports a number.
@@ -22,16 +23,6 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
  * work becomes final, but a snapshot of the same number the review computes live, rather than of a different
  * one.
  */
-
-// `git merge-base --is-ancestor` answers by exit code, which the runner surfaces as a throw.
-const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
-    try {
-        await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 /* WHERE an agent's delta is measured from, which decides what "this agent's work" even means. Shared by the
  * land (with its landedTip rung, for the incremental remainder) and by everything that reports the cumulative

@@ -1,5 +1,5 @@
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import { pollUntil } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
 import type { SshSession } from "./ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 

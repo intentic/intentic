@@ -130,6 +130,14 @@ const flyFetch = async (method: string, path: string, init: RequestInit): Promis
     }
 };
 
+/* THE FLY MACHINE STATES IN WHICH A MACHINE IS BURNING MONEY, and therefore the ones that count as "running"
+ * everywhere on the hosted lane: the hour meter, the idle sweep, the wake. `replacing` is in the set because a
+ * machine mid-replacement is still allocated; `stopped`, `suspended` and `destroyed` are not.
+ *
+ * One set, because these readings are compared to each other — the meter charges a stretch the idle sweep then
+ * decides not to stop — and three copies of it is three chances for a state to be live to one and not another. */
+export const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
+
 const appsSchema = z.object({ apps: z.array(z.object({ name: z.string() })) });
 const idSchema = z.object({ id: z.string() });
 // `updated_at` is Fly's own stamp of the last state transition, which for a stopped machine is when it
@@ -225,7 +233,9 @@ const machineDetailSchema = z.object({
             z.object({
                 type: z.string().optional(),
                 timestamp: z.number().optional(),
-                request: z.object({ exit_event: z.object({ exit_code: z.number().optional(), oom_killed: z.boolean().optional() }).optional() }).optional(),
+                request: z
+                    .object({ exit_event: z.object({ exit_code: z.number().optional(), oom_killed: z.boolean().optional() }).optional() })
+                    .optional(),
             }),
         )
         .optional(),

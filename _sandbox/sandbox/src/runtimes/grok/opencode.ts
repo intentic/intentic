@@ -1,6 +1,5 @@
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import {
     type Config as OpenCodeConfig,
     createOpencodeClient,
@@ -10,7 +9,7 @@ import {
     type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
-import { humanizeModelId } from "../../agent/models/model-discovery.js";
+import { idCatalog } from "../../agent/models/model-discovery.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
@@ -81,14 +80,6 @@ export interface OpenCodeService {
     // delete OpenCode's auth store (this instance is Grok-only). ponytail: file-level clear; swap for an SDK call.
     readonly disconnect: (providerID: string) => Promise<void>;
 }
-
-// ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined. Neither xAI's
-// REST catalog nor its "Did you mean" rejection publishes a ranking (see model-order.ts), so the app imposes the
-// order, which is what makes `default` the frontier newest rather than whichever id xAI happened to name first.
-const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareUnrankedModelIds);
-    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
-};
 
 // How long `opencode serve` gets to print its listening line. The SDK defaults to 5s, which a cold spawn misses
 // on a loaded host: the binary is ~175 MB of bun paged in from scratch while boot is also warming the search
@@ -541,8 +532,8 @@ export const createOpenCodeService = (
         store: modelStore,
         toStored: (ids) => [...ids],
         seed: SEED_XAI_MODELS,
-        fromLive: toCatalog,
-        fromStored: toCatalog,
+        fromLive: idCatalog,
+        fromStored: idCatalog,
     });
 
     return {

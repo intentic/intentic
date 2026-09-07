@@ -1,10 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
-import { promisify } from "node:util";
 import { sleep } from "@intentic/base/async";
 import type { ExitPoint, IntenticLine } from "@intentic/sandbox-contract";
-import { logTail, processAlive, readPid, toolMissing } from "../tunnel/net-probe.js";
+import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import { rankCountries, TOR_FALLBACK } from "./exit-countries.js";
 import type { ExitDriver, ExitProbe } from "./exit-driver.js";
 import { observeThroughSocks } from "./exit-observe.js";
@@ -36,8 +35,6 @@ import { writeSelection } from "./exit-state.js";
  * What it costs, and the skill says so plainly: a large share of the web blocks Tor exits outright, and the
  * bandwidth is donated by volunteers, so it is for reading a page from somewhere else, not for bulk crawling.
  */
-
-const exec = promisify(execFile);
 
 // Bootstrapping over a hostile-ish network takes a while on a cold consensus. Generous, and it fails with the
 // log's own tail rather than a bare timeout.
@@ -131,10 +128,8 @@ const control = (id: string, commands: readonly string[]): Promise<string> =>
         })();
     });
 
-const livePid = async (id: string): Promise<number | undefined> => {
-    const pid = await readPid(pidPath(id));
-    return pid !== undefined && (await processAlive(pid, "tor")) ? pid : undefined;
-};
+// This driver's two constants (where the pidfile is, what must still be running) bound to the shared pair.
+const livePid = (id: string): Promise<number | undefined> => livePidOf(pidPath(id), "tor");
 
 // Bootstrapped, per tor's own log. Reading the log rather than polling the SOCKS port because the port opens
 // early and accepts connections that then hang: "the proxy is listening" and "tor can build a circuit" are
@@ -228,13 +223,7 @@ const launch = async (id: string, country: string | undefined): Promise<void> =>
     }
 };
 
-const halt = async (id: string): Promise<void> => {
-    const pid = await livePid(id);
-    if (pid !== undefined) {
-        await exec("kill", ["-TERM", String(pid)]).catch(() => undefined);
-    }
-    await rm(pidPath(id), { force: true });
-};
+const halt = (id: string): Promise<void> => haltClient(pidPath(id), "tor");
 
 // Where tor is currently aimed, then aim it somewhere else. SETCONF alone is not enough: it governs circuits
 // built from now on, and existing ones keep their exits, so NEWNYM has to follow or the next request comes out

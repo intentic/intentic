@@ -8,6 +8,7 @@ import {
     batchRunsDir,
 } from "@intentic/sandbox-contract/batch-runs";
 import type { Story } from "./stories";
+import { isConversationId } from "@intentic/sandbox-contract";
 
 /* A RUN is the set of stories the user selected at one moment. The machinery under it — the directory layout,
  * the run id, the conversation id derived from it — is the core's batch-run substrate, shared with maintenance
@@ -45,7 +46,6 @@ export const SEEN_PATH = `${RUNS_DIR}/seen.json`;
 
 const RUN_ID = /^r[0-9a-z]+$/;
 const STORY_SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const SHOT_PATH = /^shots\/[^/]+\.png$/i;
 
 // The only report-relative image path that can be resolved back through /workspace/raw. Shared by structured
@@ -321,7 +321,7 @@ const runStory = (value: unknown): RunStory | undefined => {
         !nonempty(path) ||
         !nonempty(title) ||
         !nonempty(conversationId) ||
-        !CONVERSATION_ID.test(conversationId) ||
+        !isConversationId(conversationId) ||
         typeof content !== `string` ||
         !Array.isArray(criteria) ||
         !criteria.every(nonempty)

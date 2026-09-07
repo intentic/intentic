@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DesiredStateGraph } from "@intentic/graph";
-import type { ForgejoApi } from "@intentic/providers";
+import type { ForgejoAdmin, ForgejoApi } from "@intentic/providers";
 import { renderTemplate } from "../lib/templates.js";
 import { collectSecrets } from "../secrets/secrets.js";
 
@@ -130,15 +130,14 @@ export const collectSecretValues = (
 };
 
 // Set a repo's Actions secrets from a name -> value map, after the repo exists (post-adopt push).
-export const setRepoSecrets = async (args: {
-    readonly api: ForgejoApi;
-    readonly baseUrl: string;
-    readonly user: string;
-    readonly password: string;
-    readonly owner: string;
-    readonly name: string;
-    readonly secrets: Readonly<Record<string, string>>;
-}): Promise<void> => {
+export const setRepoSecrets = async (
+    args: ForgejoAdmin & {
+        readonly api: ForgejoApi;
+        readonly owner: string;
+        readonly name: string;
+        readonly secrets: Readonly<Record<string, string>>;
+    },
+): Promise<void> => {
     for (const [secretName, data] of Object.entries(args.secrets)) {
         await args.api.setRepoSecret({
             baseUrl: args.baseUrl,

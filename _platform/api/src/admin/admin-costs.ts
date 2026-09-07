@@ -2,13 +2,12 @@ import type { AdminCosts } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
+import { DAY_MS } from "../durations.js";
 
 /* THE BILLS, BEFORE THE INVOICE: hosted machines and the warm pool (Fly), and the trial meter (Google
  * keys) — the two places the platform spends real money on users' behalf. Figures are computed against the
  * config knobs they are spent under (the hour ceiling, the pool size, the configured image, the daily
  * message allowance) so the panel renders promise vs. actual, not bare numbers. */
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const TOP_OWNERS = 10;
 
@@ -84,9 +83,7 @@ export const adminCosts = async (prisma: PrismaClient, config: Config, now: () =
                 const email = emailOf.get(row.userId);
                 return email === undefined ? [] : [{ email, minutes: row.minutes }];
             }),
-            pool: [...poolByRegion.entries()]
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([region, counts]) => ({ region, ...counts })),
+            pool: [...poolByRegion.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([region, counts]) => ({ region, ...counts })),
             poolSize: config.hosted.poolSize,
             image: config.hosted.image,
         },
@@ -97,9 +94,7 @@ export const adminCosts = async (prisma: PrismaClient, config: Config, now: () =
             usersToday: todayAggregate._count._all,
             messages7d: weekMessages,
             users7d: weekUsers.size,
-            models: [...modelUsers.entries()]
-                .map(([model, users]) => ({ model, accounts: users.size }))
-                .sort((a, b) => b.accounts - a.accounts),
+            models: [...modelUsers.entries()].map(([model, users]) => ({ model, accounts: users.size })).sort((a, b) => b.accounts - a.accounts),
         },
     };
 };

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { reapIdleHosted } from "./hosted-idle.js";
+import { DAY_MS } from "../../durations.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -16,7 +17,6 @@ const config = (over: Record<string, unknown> = {}): Config =>
         hostedPlan: { compEmails: `` },
     }) as unknown as Config;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS);
 
 // One machine row as the sweep selects it.

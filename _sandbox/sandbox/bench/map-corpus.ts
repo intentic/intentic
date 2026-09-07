@@ -21,13 +21,13 @@
  * SCOPE. Claude Code transcripts only. Codex, Grok, Gemini, Cursor, Pi and ACP turns keep their history
  * elsewhere, so every share here is a share OF THE CLAUDE ARM, even though the map itself reaches all six. */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { displayNameOf, toolCategoryOf, toolLocations, toolTarget } from "../src/agent/tools/tool-calls.js";
 import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/turn-metrics.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/prompt/workspace-map.js";
+import { transcriptFiles } from "./transcripts.js";
 
 /* The workspace root as the AGENT saw it, which is what the paths in these transcripts are written against and
  * what decides which listings were orientation. A corpus captured from another sandbox passes its own. */
@@ -176,22 +176,6 @@ export interface Session {
     };
 }
 
-const transcriptFiles = (root: string): string[] => {
-    const found: string[] = [];
-    const walk = (dir: string): void => {
-        for (const entry of readdirSync(dir)) {
-            const path = join(dir, entry);
-            if (statSync(path).isDirectory()) {
-                walk(path);
-            } else if (entry.endsWith(".jsonl")) {
-                found.push(path);
-            }
-        }
-    };
-    walk(root);
-    return found;
-};
-
 const textOf = (content: readonly Record<string, unknown>[] | string | undefined): string => {
     if (typeof content === "string") {
         return content;
@@ -201,7 +185,6 @@ const textOf = (content: readonly Record<string, unknown>[] | string | undefined
         .map((block) => (typeof block["text"] === "string" ? block["text"] : ""))
         .join("\n");
 };
-
 
 /* ONE SESSION, read to the end of its opening turn for behaviour and to the end of the file for coverage.
  *

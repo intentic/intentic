@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 
 // Reading a live tunnel back off the machine: what address a gateway assigned, what it routed into the tunnel,
@@ -72,6 +72,25 @@ export const readPid = async (path: string): Promise<number | undefined> => {
     const raw = await readFile(path, "utf8").catch(() => undefined);
     const pid = raw === undefined ? Number.NaN : Number.parseInt(raw.trim(), 10);
     return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+};
+
+/* The two-step every tunnel driver does before it trusts a pidfile: read it, then confirm the pid is still the
+ * client that wrote it. `command` is what the process must still be running (`tor`, `openvpn`, `openconnect`),
+ * and it is the whole safety of this — without it a recycled pid reads as a connected tunnel. */
+export const livePid = async (pidFile: string, command: string): Promise<number | undefined> => {
+    const pid = await readPid(pidFile);
+    return pid !== undefined && (await processAlive(pid, command)) ? pid : undefined;
+};
+
+/* Stop the client and forget its pidfile. TERM rather than KILL so the client tears its own interface and
+ * routes down; a failure to signal is ignored because the pid may have exited between the check and the
+ * signal, and the pidfile goes either way — a stale one is what makes the NEXT dial think it is already up. */
+export const halt = async (pidFile: string, command: string): Promise<void> => {
+    const pid = await livePid(pidFile, command);
+    if (pid !== undefined) {
+        await exec("kill", ["-TERM", String(pid)]).catch(() => undefined);
+    }
+    await rm(pidFile, { force: true });
 };
 
 // True when the executable is not on PATH, the pre-rebuild state. ENOENT on spawn is the only signal that

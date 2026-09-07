@@ -1,12 +1,11 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { capabilitiesOf } from "@intentic/sandbox-contract";
+import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
 export type PurgeConversation = Pick<PersistedAgent, "id" | "provider" | "harness" | "sessionId">;
 
-const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
 
 const transcript = (historyRoot: string, id: string): string => join(historyRoot, "transcripts", `${id}.jsonl`);
@@ -17,7 +16,7 @@ const attachmentDirs = (raw: string): Set<string> =>
     new Set([...raw.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])));
 
 const purgeClaudeSession = async (workspaceRoot: string, sessionId: string): Promise<void> => {
-    if (!SAFE_ID.test(sessionId)) {
+    if (!isConversationId(sessionId)) {
         return;
     }
     const projects = statePath(workspaceRoot, ".intentic/records/sessions/claude/", "projects");

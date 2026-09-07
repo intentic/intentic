@@ -15,7 +15,7 @@ export { createGarageBucketProvider } from "./backings/garage-bucket.js";
 export { createCiProvider } from "./forgejo/ci.js";
 export { createForgejoProvider, FORGEJO_HTTP_PORT } from "./forgejo/forgejo.js";
 export { fakeForgejoApi } from "./forgejo/forgejo-api.fake.js";
-export type { ForgejoApi, ForgejoHook, ForgejoRepo } from "./forgejo/forgejo-api.js";
+export type { ForgejoAdmin, ForgejoApi, ForgejoHook, ForgejoRepo } from "./forgejo/forgejo-api.js";
 export { forgejoApi } from "./forgejo/forgejo-api.js";
 export { createForgejoNotifyProvider } from "./forgejo/forgejo-notify.js";
 export { createForgejoRunnerProvider } from "./forgejo/forgejo-runner.js";

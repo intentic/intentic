@@ -86,6 +86,22 @@ export const INTEGRATION_SUITE = {
     hookTimeout: 120_000,
 } as const;
 
+/* A SUITE, RUN IN A DOM. For the packages that ship browser code and want ONE environment for the whole
+ * package rather than a `@vitest-environment` annotation per file: the widget and the issue SDK, both of which
+ * are mostly DOM with a few environment-agnostic parsers that do not mind being run in one.
+ *
+ * Only `environment` moves. The ceilings above are the point of the shared suites and they come across
+ * untouched, which is the whole reason this is a wrapper rather than a second pair of suite constants.
+ *
+ * `exclude` is REBUILT rather than spread through: the suites are `as const`, so it arrives readonly, and
+ * vitest's ProjectConfig wants a mutable array. Every package that overrode a suite used to make this copy for
+ * itself, and getting it wrong is a type error at the config, which is a confusing place to meet one. */
+export const inJsdom = (suite: typeof UNIT_SUITE | typeof INTEGRATION_SUITE) => ({
+    ...suite,
+    exclude: [...suite.exclude],
+    environment: "jsdom" as const,
+});
+
 /* THE SAME CEILING, ONE LAYER IN: what `vi.waitFor` is allowed inside an integration suite.
  *
  * It has to be said separately because vitest does not derive it from the budgets above. A wait gets ONE

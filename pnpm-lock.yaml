@@ -716,6 +716,9 @@ importers:
 
   _deploy/engine:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/graph':
         specifier: workspace:*
         version: link:../graph

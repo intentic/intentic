@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { collectSecretUsage, type DesiredStateGraph } from "@intentic/graph";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
+import { ARTIFACT_FILE } from "./workspace-layout.js";
 
-const ARTIFACT_FILE = "desired-state.json";
 const ENV_FILE = ".env";
 const SECRETS_FILE = ".secrets.json";
 // Digests of the secret values last pushed to Forgejo Actions (`adopt` / `intentic deploy secrets push`). Forgejo

@@ -2,6 +2,7 @@ import type { ModelPin, SafetyDecision, SafetyVerdict } from "@intentic/sandbox-
 import type { Services } from "../../composition.js";
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
+import { FENCE } from "@intentic/sandbox-contract";
 
 /* WHETHER THIS COMMAND SHOULD RUN, ASKED OF A MODEL THAT READ THE OWNER'S POLICY. The second tier of the safety
  * design (the contract's safety-policy.ts sets out all four), and the one that replaced a table of regex
@@ -142,7 +143,6 @@ const judgePrompt = (policy: string, program: string, facts: JudgeFacts): string
 
 // A model reaches for these wrappers even when told not to, the same instinct cleanSessionTitle unwraps: the
 // answer is right and only its packaging is wrong.
-const FENCE = /^```[\w-]*\n?|\n?```$/gu;
 
 // One labelled line out of the reply. Tolerant of the label's case and of a missing space after the colon,
 // because those are the ways a small model deviates from a shape it is otherwise following.

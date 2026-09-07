@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { expect, test } from "vitest";
-import { cleanTranscription, createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
+import { createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 
 /* The speech engine over its two injected seams (exec, model fetch): the same shape the Discord voice
  * transcriber proves its whisper conventions with (_extensions/discord/src/audio.test.ts). */
@@ -51,13 +51,6 @@ test("whisperLanguage extracts the primary subtag and falls back to auto-detecti
     expect(whisperLanguage(undefined)).toBe("auto");
     expect(whisperLanguage("")).toBe("auto");
     expect(whisperLanguage("x!")).toBe("auto");
-});
-
-test("cleanTranscription flattens whisper output and drops noise-only annotations", () => {
-    expect(cleanTranscription(" Hello there.\n General Kenobi.\n")).toBe("Hello there. General Kenobi.");
-    expect(cleanTranscription(" [BLANK_AUDIO]\n")).toBeUndefined();
-    expect(cleanTranscription("(wind blowing)")).toBeUndefined();
-    expect(cleanTranscription("")).toBeUndefined();
 });
 
 test("an image without whisper-cli reads unprovisioned and refuses to transcribe", async () => {

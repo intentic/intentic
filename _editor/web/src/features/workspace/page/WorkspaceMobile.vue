@@ -23,9 +23,9 @@ import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
 import { useMonaco } from "../files/useMonaco";
 import { useUploadQueue } from "../files/useUploadQueue";
-import { MATCH_TOGGLES, useSearchOptions } from "../search/useSearchOptions";
+import { useExplorerSearch } from "../search/useExplorerSearch";
+import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
-import { type SearchScope, useWorkspaceSearch } from "../search/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { useNotifications } from "../../../shell/notifications/notifications";
@@ -172,16 +172,10 @@ const segmentOptions = computed(() => [
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
-const filter = ref(``);
-/* Same three scopes as the desktop explorer (WorkspaceDesktop.vue documents what each one means), and the same
- * match switches: they are PERSISTED and shared, so a phone that applied them without showing them was running
- * a regex search the reader had no way to see, let alone turn off. Their own row rather than inside the field:
- * there is vertical room here and none beside a 16px input, and a row is a touch target. */
-const searchScope = ref<"name" | SearchScope>(`name`);
-const contentMode = computed(() => searchScope.value !== `name`);
-const textMode = computed(() => searchScope.value === `text`);
-const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
-const search = useSearchOptions();
+/* The same search state the desktop explorer uses (useExplorerSearch). What differs here is only where the
+ * match switches are DRAWN: their own row rather than inside the field, because there is vertical room here
+ * and none beside a 16px input, and a row is a touch target. */
+const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -194,12 +188,7 @@ const {
     loadMore: searchLoadMore,
     error: searchError,
     note: searchNote,
-} = useWorkspaceSearch(filter, contentScope, contentMode);
-
-const clearFilter = (): void => {
-    filter.value = ``;
-    searchScope.value = `name`;
-};
+} = results;
 
 // Entering a dir the walk left unlisted (ignored, or below its entry budget), or any path not in the eager
 // tree at all (deep inside a lazy subtree): fetches its children on demand; the listing repaints on arrival.
@@ -696,12 +685,7 @@ const onPick = (event: Event): void => {
         </BottomSheet>
 
         <Modal :open="renameTarget !== undefined" size="sm" header="Rename" @update:open="renameTarget = undefined">
-            <input
-                v-model="renameValue"
-                type="text"
-                class="ui-field-box w-full"
-                @keydown.enter="confirmRename"
-            />
+            <input v-model="renameValue" type="text" class="ui-field-box w-full" @keydown.enter="confirmRename" />
             <template #footer>
                 <Button label="Cancel" severity="secondary" :text="true" @click="renameTarget = undefined" />
                 <Button label="Rename" autofocus @click="confirmRename" />

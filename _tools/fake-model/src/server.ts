@@ -1,5 +1,6 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readBody, sendJson } from "@intentic/testing/http-fake";
 import {
     assistantMessage,
     execCommandCall,
@@ -92,14 +93,6 @@ export interface FakeModel {
     close(): Promise<void>;
 }
 
-const readBody = async (request: IncomingMessage): Promise<string> => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) {
-        chunks.push(chunk as Buffer);
-    }
-    return Buffer.concat(chunks).toString("utf8");
-};
-
 const sendSse = (response: ServerResponse, frames: readonly SseFrame[]): void => {
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
     for (const [event, data] of frames) {
@@ -118,12 +111,6 @@ const sendChatSse = (response: ServerResponse, chunks: readonly JsonValue[]): vo
     }
     response.write("data: [DONE]\n\n");
     response.end();
-};
-
-const sendJson = (response: ServerResponse, status: number, body: unknown): void => {
-    const text = JSON.stringify(body);
-    response.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(text) });
-    response.end(text);
 };
 
 // The step that governs request N, with the last one repeating (see ScriptedStep). An empty script answers

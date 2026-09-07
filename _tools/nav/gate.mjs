@@ -36,13 +36,9 @@ import { listTracked, readAt } from "./lib/files.mjs";
 import { estimateTokens } from "./lib/tokens.mjs";
 import { resolveSpecifier } from "./lib/resolve.mjs";
 import { buildTree } from "./lib/tree.mjs";
+import { arg } from "./lib/args.mjs";
 
 const root = repoRoot(import.meta.url);
-
-const arg = (name, fallback) => {
-    const index = process.argv.indexOf(`--${name}`);
-    return index === -1 || index === process.argv.length - 1 ? fallback : process.argv[index + 1];
-};
 
 /* FILES WHOSE CONTENT IS THE BEHAVIOR. Kept as an explicit list rather than inferred, because the cost of
  * forgetting one is a silent wire-format change and the cost of an extra one is a moment spent explaining a

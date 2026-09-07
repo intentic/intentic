@@ -30,6 +30,19 @@
  * for the ones a person opens.
  */
 
+/* THE SHAPE ITSELF, and the injection guard every path that interpolates a conversation id leans on.
+ *
+ * A conversation id becomes a branch name, a worktree directory, a transcript filename and a journal filename,
+ * so "is this a conversation id" is really "is this safe to put in a path", and it is asked on the read side by
+ * everything that walks one of those directories: a stray file, a hand-made name, a `../` — none of them may
+ * be dereferenced. Those checks had each restated the pattern under a local name (FILE_ID, SAFE_ID,
+ * CONVERSATION_ID) beside the schema that defines it, which is five places to fix if the shape ever moves and
+ * five chances for one of them to be laxer than the id it is guarding. */
+export const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+
+// Safe to interpolate into a path or a branch name. `false` for anything else, including the empty string.
+export const isConversationId = (value: string): boolean => CONVERSATION_ID.test(value);
+
 /* The two halves of the name. Kept short (nothing over seven letters) because the whole point is a string that
  * fits on a card, and visually distinct from one another, no near-rhymes and no two words sharing a first
  * syllable, since a name is only useful here if it can be told apart from its neighbour in the lane. */

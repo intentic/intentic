@@ -3,6 +3,7 @@ import type { Persona, PersonaRoute, PersonaRouteAsk } from "@intentic/sandbox-c
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import type { Services } from "../../composition.js";
+import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
 /* WHICH PERSONA A NEW CHAT BELONGS TO, decided once, from its first message, before the first turn.
  *
@@ -52,7 +53,9 @@ const excerpt = (text: string): string => {
 export const candidateLine = (card: Persona, siteOf: (capability: string) => string | undefined): string => {
     const facts = [
         ...(card.brief === undefined ? [] : [card.brief.trim().replace(/\.$/u, "")]),
-        ...(card.context === undefined ? [] : [`Carries: ${card.context.repos.length === 0 ? "the workspace repository only" : card.context.repos.join(", ")}`]),
+        ...(card.context === undefined
+            ? []
+            : [`Carries: ${card.context.repos.length === 0 ? "the workspace repository only" : card.context.repos.join(", ")}`]),
         ...(card.workspace?.startIn === undefined ? [] : [`Starts in: ${card.workspace.startIn}`]),
         ...(card.capabilities.length === 0 ? [] : [`Speaks through: ${[...new Set(card.capabilities.map((id) => siteOf(id) ?? id))].join(", ")}`]),
     ];
@@ -85,9 +88,7 @@ export const routerPrompt = (ask: PersonaRouteAsk, lines: readonly string[]): st
     ].join(`\n`);
 
 // Wrappers a model reaches for even when told not to: a fence, a label, a bullet, quotes, a trailing period.
-const FENCE = /^```[\w-]*\n?|\n?```$/gu;
 const LABEL = /^(?:persona|id|answer)\s*:\s*/iu;
-const BULLET = /^[-*]\s+/u;
 
 export interface RouteVerdict {
     // The card named, or undefined for `none`.
@@ -113,17 +114,25 @@ export const routeAnswer = (ids: ReadonlySet<string>): RoleAnswer<RouteVerdict> 
                     .split(`\n`)
                     .map((line) => line.trim())
                     .find((line) => line !== ``) ?? ``;
-            const bare = first.replace(BULLET, ``).replace(LABEL, ``).replace(/[.`'"]+$/u, ``).replace(/^[`'"]+/u, ``).trim();
+            const bare = first
+                .replace(BULLET, ``)
+                .replace(LABEL, ``)
+                .replace(/[.`'"]+$/u, ``)
+                .replace(/^[`'"]+/u, ``)
+                .trim();
             const token = bare.split(/\s+/u)[0] ?? ``;
             return { persona: byLower.get(token.toLowerCase()), token };
         },
-        unusable: ({ persona, token }) => (persona !== undefined || token.toLowerCase() === NONE ? undefined : `named "${token}", which is no persona here`),
+        unusable: ({ persona, token }) =>
+            persona !== undefined || token.toLowerCase() === NONE ? undefined : `named "${token}", which is no persona here`,
     };
 };
 
 // The site an account id belongs to, for the candidate line. Only browser accounts have one; anything else is
 // named by its id.
-const siteLookup = (capabilities: readonly { readonly id: string; readonly kind: string; readonly config: unknown }[]): ((id: string) => string | undefined) => {
+const siteLookup = (
+    capabilities: readonly { readonly id: string; readonly kind: string; readonly config: unknown }[],
+): ((id: string) => string | undefined) => {
     const sites = new Map(
         capabilities.flatMap((capability) => {
             const platform = capability.kind === "browser" ? (capability.config as { readonly platform?: string }).platform : undefined;
@@ -154,9 +163,16 @@ export const routePersona = async (services: Services, ask: PersonaRouteAsk, sig
     const lines = cards.map((card) => candidateLine(card, siteOf));
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(ROUTE_DEADLINE_MS)]);
     try {
-        const answer = await askRoleModel(services, "persona-router", { prompt: routerPrompt(ask, lines), answer: routeAnswer(new Set(cards.map((card) => card.id))) }, deadline);
+        const answer = await askRoleModel(
+            services,
+            "persona-router",
+            { prompt: routerPrompt(ask, lines), answer: routeAnswer(new Set(cards.map((card) => card.id))) },
+            deadline,
+        );
         const card = cards.find((entry) => entry.id === answer.value.persona);
-        return card === undefined ? { reason: `No persona fits this message.` } : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.` };
+        return card === undefined
+            ? { reason: `No persona fits this message.` }
+            : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.` };
     } catch (error: unknown) {
         // A spent chain, no account, the deadline: the chat opens as it would have without routing, and the
         // chip says why nothing was picked rather than showing nothing at all.

@@ -18,4 +18,5 @@ export const cacheDir = (): string => join(webqHome(), "cache");
 export const defaultOutDir = (): string => join(webqHome(), "out");
 
 /** The one token estimate everything reports: ~4 chars per token, the usual English-prose rule of thumb. */
-export const tokensOf = (text: string): number => Math.ceil(text.length / 4);
+// The budget unit, shared with iq and the daemon so a cap and the thing it cut are counted the same way.
+export { estimateTokens as tokensOf } from "@intentic/base/format";

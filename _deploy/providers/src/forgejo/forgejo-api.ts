@@ -2,6 +2,18 @@ import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 import { responseDetail } from "../core/response-detail.js";
 
+/* THE ADMIN CONNECTION, which every call on this surface carries: where the instance is, and the admin
+ * credentials it is reached with. Auth flows per-call as HTTP Basic rather than being baked into the adapter
+ * at construction, so one process can drive several instances and no long-lived object holds a password.
+ *
+ * Named because it was spelled out in full on all eighteen methods below, which is where a surface stops
+ * reading as "the same connection, eighteen operations" and starts reading as eighteen unrelated functions. */
+export interface ForgejoAdmin {
+    readonly baseUrl: string;
+    readonly user: string;
+    readonly password: string;
+}
+
 // A Forgejo repo and one of its webhooks. Forgejo's REST surface returns the resource JSON directly (no
 // success envelope); errors arrive with a non-2xx status, and otherwise the body is validated against the
 // fields we consume (extra fields like timestamps are dropped).
@@ -39,214 +51,192 @@ export type ForgejoHook = z.infer<typeof forgejoHookSchema>;
 // never baked into the adapter at construction.
 export interface ForgejoApi {
     // A repo under `owner`; undefined if it does not exist (404).
-    readonly findRepo: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-    }) => Promise<ForgejoRepo | undefined>;
+    readonly findRepo: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+        },
+    ) => Promise<ForgejoRepo | undefined>;
     // Create a repo owned by `owner`. `ownerIsOrg` picks the endpoint: an org repo (POST /orgs/{owner}/repos)
     // when the owner is a team's organization, or an admin-for-user repo (POST /admin/users/{owner}/repos) for
     // the single-admin fallback owner. `autoInit` makes Forgejo write an initial commit (so an app repo can be
     // cloned immediately); pass false to get an EMPTY repo when local history will be pushed in.
-    readonly createRepo: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly ownerIsOrg: boolean;
-        readonly name: string;
-        readonly private: boolean;
-        readonly autoInit: boolean;
-    }) => Promise<ForgejoRepo>;
+    readonly createRepo: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly ownerIsOrg: boolean;
+            readonly name: string;
+            readonly private: boolean;
+            readonly autoInit: boolean;
+        },
+    ) => Promise<ForgejoRepo>;
     // A user exists (by username). Public endpoint; admin Basic auth is fine.
-    readonly findUser: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly username: string;
-    }) => Promise<boolean>;
+    readonly findUser: (
+        args: ForgejoAdmin & {
+            readonly username: string;
+        },
+    ) => Promise<boolean>;
     // Create a git account. `mustChangePassword` is forced false so the generated password works for the API +
     // git push immediately (Forgejo defaults it true, which would lock the account out until a rotation).
-    readonly createUser: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly username: string;
-        readonly email: string;
-        readonly accountPassword: string;
-    }) => Promise<void>;
+    readonly createUser: (
+        args: ForgejoAdmin & {
+            readonly username: string;
+            readonly email: string;
+            readonly accountPassword: string;
+        },
+    ) => Promise<void>;
     // An organization exists (by login).
-    readonly findOrg: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly org: string;
-    }) => Promise<boolean>;
+    readonly findOrg: (
+        args: ForgejoAdmin & {
+            readonly org: string;
+        },
+    ) => Promise<boolean>;
     // Create an organization owned by the admin `user` (so the admin stays in its Owners team and its tokens
     // retain full access to the org's private repos, what Komodo clones and pulls with).
-    readonly createOrg: (args: { readonly baseUrl: string; readonly user: string; readonly password: string; readonly org: string }) => Promise<void>;
+    readonly createOrg: (args: ForgejoAdmin & { readonly org: string }) => Promise<void>;
     // A team in an org (by name); undefined if absent. Returns the numeric id member/repo grants need.
-    readonly findTeam: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly org: string;
-        readonly name: string;
-    }) => Promise<ForgejoTeam | undefined>;
+    readonly findTeam: (
+        args: ForgejoAdmin & {
+            readonly org: string;
+            readonly name: string;
+        },
+    ) => Promise<ForgejoTeam | undefined>;
     // Create a team in an org at `permission` (read|write|admin) granting access to the repos it is attached to.
-    readonly createTeam: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly org: string;
-        readonly name: string;
-        readonly permission: string;
-    }) => Promise<ForgejoTeam>;
+    readonly createTeam: (
+        args: ForgejoAdmin & {
+            readonly org: string;
+            readonly name: string;
+            readonly permission: string;
+        },
+    ) => Promise<ForgejoTeam>;
     // Add a user to a team (idempotent PUT).
-    readonly addTeamMember: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly teamId: number;
-        readonly username: string;
-    }) => Promise<void>;
+    readonly addTeamMember: (
+        args: ForgejoAdmin & {
+            readonly teamId: number;
+            readonly username: string;
+        },
+    ) => Promise<void>;
     // Attach a repo to a team so its members get the team's permission on it (idempotent PUT).
-    readonly addTeamRepo: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly teamId: number;
-        readonly org: string;
-        readonly name: string;
-    }) => Promise<void>;
+    readonly addTeamRepo: (
+        args: ForgejoAdmin & {
+            readonly teamId: number;
+            readonly org: string;
+            readonly name: string;
+        },
+    ) => Promise<void>;
     // Every webhook on a repo, for stateless re-attribution (matched by type + config.url).
-    readonly listHooks: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-    }) => Promise<readonly ForgejoHook[]>;
+    readonly listHooks: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+        },
+    ) => Promise<readonly ForgejoHook[]>;
     // Create a webhook (type "discord" for notifications, "gitea" for the Komodo deploy listener).
-    readonly createHook: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly type: string;
-        readonly config: Readonly<Record<string, string>>;
-        readonly events: readonly string[];
-    }) => Promise<void>;
+    readonly createHook: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly type: string;
+            readonly config: Readonly<Record<string, string>>;
+            readonly events: readonly string[];
+        },
+    ) => Promise<void>;
     // Replace an existing webhook's config + events in place.
-    readonly updateHook: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly id: number;
-        readonly config: Readonly<Record<string, string>>;
-        readonly events: readonly string[];
-    }) => Promise<void>;
+    readonly updateHook: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly id: number;
+            readonly config: Readonly<Record<string, string>>;
+            readonly events: readonly string[];
+        },
+    ) => Promise<void>;
     // The latest commit sha on `branch`; undefined when the repo has no commits on it yet.
-    readonly latestCommit: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly branch: string;
-    }) => Promise<string | undefined>;
+    readonly latestCommit: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly branch: string;
+        },
+    ) => Promise<string | undefined>;
     // The raw contents of `path` on `branch`; undefined if it does not exist (404).
-    readonly readFile: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly branch: string;
-        readonly path: string;
-    }) => Promise<string | undefined>;
+    readonly readFile: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly branch: string;
+            readonly path: string;
+        },
+    ) => Promise<string | undefined>;
     // Create or replace `path` on `branch` with `content` (utf-8), committing with `message`.
-    readonly commitFile: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly branch: string;
-        readonly path: string;
-        readonly content: string;
-        readonly message: string;
-    }) => Promise<void>;
+    readonly commitFile: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly branch: string;
+            readonly path: string;
+            readonly content: string;
+            readonly message: string;
+        },
+    ) => Promise<void>;
     // Create or replace a repo Actions secret (consumed by the CI workflow). Forgejo takes the PLAINTEXT value
     // as `data` (unlike GitHub's libsodium sealed box), create-or-replaced in place with a single PUT.
-    readonly setRepoSecret: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly secretName: string;
-        readonly data: string;
-    }) => Promise<void>;
+    readonly setRepoSecret: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly secretName: string;
+            readonly data: string;
+        },
+    ) => Promise<void>;
     // The teardown surface prune drives. Each is idempotent: a 404 (the resource is already gone) is success.
     // Delete a repo (and all its content). `owner` is the org or admin user the repo lives under.
-    readonly deleteRepo: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-    }) => Promise<void>;
+    readonly deleteRepo: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+        },
+    ) => Promise<void>;
     // Delete `path` on `branch`, committing with `message` (looks up the current blob sha the API requires).
-    readonly deleteFile: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly branch: string;
-        readonly path: string;
-        readonly message: string;
-    }) => Promise<void>;
+    readonly deleteFile: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly branch: string;
+            readonly path: string;
+            readonly message: string;
+        },
+    ) => Promise<void>;
     // Delete a repo Actions secret by name.
-    readonly deleteRepoSecret: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly secretName: string;
-    }) => Promise<void>;
+    readonly deleteRepoSecret: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly secretName: string;
+        },
+    ) => Promise<void>;
     // Delete a webhook by id.
-    readonly deleteHook: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly owner: string;
-        readonly name: string;
-        readonly id: number;
-    }) => Promise<void>;
+    readonly deleteHook: (
+        args: ForgejoAdmin & {
+            readonly owner: string;
+            readonly name: string;
+            readonly id: number;
+        },
+    ) => Promise<void>;
     // Delete a user account (admin endpoint; `purge` removes its repos/issues too).
-    readonly deleteUser: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly username: string;
-    }) => Promise<void>;
+    readonly deleteUser: (
+        args: ForgejoAdmin & {
+            readonly username: string;
+        },
+    ) => Promise<void>;
     // Delete an organization by login.
-    readonly deleteOrg: (args: { readonly baseUrl: string; readonly user: string; readonly password: string; readonly org: string }) => Promise<void>;
+    readonly deleteOrg: (args: ForgejoAdmin & { readonly org: string }) => Promise<void>;
     // Delete a team by its numeric id.
-    readonly deleteTeam: (args: {
-        readonly baseUrl: string;
-        readonly user: string;
-        readonly password: string;
-        readonly teamId: number;
-    }) => Promise<void>;
+    readonly deleteTeam: (
+        args: ForgejoAdmin & {
+            readonly teamId: number;
+        },
+    ) => Promise<void>;
 }
 
 const authHeader = (user: string, password: string): string => `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;

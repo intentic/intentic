@@ -1,4 +1,5 @@
-import { pollUntil, type Provider, type ProviderContext, type ResolvedInputs } from "@intentic/engine";
+import { pollUntil } from "@intentic/base/async";
+import type { Provider, ProviderContext, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";

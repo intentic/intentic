@@ -44,7 +44,9 @@ export const resolveSource = (source: unknown, registryUrl: string, pluginRoot: 
     return undefined;
 };
 
-const FULL_SHA = /^[0-9a-f]{40}$/;
+// A full lowercase commit sha, the only ref an install may be PINNED to: a tag or a branch can be moved under
+// a pin, which is the whole thing a pin is for. Shared with registry.ts, which validates the same field.
+export const FULL_SHA = /^[0-9a-f]{40}$/;
 
 /* Whether this pointer names one immutable commit. An EXTENSION install requires it, extension code runs
  * trusted in the owner's browser, so the approved code and the running code have to be the same object, and a

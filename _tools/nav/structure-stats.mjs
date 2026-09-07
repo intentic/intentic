@@ -34,11 +34,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
+import { arg } from "./lib/args.mjs";
 
-const arg = (name, fallback) => {
-    const index = process.argv.indexOf(`--${name}`);
-    return index === -1 || index === process.argv.length - 1 ? fallback : process.argv[index + 1];
-};
 const since = arg("since", "");
 
 const agents = JSON.parse(fs.readFileSync(path.join(HISTORY_ROOT, "agents.json"), "utf8"));
