@@ -37,13 +37,21 @@ const bootstrapBlock = (text: string): string | undefined => {
 };
 
 const PAIRS = [
-    { dialect: `sh`, device: `deviceSh`, sync: `desktopSh`, declares: /^ROUTE="(?:device|sync)"$/mu, handsOver: /"\$ROUTE" setup/u },
+    {
+        dialect: `sh`,
+        device: `deviceSh`,
+        sync: `desktopSh`,
+        declares: /^ROUTE="(?:device|sync)"$/mu,
+        handsOver: /"\$ROUTE" setup/u,
+        runnableStage: /chmod \+x "\$part"/u,
+    },
     {
         dialect: `PowerShell`,
         device: `devicePs1`,
         sync: `desktopPs1`,
         declares: /^\$route = '(?:device|sync)'$/mu,
         handsOver: /@\(\$route, 'setup'/u,
+        runnableStage: /^\s*\$part = "\$Dest\.part(?:-\$published)?\.exe"$/mu,
     },
 ] as const satisfies readonly {
     dialect: string;
@@ -51,6 +59,7 @@ const PAIRS = [
     sync: keyof typeof INSTALL_SCRIPTS;
     declares: RegExp;
     handsOver: RegExp;
+    runnableStage: RegExp;
 }[];
 
 describe.each(PAIRS)(`the $dialect installers`, (pair) => {
@@ -79,6 +88,23 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
             expect(block, `${path} downloads without being able to resume`).toMatch(/--continue-at|AddRange/);
             expect(block, `${path} never pins the download to the tag \`latest\` resolves to`).toContain(`releases/latest`);
             expect(block, `${path} never runs what it downloaded before installing it`).toMatch(/\bversion\b/);
+        }
+    });
+
+    /* AND THE STAGED FILE HAS TO BE RUNNABLE BEFORE IT IS PROBED — the same requirement spelled differently per
+     * dialect, and missing from the PowerShell one for as long as the staging existed. sh needs the execute
+     * bit. PowerShell needs a name ending in `.exe`, because it resolves a command by EXTENSION: a path whose
+     * extension is not in PATHEXT is not a program to it, whatever the bytes are, so `& $part version` on
+     * `intentic-machine.exe.part-1.248.0` failed as an unrecognized command. The probe reported that as "no
+     * version" and the shim deleted a complete 83 MB download and blamed a captive portal — on the first
+     * machine that ever reached the download with an agent already installed, because the path only opens for
+     * an installed agent that cannot take the handover. */
+    it(`make the staged download runnable before probing it`, () => {
+        for (const { path, text } of both) {
+            expect(
+                bootstrapBlock(text) ?? ``,
+                `${path} probes a staged download this dialect will not run (sh needs chmod +x, PowerShell needs a .exe name)`,
+            ).toMatch(pair.runnableStage);
         }
     });
 

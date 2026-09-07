@@ -175,12 +175,21 @@ function Install-IntenticAgent {
     # years: without this line the download fails on exactly the machines least able to explain why.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $published = Get-IntenticPublishedVersion
+    # THE STAGED NAME ENDS IN .exe, AND THAT SUFFIX IS LOAD-BEARING. What lands is probed by running it, and
+    # PowerShell resolves a command by EXTENSION: a path whose extension is not in PATHEXT is not a program to
+    # it, whatever the bytes say. So `& $part version` on `intentic-machine.exe.part-1.248.0` fails with "not
+    # recognized as the name of a cmdlet, function, script file, or operable program", the probe reads that as
+    # "no version", and this function deletes a complete 83 MB download and blames a captive portal - which is
+    # exactly what it did to the first machine that ever reached this path with an agent already installed.
+    #
+    # The agent's own `upgrade` stages without the suffix and is fine: it probes with spawn, and CreateProcess
+    # loads a PE by its bytes. This block is the one that has to ask a shell.
     if ($published) {
         $url = "$releases/download/v$published/intentic-machine-windows-$Arch.exe"
-        $part = "$Dest.part-$published"
+        $part = "$Dest.part-$published.exe"
     } else {
         $url = "$releases/latest/download/intentic-machine-windows-$Arch.exe"
-        $part = "$Dest.part"
+        $part = "$Dest.part.exe"
     }
     # A partial from another release is bytes that can never be finished.
     $leaf = Split-Path $Dest -Leaf
