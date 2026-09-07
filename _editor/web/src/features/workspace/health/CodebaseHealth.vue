@@ -37,6 +37,11 @@ const modules = computed(() => moduleRows(health.value?.modules ?? []));
 // The index is built in the background, so a panel opened right after boot can be reading a partial one. Saying
 // so beats rendering "0 symbols" as if it were a fact about the repository.
 const building = computed(() => health.value?.freshness.state === `building`);
+/* HEADER AND ROWS SHARE ONE TRACK LIST so the columns line up, and sharing it is the whole point: two elements
+ * that must agree, so the list is written once. The bar column is fixed rather than fluid — a ranked bar is
+ * compared against its neighbours, and a column that grows with the panel would rescale the comparison every
+ * time the sidebar moves. */
+const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items-center gap-2`;
 </script>
 
 <template>
@@ -126,7 +131,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                         <!-- The action's track is held open in the header too, so the columns below it stay put
                              whether or not a row is being hovered. -->
                         <div class="mt-2 flex items-center gap-2 px-1 pb-1 text-2xs text-subtle">
-                            <div class="hs-row min-w-0 flex-1">
+                            <div :class="`${ROW_CLASS} min-w-0 flex-1`">
                                 <span></span>
                                 <span></span>
                                 <span>risk</span>
@@ -136,10 +141,14 @@ const building = computed(() => health.value?.freshness.state === `building`);
                             <span class="w-4 shrink-0"></span>
                         </div>
                         <ul class="flex flex-col">
-                            <li v-for="(row, index) in rows" :key="row.path" class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay">
+                            <li
+                                v-for="(row, index) in rows"
+                                :key="row.path"
+                                class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay"
+                            >
                                 <!-- One hue for every bar: length is the whole message, and a colour keyed to the
                                      bar's own size would double-encode it. Text keeps text tokens throughout. -->
-                                <button type="button" class="hs-row min-w-0 flex-1 text-left" @click="emit('open-file', row.path)">
+                                <button type="button" :class="`${ROW_CLASS} min-w-0 flex-1 text-left`" @click="emit('open-file', row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                     <!-- The DIRECTORY takes the truncation; the filename is what identifies the
                                          row, so it never shrinks, and it is the directory, not the row, that
@@ -186,7 +195,11 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
                     <!-- No bar here: the RANK is the claim, and export counts are not a magnitude worth drawing. -->
                     <ul v-else class="mt-2 flex flex-col">
-                        <li v-for="(module, index) in modules" :key="module.path" class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay">
+                        <li
+                            v-for="(module, index) in modules"
+                            :key="module.path"
+                            class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay"
+                        >
                             <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="emit('open-file', module.path)">
                                 <span class="w-5 shrink-0 text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                 <span class="flex min-w-0 flex-1 overflow-hidden text-xs">
@@ -217,15 +230,3 @@ const building = computed(() => health.value?.freshness.state === `building`);
         </div>
     </div>
 </template>
-
-<style scoped>
-/* Header and rows share one track list so the columns line up. The bar column is fixed rather than fluid: a
-   ranked bar is compared against its neighbours, and a column that grows with the panel would rescale the
-   comparison every time the sidebar moves. */
-.hs-row {
-    display: grid;
-    grid-template-columns: 1.25rem minmax(0, 1fr) 8rem 3.5rem 4rem;
-    align-items: center;
-    gap: 0.5rem;
-}
-</style>

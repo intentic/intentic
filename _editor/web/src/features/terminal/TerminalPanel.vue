@@ -902,7 +902,7 @@ const registerPanelCommands = (): void => {
 // merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on the
 // chat strip.
 const onBarContextMenu = (event: MouseEvent): void => {
-    if (event.target instanceof Element && event.target.closest(`button, .tterm`) !== null) {
+    if (event.target instanceof Element && event.target.closest(`button, [data-term-tab]`) !== null) {
         return;
     }
     event.preventDefault();
@@ -942,6 +942,18 @@ watch(ctrlArmed, (armed) => {
         window.removeEventListener(`keydown`, onArmedKeydown, true);
     }
 });
+
+/* ONE SHAPE FOR BOTH CALL SITES — the armed Ctrl toggle and the ten keys below it. A string in script rather
+ * than a class in a stylesheet: the kit holds its own class lists this way (lib/ui.ts, rows/row.ts), so the
+ * whole row stays inside the utility surface and there is still only one place to change the shape.
+ *
+ * 44px, not 36. These keys only exist on a coarse pointer (the row is `v-if="coarse"`), so there is no mouse to
+ * keep a tighter size for, and they are the most repeatedly and quickly pressed controls the app has on a phone:
+ * driving a shell is Tab, Tab, arrow, Ctrl-C, and every one of those is a key the soft keyboard could not offer.
+ * They also sit at the very bottom of the screen, where thumb accuracy is worst. The row is theirs alone and
+ * scrolls sideways, so the height costs nothing but the 8px it takes. The 0.6rem of padding is off the 0.25rem
+ * spacing scale, so it is spelled as the rem it is rather than rounded onto a step it is not. */
+const KEY_CLASS = `inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-line bg-canvas px-[0.6rem] font-mono text-[0.8125rem] text-content active:bg-overlay`;
 
 const EXTRA_KEYS: readonly { label: string; data: string }[] = [
     { label: `Esc`, data: `\x1b` },
@@ -1157,8 +1169,16 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <div
                     v-for="(group, gi) in groups"
                     :key="groupKey(group)"
-                    class="tterm group flex h-6 shrink-0 cursor-pointer select-none items-center rounded-md"
-                    :class="[vertical ? 'w-full min-w-0' : '', { 'tterm-on': gi === activeGroupIndex, 'tterm-selected': isSelected(group) }]"
+                    data-term-tab
+                    class="group flex h-6 shrink-0 cursor-pointer select-none items-center rounded-md transition-colors"
+                    :class="[
+                        vertical ? 'w-full min-w-0' : '',
+                        isSelected(group)
+                            ? 'bg-primary-500/14 text-content'
+                            : gi === activeGroupIndex
+                              ? 'bg-overlay text-content'
+                              : 'text-muted hover:bg-content/6 hover:text-content',
+                    ]"
                 >
                     <template v-for="(name, si) in group" :key="name">
                         <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
@@ -1344,7 +1364,13 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     @keydown.shift.enter.prevent="findPrevious"
                 />
                 <span class="min-w-14 text-center font-mono text-2xs text-muted" aria-live="polite">{{ findLabel }}</span>
-                <button type="button" :class="ui.iconButton()" aria-label="Previous match" v-tooltip.top="'Previous match (Shift+Enter)'" @click="findPrevious">
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    aria-label="Previous match"
+                    v-tooltip.top="'Previous match (Shift+Enter)'"
+                    @click="findPrevious"
+                >
                     <Icon name="chevron-up" />
                 </button>
                 <button type="button" :class="ui.iconButton()" aria-label="Next match" v-tooltip.top="'Next match (Enter)'" @click="findNext">
@@ -1414,8 +1440,14 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
                  the soft keyboard stays up while the key is injected. -->
             <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
-                <button type="button" class="termkey" :class="{ 'termkey-on': ctrlArmed }" @pointerdown.prevent="ctrlArmed = !ctrlArmed">Ctrl</button>
-                <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" class="termkey" @pointerdown.prevent="pressKey(key.data)">
+                <button
+                    type="button"
+                    :class="[KEY_CLASS, ctrlArmed ? 'border-primary-500/60 bg-primary-500/16 text-primary-500' : '']"
+                    @pointerdown.prevent="ctrlArmed = !ctrlArmed"
+                >
+                    Ctrl
+                </button>
+                <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" :class="KEY_CLASS" @pointerdown.prevent="pressKey(key.data)">
                     {{ key.label }}
                 </button>
             </div>
@@ -1532,27 +1564,6 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </template>
 
 <style scoped>
-/* Terminal tab pill: mirrors FileTabs' .ftab muted→hover→active progression, kept rounded to sit among the
-   toolbar's other rounded-md buttons. Selected (Shift/Ctrl+click) tints toward primary so a multi-selection
-   reads at a glance without fighting the active pill's overlay. */
-.tterm {
-    color: var(--color-muted);
-    transition:
-        background-color 0.15s,
-        color 0.15s;
-}
-.tterm:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-    color: var(--color-content);
-}
-.tterm-on {
-    background: var(--color-overlay);
-    color: var(--color-content);
-}
-.tterm-selected {
-    background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
-    color: var(--color-content);
-}
 /* Split cells (built by useTerminal's mount, plain elements, hence :deep): equal flex columns with a hairline
    between, and a top accent on the focused pane so keystroke routing is visible in a split. */
 .term-body :deep(.term-cell) {
@@ -1568,35 +1579,5 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 }
 .term-body.term-split :deep(.term-cell:focus-within) {
     box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--color-primary-500) 55%, transparent);
-}
-
-/* Touch extra-keys: 40px min targets, monospace glyphs, armed-Ctrl tint. */
-/* 44px, not 36. These keys only exist on a coarse pointer (the row is `v-if="coarse"`), so there is no mouse
-   to keep a tighter size for, and they are the most repeatedly and quickly pressed controls the app has on a
-   phone: driving a shell is Tab, Tab, arrow, Ctrl-C, and every one of those is a key the soft keyboard could
-   not offer. They also sit at the very bottom of the screen, where thumb accuracy is worst. The row is theirs
-   alone and scrolls sideways, so the height costs nothing but the 8px it takes. */
-.termkey {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.75rem;
-    height: 2.75rem;
-    padding: 0 0.6rem;
-    flex-shrink: 0;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-line);
-    background: var(--color-canvas);
-    color: var(--color-content);
-    font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.8125rem;
-}
-.termkey:active {
-    background: var(--color-overlay);
-}
-.termkey-on {
-    border-color: color-mix(in srgb, var(--color-primary-500) 60%, transparent);
-    background: color-mix(in srgb, var(--color-primary-500) 16%, transparent);
-    color: var(--color-primary-500);
 }
 </style>

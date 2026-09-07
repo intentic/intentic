@@ -12,7 +12,7 @@ import type { Disposable } from "@intentic/extension-api";
 // The shell in miniature: the terminal panel and the chat panel own a root class each, everything else (here
 // the editor) is the fallback surface.
 document.body.innerHTML = `
-    <div class="term"><span class="tterm" data-id="pill"></span></div>
+    <div class="term"><span data-term-tab data-id="pill"></span></div>
     <div class="chat-panel"><textarea data-id="composer"></textarea></div>
     <div class="editor"><span data-id="line"></span></div>
     <div class="chat-panel" data-id="nesting"><div class="term"><span data-id="nested-pill"></span></div></div>

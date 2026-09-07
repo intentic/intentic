@@ -172,10 +172,14 @@ watch(
 <template>
     <div class="group/tabs relative flex min-w-0 flex-1">
         <!-- A right-click that lands on the scroller ITSELF (past the last tab) is the strip's own menu; a tab
-             stops its own event before it gets here. -->
+             stops its own event before it gets here.
+
+             The native horizontal scrollbar is hidden by `.scrollbar-none` (ui styles/utilities.css): it would
+             take 6px off the fixed-height row and push the tab text up. Scrolling still works via scrollLeft (the
+             wheel handler + the overlay thumb below), which is the condition that utility documents for its use. -->
         <div
             ref="scroller"
-            class="ftabs-scroll scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto"
+            class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto"
             @scroll="updateThumb"
             @wheel="onWheel"
             @contextmenu="emit('contextmenu', undefined, $event)"
@@ -184,8 +188,13 @@ watch(
                 v-for="tab in tabs"
                 :key="tab.id"
                 :ref="(el) => setTabEl(tab.id, el)"
-                class="ftab group flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs"
-                :class="{ 'ftab-on': tab.id === active }"
+                data-tab
+                class="group flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-b-2 border-r-line px-3 py-1.5 text-xs transition-colors"
+                :class="
+                    tab.id === active
+                        ? `border-b-primary-500 bg-canvas text-content`
+                        : `border-b-transparent text-muted hover:bg-content/6 hover:text-content`
+                "
                 v-tooltip.bottom="tabHint(tab)"
                 @click="emit('select', tab.id)"
                 @dblclick="emit('keep', tab.id)"
@@ -203,7 +212,8 @@ watch(
                      one this app has never heard of): an unknown name renders the set's fallback, never an error. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
-                <span class="max-w-40 truncate" :class="{ 'ftab-label--preview': tab.id === preview }">{{ tabLabel(tab) }}</span>
+                <!-- Italic slants past its box; truncate clips the last glyph unless we leave room on the right. -->
+                <span class="max-w-40 truncate" :class="tab.id === preview ? `pr-[0.2em] italic` : ``">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
                     <Icon
                         name="circle-fill"
@@ -221,8 +231,12 @@ watch(
         <!-- Overlay scrollbar: hidden until the strip overflows, faint by default, highlighted on strip hover. -->
         <div
             v-if="thumbWidth"
-            class="ftabs-thumb"
-            :class="{ 'ftabs-thumb--active': dragging }"
+            class="absolute bottom-px h-0.75 rounded-full transition-colors"
+            :class="
+                dragging
+                    ? `cursor-grabbing bg-muted`
+                    : `cursor-grab group-hover/tabs:bg-line-strong group-hover/tabs:hover:cursor-grabbing group-hover/tabs:hover:bg-muted`
+            "
             :style="{ left: `${thumbLeft}%`, width: `${thumbWidth}%` }"
             @pointerdown="onThumbDown"
             @pointermove="onThumbMove"
@@ -230,51 +244,3 @@ watch(
         ></div>
     </div>
 </template>
-
-<style scoped>
-/* The native horizontal scrollbar is hidden by `.scrollbar-none` on the element (styles/utilities.css): it
- * would take 6px off the fixed-height row and push the tab text up. Scrolling still works via scrollLeft
- * (wheel handler + the overlay thumb below), which is the condition that utility documents for its use.
- * `.ftabs-scroll` remains as the hook the thumb below measures against. */
-.ftabs-thumb {
-    position: absolute;
-    bottom: 1px;
-    height: 3px;
-    border-radius: 9999px;
-    background: transparent;
-    cursor: grab;
-    transition: background-color 0.15s;
-}
-.group\/tabs:hover .ftabs-thumb {
-    background: var(--color-line-strong);
-}
-.group\/tabs:hover .ftabs-thumb:hover,
-.ftabs-thumb--active {
-    background: var(--color-muted);
-    cursor: grabbing;
-}
-.ftab {
-    color: var(--color-muted);
-    cursor: pointer;
-    border-right: 1px solid var(--color-line);
-    border-bottom: 2px solid transparent;
-    transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
-}
-.ftab:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-    color: var(--color-content);
-}
-.ftab-on {
-    background: var(--color-canvas);
-    color: var(--color-content);
-    border-bottom-color: var(--color-primary-500);
-}
-/* Italic slants past its box; truncate clips the last glyph unless we leave room on the right. */
-.ftab-label--preview {
-    font-style: italic;
-    padding-right: 0.2em;
-}
-</style>

@@ -288,7 +288,14 @@ const fit = (): void => void flow.value?.fitView(FIT);
         </template>
 
         <Panel position="bottom-right">
-            <button type="button" v-tooltip.top="`Fit the whole graph`" aria-label="Fit the whole graph" class="dag-editor-control" @click="fit()">
+            <!-- `rounded-sm`, not `rounded-md`: this theme sets --radius-sm to 0.375rem and --radius-md to 0.5rem. -->
+            <button
+                type="button"
+                v-tooltip.top="`Fit the whole graph`"
+                aria-label="Fit the whole graph"
+                class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border border-line bg-canvas text-[0.625rem] text-subtle hover:border-line-strong hover:text-content"
+                @click="fit()"
+            >
                 <Icon name="expand" />
             </button>
         </Panel>
@@ -359,22 +366,5 @@ const fit = (): void => void flow.value?.fitView(FIT);
 .dag-editor .vue-flow__pane {
     background-image: radial-gradient(circle, var(--color-line) 1px, transparent 1px);
     background-size: 18px 18px;
-}
-.dag-editor-control {
-    display: flex;
-    height: 1.5rem;
-    width: 1.5rem;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.375rem;
-    border: 1px solid var(--color-line);
-    background: var(--color-canvas);
-    font-size: 0.625rem;
-    color: var(--color-subtle);
-}
-.dag-editor-control:hover {
-    border-color: var(--color-line-strong);
-    color: var(--color-content);
 }
 </style>

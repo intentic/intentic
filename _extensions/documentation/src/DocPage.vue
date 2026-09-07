@@ -83,7 +83,7 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
                 v-for="anchor in anchors"
                 :key="anchor.path"
                 v-bind="anchorLink(anchor)"
-                class="anchorrow flex w-full items-start gap-3 rounded-lg px-2.5 py-1.5 text-left"
+                class="ui-row-select flex w-full items-start gap-3 rounded-lg px-2.5 py-1.5 text-left"
             >
                 <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
                 <span class="flex min-w-0 flex-col">
@@ -111,19 +111,3 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
         </footer>
     </article>
 </template>
-
-<style scoped>
-/* Same row idiom as the contents column beside it, and the same reason for the short transition: these are rows
-   you sweep across, so the feedback has to land inside the sweep. */
-.anchorrow {
-    cursor: pointer;
-    transition: background-color 0.09s ease-out;
-}
-.anchorrow:hover {
-    background: color-mix(in srgb, var(--color-content) 5%, transparent);
-}
-.anchorrow:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--color-primary-500);
-}
-</style>
