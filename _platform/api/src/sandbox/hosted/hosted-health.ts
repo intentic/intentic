@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_HEALTH, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
+import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedFleet } from "./hosted-fleet.js";
 import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 
@@ -45,6 +46,21 @@ import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 const ALERT_EVERY_MS = 6 * 60 * 60 * 1000;
 
 export interface HostedHealth {
+    /* THE LANE HAS RUN OUT OF MACHINES (hosted-capacity.ts): the fleet is on the ceiling its provider allows,
+     * with no warm stock left to hand over. The one fault here that is not a disagreement between the rows and
+     * Fly — both sides agree perfectly, there is simply nowhere to put the next person's sandbox — and the one
+     * NOBODY was told about. The pool's inability to build stock has always been logged and never mailed
+     * ("ordinary weather": a claim just emptied a slot), so a fleet that had genuinely filled up looked exactly
+     * like a busy afternoon, while every new sign-up was being turned away. It is mailed, because the fix is a
+     * raised quota and only a person can do that. */
+    readonly capacity: {
+        // Undefined where nothing needed counting: no ceiling configured and no refusal to explain, which is
+        // also the only shape in which `full` cannot be true (hosted-capacity.ts).
+        readonly used: number | undefined;
+        readonly cap: number;
+        readonly full: boolean;
+        readonly reason: "cap" | "provider" | undefined;
+    };
     // Rows whose app Fly no longer has: the shape that leaves people pressing "start it over".
     readonly missing: string[];
     // Apps running a machine that names ANOTHER deployment. The cause signal, and the only orphan shape that
@@ -59,7 +75,7 @@ export interface HostedHealth {
 }
 
 export const hostedHealth = async (prisma: PrismaClient, config: Config): Promise<HostedHealth> => {
-    const fleet = await hostedFleet(prisma, config);
+    const [fleet, capacity] = await Promise.all([hostedFleet(prisma, config), hostedCapacity(prisma, config)]);
     const missing = fleet.filter((entry) => entry.missing).map((entry) => entry.appName);
     // `orphan` is the fleet's word for an app with no row behind it, which says nothing yet about WHOSE it is.
     // The reaper's own classifier answers that from the provider; skipped entirely when there is nothing to
@@ -76,19 +92,47 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config): Promis
         target: config.hosted.poolSize,
     }));
     return {
+        capacity: { used: capacity.used, cap: capacity.cap, full: capacity.full, reason: capacity.reason },
         missing,
         strangers,
         litter,
         stock,
-        healthy: missing.length === 0 && strangers.length === 0 && stock.every((r) => r.warm >= r.target),
+        healthy: !capacity.full && missing.length === 0 && strangers.length === 0 && stock.every((r) => r.warm >= r.target),
     };
 };
 
+/* WHY THE LANE IS FULL, told apart in the mail because the two have different remedies and only one of them
+ * is ours to perform: our own ceiling is a number in this platform's config, and the provider refusing is a
+ * quota (or a region's hardware) that only Fly can move. Both end the same way, with the thing an operator
+ * most wants to know: nobody new is getting a sandbox, and the people arriving are being told so. */
+const capacityLine = (capacity: HostedHealth[`capacity`]): string => {
+    const held = `${capacity.used ?? `all`}${capacity.cap === 0 ? `` : ` of ${capacity.cap}`} machines`;
+    const cause =
+        capacity.reason === `cap`
+            ? `This platform is at the ceiling it was configured with (${held}): raise HOSTED_MAX_MACHINES, and the provider's own allowance with it.`
+            : `Fly refused to create a machine for capacity in the last few minutes, with ${held} in the fleet: its allowance for this org, or a region's hardware, is the limit rather than anything here.`;
+    return `${cause} There is no warm stock left either, so nobody can be given a new sandbox: new sign-ups are being told plainly that we are out of machines and pointed at running one on their own computer. Free machines or raise the limit and the lane opens again by itself.`;
+};
+
+// What the mail is about, in its subject line: a full fleet leads, because it is the one that is happening to
+// people RIGHT NOW rather than to the platform's bookkeeping.
+const alertSubject = (health: HostedHealth): string => {
+    const said = [
+        health.capacity.full
+            ? `the fleet is full (${health.capacity.used ?? `all`}${health.capacity.cap === 0 ? `` : ` of ${health.capacity.cap}`} machines)`
+            : ``,
+        health.missing.length > 0 ? `${health.missing.length} machine(s) gone` : ``,
+        health.strangers.length > 0 ? `${health.strangers.length} app(s) another deployment is running` : ``,
+    ].filter((part) => part !== ``);
+    return `intentic hosted: ${said.join(`, `)}`;
+};
+
 const alertMail = (config: Config, health: HostedHealth) => ({
-    subject: `intentic hosted: ${health.missing.length} machine(s) gone, ${health.strangers.length} app(s) another deployment is running`,
+    subject: alertSubject(health),
     html: linkEmail({
-        heading: `The hosted fleet and the database disagree`,
+        heading: health.capacity.full ? `The hosted lane has run out of machines` : `The hosted fleet and the database disagree`,
         body: [
+            health.capacity.full ? capacityLine(health.capacity) : ``,
             health.missing.length > 0 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.` : ``,
             health.strangers.length > 0
                 ? `${health.strangers.length} app(s) under this platform's prefix are running machines stamped by a DIFFERENT deployment: ${health.strangers.join(`, `)}. Another deployment is sharing this Fly org and credential, which is how a fleet gets destroyed out from under its rows.`
@@ -127,17 +171,20 @@ export const sweepHostedHealth = async (
     // on exactly the days there is nothing else to say: the apps the reaper cannot prove are ours are a small
     // manual job, and a log nobody can grep is the same as not knowing.
     if (health.healthy) {
-        logger.info({ stock: health.stock, litter: health.litter }, `hosted health: fleet and database agree`);
+        logger.info({ stock: health.stock, litter: health.litter, capacity: health.capacity }, `hosted health: fleet and database agree`);
         return health;
     }
     logger.error(
-        { missing: health.missing, strangers: health.strangers, litter: health.litter, stock: health.stock },
-        `hosted health: the fleet and the database disagree`,
+        { capacity: health.capacity, missing: health.missing, strangers: health.strangers, litter: health.litter, stock: health.stock },
+        health.capacity.full
+            ? `hosted health: the lane is full; nobody can be given a new machine until the provider's allowance is raised`
+            : `hosted health: the fleet and the database disagree`,
     );
     const admins = adminsOf(config);
     // The pool being short is ordinary weather (a claim just emptied a slot, a build is in flight), so it is
-    // logged but never mailed; a machine that has vanished under its row never is.
-    const worthMailing = health.missing.length > 0 || health.strangers.length > 0;
+    // logged but never mailed; a machine that has vanished under its row never is. A FULL FLEET is neither: the
+    // stock is short for a reason no tick will fix, and the only remedy is somebody raising an allowance.
+    const worthMailing = health.capacity.full || health.missing.length > 0 || health.strangers.length > 0;
     if (admins.length === 0 || !worthMailing || now() - lastAlertAt < ALERT_EVERY_MS) {
         return health;
     }

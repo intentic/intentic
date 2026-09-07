@@ -8,8 +8,19 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { decryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_BUILD, runExclusive } from "../../jobs-lock.js";
-import { createMachine, destroyMachine, flyBuildRole, getMachine, getMachineDetail, isFlyGone, listMachines, updateMachine } from "./fly.js";
+import {
+    createMachine,
+    destroyMachine,
+    flyBuildRole,
+    getMachine,
+    getMachineDetail,
+    isFlyCapacity,
+    isFlyGone,
+    listMachines,
+    updateMachine,
+} from "./fly.js";
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly-tokens.js";
+import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "./hosted.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "./hosted-usage.js";
@@ -68,7 +79,7 @@ const utcDayStart = (now: Date): Date => new Date(Date.UTC(now.getUTCFullYear(),
 /* WHY A BUILD WAS NOT STARTED, in the words the route answers and the card shows. Every code is a refusal
  * that spent nothing: the checks run in order of cost, and the first that fails ends the request before a
  * token is minted or a machine created. */
-export type HostedBuildRefusal = "off" | "no-machine" | "mismatch" | "invalid" | "busy" | "daily" | "ceiling" | "budget";
+export type HostedBuildRefusal = "off" | "no-machine" | "mismatch" | "invalid" | "busy" | "daily" | "ceiling" | "budget" | "capacity";
 
 export class HostedBuildRefused extends Error {
     readonly code: HostedBuildRefusal;
@@ -155,6 +166,14 @@ const assertWithinLimits = async (prisma: PrismaClient, config: Config, ownerId:
     const minutesToday = (finishedToday._sum.minutes ?? 0) + running * buildTimeoutMinutes;
     if (buildMinutesPerDay > 0 && minutesToday + buildTimeoutMinutes > buildMinutesPerDay) {
         throw new HostedBuildRefused(`ceiling`, `the platform's environment builds for today are spent; try again tomorrow`);
+    }
+    /* AND A MACHINE HAS TO FIT. A builder is a real machine on the provider for the minutes of one build, so
+     * it spends the same finite allowance a person's sandbox does — which makes a full fleet the one brake
+     * that has to be checked here as well as at provisioning, or an environment build would quietly take the
+     * slot the next sign-up needs. Refused, not queued: the owner's machine keeps running exactly as it is
+     * (the overlay is an addition, never a repair), so "later" costs them nothing. */
+    if ((await hostedCapacity(prisma, config)).headroom === 0) {
+        throw new HostedBuildRefused(`capacity`, `we have no room on our provider for a build machine right now; your sandbox is unaffected, try again a little later`);
     }
     const budget = await hostedBudgetOf(prisma, config, ownerId);
     if (budget.metered && budget.remainingMinutes < buildTimeoutMinutes) {
@@ -265,6 +284,102 @@ const finishHostedBuild = async (
     logger.info({ build: build.id, ok, minutes, exitCode: outcome.exitCode }, `hosted build: finished`);
 };
 
+/* THE SPENDING HALF OF STARTING A BUILD, after every refusal above it has passed and the machine row's guard
+ * is won: a scoped deploy token, a builder machine carrying the recipe, and the row that owns both. Its own
+ * function because it is also the only half with cleanup — anything that fails here must leave nothing
+ * running and nothing reserved, since the caller has already told the row a build is in flight. */
+const startBuilder = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    machine: { id: string; sandboxId: string; appName: string; region: string },
+    request: HostedBuildRequest,
+    pinned: string,
+    id: string,
+): Promise<HostedBuildState> => {
+    const { flyApiToken, flyOrg, buildTimeoutMinutes } = config.hosted;
+    let builderMachineId: string | undefined;
+    try {
+        const secret = randomBytes(32).toString(`base64url`);
+        const organizationId = await organizationIdOf(flyApiToken, flyOrg);
+        const deploy = await mintAppDeployToken(flyApiToken, organizationId, {
+            app: machine.appName,
+            name: `intentic overlay build ${id}`,
+            expiryMinutes: buildTimeoutMinutes + 15,
+        });
+        const image = overlayImageTag(machine.appName);
+        const machineConfig = {
+            ...flyBuildMachineConfig({
+                image: config.hosted.builderImage,
+                guest: { cpuKind: config.hosted.builderCpuKind, cpus: config.hosted.builderCpus, memoryMb: config.hosted.builderMemoryMb },
+                files: [
+                    { path: BUILD_PATHS.dockerfile, content: pinned },
+                    { path: BUILD_PATHS.script, content: buildScript() },
+                    { path: BUILD_PATHS.dockerConfig, content: dockerConfigJson(REGISTRY, deploy.token) },
+                ],
+                entrypoint: [`/bin/sh`, BUILD_PATHS.script],
+                env: [
+                    [BUILD_ENV.image, image],
+                    [BUILD_ENV.cache, overlayCacheTag(machine.appName)],
+                    [BUILD_ENV.timeoutSeconds, String(buildTimeoutMinutes * 60)],
+                    [BUILD_ENV.reportUrl, `${config.api.url}/sandbox/hosted-build-report/${id}`],
+                    [BUILD_ENV.secret, secret],
+                ],
+            }),
+            metadata: flyBuildRole(machine.sandboxId, hostedInstanceId(config)),
+        };
+        const created = await createMachine(flyApiToken, machine.appName, {
+            name: `${machine.appName}-build-${id.slice(0, 8)}`,
+            region: machine.region,
+            config: machineConfig,
+        });
+        builderMachineId = created.machineId;
+        const row = await prisma.hostedBuild.create({
+            data: {
+                id,
+                hostedMachineId: machine.id,
+                hash: request.hash,
+                baseImage: config.hosted.image,
+                content: request.content,
+                state: BUILD_STATES.building,
+                image,
+                builderMachineId: created.machineId,
+                builderInstanceId: created.instanceId,
+                secretHash: sha256Hex(secret),
+                tokenId: deploy.id,
+                requestedBy: request.requestedBy,
+            },
+        });
+        logger.info({ app: machine.appName, build: id, requestedBy: request.requestedBy }, `hosted build: builder created`);
+        return buildStateOf(row);
+    } catch (error) {
+        // Nothing was recorded, so nothing may be left running or reserved: the builder (if it got made) goes,
+        // and the row's guard opens again for the next request.
+        if (builderMachineId !== undefined) {
+            await destroyMachine(flyApiToken, machine.appName, builderMachineId, { force: true }).catch((err: unknown) =>
+                logger.warn(
+                    { err, app: machine.appName },
+                    `hosted build: cleanup of a builder after a failed start failed; the reconcile collects it`,
+                ),
+            );
+        }
+        await prisma.hostedMachine.updateMany({ where: { id: machine.id, buildingId: id }, data: { buildingId: null } });
+        /* THE PROVIDER REFUSING THE BUILDER FOR CAPACITY is the brake above arriving one call later — the org
+         * filled up between the count and the create, or this platform runs without a ceiling of its own. Same
+         * refusal, so the card says "no room right now" rather than showing its owner a gateway error over a
+         * build that spent nothing, and latched so provisioning knows before the next arrival asks. */
+        if (isFlyCapacity(error)) {
+            noteProviderAtCapacity(machine.region);
+            logger.error({ err: error, app: machine.appName }, `hosted build: the provider has no machine left for a builder`);
+            throw new HostedBuildRefused(
+                `capacity`,
+                `we have no room on our provider for a build machine right now; your sandbox is unaffected, try again a little later`,
+            );
+        }
+        throw error;
+    }
+};
+
 /* START A BUILD: verify, brake, win the row, then spend, in that order, so every refusal costs nothing and
  * every failure after the guard releases it. Answers the build's state as started, which is what the card
  * polls from then on. */
@@ -315,75 +430,7 @@ export const requestHostedBuild = async (
     if (won.count === 0) {
         throw new HostedBuildRefused(`busy`, `this sandbox's environment is already being built`);
     }
-    const { flyApiToken, flyOrg, buildTimeoutMinutes } = config.hosted;
-    let builderMachineId: string | undefined;
-    try {
-        const secret = randomBytes(32).toString(`base64url`);
-        const organizationId = await organizationIdOf(flyApiToken, flyOrg);
-        const deploy = await mintAppDeployToken(flyApiToken, organizationId, {
-            app: hosted.appName,
-            name: `intentic overlay build ${id}`,
-            expiryMinutes: buildTimeoutMinutes + 15,
-        });
-        const image = overlayImageTag(hosted.appName);
-        const machineConfig = {
-            ...flyBuildMachineConfig({
-                image: config.hosted.builderImage,
-                guest: { cpuKind: config.hosted.builderCpuKind, cpus: config.hosted.builderCpus, memoryMb: config.hosted.builderMemoryMb },
-                files: [
-                    { path: BUILD_PATHS.dockerfile, content: pinned },
-                    { path: BUILD_PATHS.script, content: buildScript() },
-                    { path: BUILD_PATHS.dockerConfig, content: dockerConfigJson(REGISTRY, deploy.token) },
-                ],
-                entrypoint: [`/bin/sh`, BUILD_PATHS.script],
-                env: [
-                    [BUILD_ENV.image, image],
-                    [BUILD_ENV.cache, overlayCacheTag(hosted.appName)],
-                    [BUILD_ENV.timeoutSeconds, String(buildTimeoutMinutes * 60)],
-                    [BUILD_ENV.reportUrl, `${config.api.url}/sandbox/hosted-build-report/${id}`],
-                    [BUILD_ENV.secret, secret],
-                ],
-            }),
-            metadata: flyBuildRole(hosted.sandboxId, hostedInstanceId(config)),
-        };
-        const created = await createMachine(flyApiToken, hosted.appName, {
-            name: `${hosted.appName}-build-${id.slice(0, 8)}`,
-            region: hosted.region,
-            config: machineConfig,
-        });
-        builderMachineId = created.machineId;
-        const row = await prisma.hostedBuild.create({
-            data: {
-                id,
-                hostedMachineId: hosted.id,
-                hash: request.hash,
-                baseImage: config.hosted.image,
-                content: request.content,
-                state: BUILD_STATES.building,
-                image,
-                builderMachineId: created.machineId,
-                builderInstanceId: created.instanceId,
-                secretHash: sha256Hex(secret),
-                tokenId: deploy.id,
-                requestedBy: request.requestedBy,
-            },
-        });
-        logger.info({ app: hosted.appName, build: id, requestedBy: request.requestedBy }, `hosted build: builder created`);
-        return buildStateOf(row);
-    } catch (error) {
-        // Nothing was recorded, so nothing may be left running or reserved: the builder (if it got made) goes,
-        // and the row's guard opens again for the next request.
-        if (builderMachineId !== undefined) {
-            await destroyMachine(flyApiToken, hosted.appName, builderMachineId, { force: true }).catch((err: unknown) =>
-                logger.warn(
-                    { err, app: hosted.appName },
-                    `hosted build: cleanup of a builder after a failed start failed; the reconcile collects it`,
-                ),
-            );
-        }
-        await prisma.hostedMachine.updateMany({ where: { id: hosted.id, buildingId: id }, data: { buildingId: null } });
-        throw error;
-    }
+    return startBuilder(prisma, config, logger, hosted, request, pinned, id);
 };
 
 /* THE BUILDER'S OWN REPORT, authenticated by the secret only it and the row (hashed) hold. A report can only

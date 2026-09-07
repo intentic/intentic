@@ -6,6 +6,7 @@ import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { testIngressConfig } from "../../testing.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
@@ -35,6 +36,9 @@ const config = (over?: Record<string, unknown>): Config =>
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
+            // The schema's own default: no ceiling of this platform's own, so the fleet's size is nobody's
+            // question here. The capacity cases below set it to the number they are about.
+            maxMachines: 0,
         },
         hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePriceId: `` },
         ...over,
@@ -126,6 +130,10 @@ const flyMachine = (over: { platform?: string; ageMinutes?: number; role?: strin
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    // A capacity refusal is remembered for a few minutes (hosted-capacity.ts), and that memory is a module's,
+    // not a fixture's: one case teaching the next that the provider is full would be the kind of shared state
+    // that makes a suite mean nothing.
+    forgetProviderCapacity();
 });
 
 describe(`hostedEnabled`, () => {
@@ -242,11 +250,47 @@ describe(`provisionHosted`, () => {
     it(`a failure after the app exists deletes the app again so a retry starts clean`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
-            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ error: `no capacity` }, 422) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ error: `internal error` }, 500) },
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
         await expect(provisionHosted(fakePrisma({ hostedMachine: { create: vi.fn() } }) as never, config(), logger, args)).rejects.toThrow(
-            /no capacity/,
+            /internal error/,
+        );
+        expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
+    });
+
+    /* THE FLEET IS FULL, which is where the hosted lane meets the only limit it cannot argue with: the provider
+     * gives this platform a finite number of machines. Refused BEFORE the provider is called, so nobody spends
+     * a round-trip to be told, and refused as its own kind of failure, because every surface above answers it
+     * differently from a fault (sandbox.routes.ts, Setup.vue). */
+    it(`refuses without touching the provider when the fleet is at its ceiling`, async () => {
+        const fetchSpy = stubFetch([]);
+        const full = fakePrisma({
+            hostedMachine: { create: vi.fn(), count: vi.fn().mockResolvedValue(100) },
+            hostedPoolMachine: { count: vi.fn().mockResolvedValue(0) },
+            hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        });
+        await expect(
+            provisionHosted(full as never, config({ hosted: { ...config().hosted, maxMachines: 100 } }), logger, args),
+        ).rejects.toBeInstanceOf(HostedAtCapacity);
+        expect(fetchSpy).toHaveLength(0);
+    });
+
+    /* AND WHEN THE PROVIDER SAYS IT FIRST — the ceiling above is not configured, or the org filled up under us
+     * — the answer is the same one, so a reader never meets Fly's own sentence about an app they have never
+     * heard of. The half-made app still comes back down, exactly as any other failed provision's does. */
+    it(`reads the provider's own "no machines left" as the same refusal, and still cleans up`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            {
+                match: (method, url) => method === `POST` && url.includes(`/machines`),
+                respond: () => json({ error: `failed to launch VM: You have reached the maximum number of machines for this app` }, 422),
+            },
+            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
+        ]);
+        await expect(provisionHosted(fakePrisma({ hostedMachine: { create: vi.fn() } }) as never, config(), logger, args)).rejects.toBeInstanceOf(
+            HostedAtCapacity,
         );
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
@@ -683,8 +727,19 @@ describe(`reapHostedOrphans`, () => {
 
 describe(`sandbox routes: the hosted lane's gates`, () => {
     const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+    /* HostedMachine is counted with two different questions in one request, and a fixture that answered both
+     * the same way would describe an account owning the entire fleet: `where` names an owner (the per-user
+     * allowance), no argument counts every machine the platform holds (the ceiling, hosted-capacity.ts). This
+     * says what the FLEET holds while leaving the caller's own allowance untouched. */
+    const fleetOf = (machines: number) =>
+        vi.fn().mockImplementation((query?: { where?: unknown }) => Promise.resolve(query?.where === undefined ? machines : 0));
+
+    /* `headers` is part of every real request and two routes read it: the region pick (region.ts, cf-ipcountry)
+     * decides where a machine lands, and the offer asks about the stock of the region the caller would be
+     * served from. Empty here means "cannot tell", which is the US default and exactly what a self-hosted
+     * platform with no Cloudflare in front of it sees. */
     const routeContext = (over?: Partial<OrpcContext>): OrpcContext =>
-        ({ prisma: fakePrisma({}), config: config(), user, logger, ...over }) as OrpcContext;
+        ({ prisma: fakePrisma({}), config: config(), user, logger, headers: new Headers(), ...over }) as OrpcContext;
 
     it(`hostedOffer answers disabled/0 when the lane is off, and the remaining allowance when on`, async () => {
         const off = await call(sandboxRoutes.hostedOffer, undefined, {
@@ -781,6 +836,64 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
             code: `BAD_REQUEST`,
+        });
+        expect(fetchSpy).toHaveLength(0);
+    });
+
+    /* WHAT THE PAGE READS BEFORE IT DRAWS ANYTHING. A browser arrival provisions without being asked
+     * (setupArrival.ts), so "is there a machine to give" has to be answerable BEFORE that, or the first screen
+     * of the product on the day we fill up is a failed provision. Nothing to do with `remaining`, which is this
+     * account's own untouched allowance in exactly this fixture. */
+    it(`hostedOffer says the lane is full when the fleet is at its ceiling with no stock left`, async () => {
+        const full = fakePrisma({
+            hostedMachine: { count: fleetOf(100) },
+            hostedPoolMachine: { count: vi.fn().mockResolvedValue(0) },
+            hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        });
+        const context = routeContext({ prisma: full, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
+            enabled: true,
+            remaining: 1,
+            full: true,
+            hours: { allowance: 40, remaining: 40 },
+        });
+    });
+
+    /* …and stock still counts as a machine to give, because claiming one creates nothing. A fleet sitting on
+     * its ceiling with a warm machine in the caller's region can serve them in seconds, and a card that said
+     * "full" over it would send somebody to install Docker for no reason at all. */
+    it(`hostedOffer keeps offering while there is warm stock the caller could claim`, async () => {
+        const stocked = fakePrisma({
+            hostedMachine: { count: fleetOf(98) },
+            // Two pool machines, both claimable: the same answer whether the count is asked about the whole
+            // pool or only the stock that is ready, which is what this fleet actually holds.
+            hostedPoolMachine: { count: vi.fn().mockResolvedValue(2) },
+            hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        });
+        const context = routeContext({ prisma: stocked, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
+            enabled: true,
+            remaining: 1,
+            hours: { allowance: 40, remaining: 40 },
+        });
+    });
+
+    /* THE REFUSAL A READER ACTUALLY MEETS when the offer said there was room and the provisioning found none
+     * (a machine taken between the two reads, a replica that had not seen the provider refuse). It must not be
+     * a gateway error: those read as "something broke", and the editor cannot tell the difference between one
+     * it should retry and one it should replace with the other rung. */
+    it(`hostedProvision answers a full fleet as unavailable, in words a person can act on`, async () => {
+        const fetchSpy = stubFetch([]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: fleetOf(100) },
+            hostedPoolMachine: { count: vi.fn().mockResolvedValue(0), findMany: vi.fn().mockResolvedValue([]) },
+            hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        });
+        const context = routeContext({ prisma, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
+        await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context })).rejects.toMatchObject({
+            code: `SERVICE_UNAVAILABLE`,
+            message: AT_CAPACITY_MESSAGE,
         });
         expect(fetchSpy).toHaveLength(0);
     });

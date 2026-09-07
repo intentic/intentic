@@ -59,10 +59,22 @@ const flyMachine = (platform: string, ageMinutes = 120) => ({
     config: { metadata: { intentic_role: `sandbox`, intentic_platform: platform } },
 });
 
+/* The counts are what the watch reads the fleet's size off when a ceiling exists (hosted-capacity.ts), so they
+ * answer the same rows the listings do rather than a number of their own: a fixture where the two disagreed
+ * would describe a platform that cannot exist. The pool's count is asked twice, for the whole pool and for the
+ * stock that is claimable, which is what the `where` tells apart. */
 const prismaWith = (machines: unknown[], pooled: unknown[]) =>
     ({
-        hostedMachine: { findMany: vi.fn().mockResolvedValue(machines) },
-        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue(pooled) },
+        hostedMachine: { findMany: vi.fn().mockResolvedValue(machines), count: vi.fn().mockResolvedValue(machines.length) },
+        hostedPoolMachine: {
+            findMany: vi.fn().mockResolvedValue(pooled),
+            count: vi.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
+                Promise.resolve(
+                    args?.where === undefined ? pooled.length : pooled.filter((row) => (row as { state?: string }).state === `ready`).length,
+                ),
+            ),
+        },
+        hostedBuild: { count: vi.fn().mockResolvedValue(0) },
     }) as unknown as PrismaClient;
 
 const taken = (appName: string) => ({ appName, region: `iad`, wokeAt: null, sandboxId: `s1`, sandbox: { owner: { email: `o@test` } } });
@@ -125,6 +137,19 @@ describe(`hosted health`, () => {
             { region: `iad`, warm: 1, target: 1 },
             { region: `arn`, warm: 0, target: 1 },
         ]);
+        expect(health?.healthy).toBe(false);
+    });
+
+    /* THE FAULT NOBODY WAS EVER TOLD ABOUT. A pool that cannot fill has always been logged and never mailed,
+     * on the grounds that short stock is ordinary weather — a claim just emptied a slot, a build is in flight.
+     * A fleet that has actually reached the ceiling its provider allows looks exactly like that from here, and
+     * it is not weather: every new sign-up is being turned away, and no tick will fix it. It is unhealthy, and
+     * it is worth waking somebody for, because the remedy is a raised allowance and only a person can do that. */
+    it(`is unhealthy, and says why, when the fleet has reached the ceiling`, async () => {
+        stubApps(`intentic-sbx-a`);
+        const prisma = prismaWith([taken(`intentic-sbx-a`)], []);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 0, regionEu: ``, maxMachines: 1 }), logger);
+        expect(health?.capacity).toEqual({ used: 1, cap: 1, full: true, reason: `cap` });
         expect(health?.healthy).toBe(false);
     });
 

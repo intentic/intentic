@@ -17,6 +17,7 @@ import {
     FLY_META_PLATFORM,
     flySandboxRole,
     getMachine,
+    isFlyCapacity,
     isFlyGone,
     listAppNames,
     listMachines,
@@ -24,6 +25,7 @@ import {
     startMachine,
     updateMachine,
 } from "./fly.js";
+import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 
 /* The hosted lane's orchestration, what the routes call, over the fly.ts client. One machine + one volume in
  * one app per sandbox; the app name is `<prefix>-<the sandbox's 12-hex tunnel id>`, ALWAYS, pool-born or built
@@ -368,6 +370,22 @@ export const provisionHosted = async (prisma: PrismaClient, config: Config, logg
     if (claimed !== undefined) {
         return claimed;
     }
+    /* NOTHING WARM LEFT, so this machine has to be built — and building is the only half of provisioning that
+     * spends the provider's finite allowance. Asked here rather than at the route on purpose: a claim hands
+     * over a machine that already exists, so a fleet sitting on its ceiling with stock in it can still serve
+     * this arrival in seconds, and a gate above the claim would have refused them for nothing.
+     *
+     * Refusing HERE is what keeps the reader out of the provider's vocabulary. Past this line the next call is
+     * Fly's, and Fly's answer to a full org is a 422 whose sentence names an app the reader has never heard
+     * of, under a Try again button that cannot work until an operator raises a quota. */
+    const capacity = await hostedCapacity(prisma, config, region);
+    if (capacity.headroom === 0) {
+        logger.error(
+            { used: capacity.used, cap: capacity.cap, reason: capacity.reason, region },
+            `hosted: no room for another machine; refusing the lane in plain words rather than failing at the provider`,
+        );
+        throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
+    }
     const appName = hostedAppName(config, args.sandboxId, args.connectToken);
     await createApp(flyApiToken, flyOrg, appName);
     try {
@@ -392,6 +410,19 @@ export const provisionHosted = async (prisma: PrismaClient, config: Config, logg
          * is the answer and there is nothing to report as a failure. */
         if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
             throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+        }
+        /* THE PROVIDER SAYING IT IS FULL, which the ceiling above is meant to prevent anybody from meeting and
+         * cannot always: an allowance lowered under us, a machine made outside the platform, a region out of
+         * hardware while the org still has room, or simply a platform running with no ceiling configured. Read
+         * as the same fact, so the reader gets the same plain sentence either way, and latched for a few
+         * minutes so the arrivals behind this one are told before they spend a round-trip finding out.
+         *
+         * At `error` level deliberately: this is the line that says the free lane has stopped accepting new
+         * people, and the only fix is an operator raising a quota. */
+        if (isFlyCapacity(error)) {
+            noteProviderAtCapacity(region);
+            logger.error({ err: error, region, appName }, `hosted: the provider has no machine left to give; the lane is full`);
+            throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
         }
         throw error;
     }

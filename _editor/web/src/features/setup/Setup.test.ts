@@ -390,6 +390,26 @@ it(`starts nothing for a sandbox it found rather than made`, async () => {
     expect(rungs[0]?.textContent).toContain(`Start instantly`);
 });
 
+/* THE DAY THE FLEET FILLS UP. Our provider gives this platform a finite number of machines, and when they are
+ * all in use the arrival's zero-click machine is a promise nothing can keep. Before this, the page tried
+ * anyway: the reader's very first screen was a red card carrying Fly's own sentence about an app they had
+ * never heard of, over a Try again button that could not work until an operator raised a quota. So the offer
+ * carries the fact (`full`), the arrival stops, the rung wears it instead of a price, and the card says the
+ * one useful thing there is to say — the other rung runs it on your own computer, today, with no limits. */
+it(`starts nothing, and offers the other rung, when the platform is out of machines`, async () => {
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, full: true });
+    const el = await mount();
+    expect(hostedProvision).not.toHaveBeenCalled();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs[0]?.textContent).toContain(`No machines free right now`);
+    rungs[0]?.click();
+    await nextTick();
+    expect(el.textContent).toContain(`We're out of machines right now`);
+    // …and no button that would just fail: the way through is the rung beside it, and a re-read for later.
+    expect(buttonLabelled(`Start my machine`)).toBeUndefined();
+    expect(buttonLabelled(`Set it up on my own computer`)?.tagName).toBe(`BUTTON`);
+});
+
 /* …AND THE OTHER ANSWER IS ONE LINE AWAY, never a support article. A page that decided for the reader owes
  * them the rung it did not take in plain sight; revealing it starts and destroys nothing, because a reader
  * opening it to READ what the alternative is has not chosen it yet. */

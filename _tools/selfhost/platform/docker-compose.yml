@@ -122,6 +122,9 @@ services:
             HOSTED_MEMORY_MB: ${HOSTED_MEMORY_MB:-}
             HOSTED_VOLUME_GB: ${HOSTED_VOLUME_GB:-}
             HOSTED_PER_USER: ${HOSTED_PER_USER:-}
+            # …and how many the whole platform may hold on Fly at once. Set it under the org's own allowance
+            # and a full fleet is a sentence on the setup page rather than a provider error nobody can act on.
+            HOSTED_MAX_MACHINES: ${HOSTED_MAX_MACHINES:-}
             # 0 = never sleep, which bills around the clock; the default stops an unused machine after 20 quiet
             # minutes and the platform wakes it on the next visit.
             HOSTED_IDLE_STOP_MINUTES: ${HOSTED_IDLE_STOP_MINUTES:-}

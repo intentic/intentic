@@ -7,6 +7,7 @@ import {
     deleteApp,
     FlyError,
     getMachine,
+    isFlyCapacity,
     isFlyGone,
     listAppNames,
     startMachine,
@@ -133,5 +134,49 @@ describe(`fly`, () => {
         await expect(createVolume(`tok`, `app`, `iad`, 20)).rejects.toThrow(/region has no capacity/);
         await expect(createApp(`tok`, `intentic`, `app`)).rejects.toThrow(FlyError);
         await expect(createApp(`tok`, `intentic`, `app`)).rejects.toThrow(/HOSTED_FLY_API_TOKEN/);
+    });
+
+    /* "THERE ARE NO MORE MACHINES", told apart from every other refusal, because everything above answers it
+     * differently: the lane says so in plain words instead of handing somebody a gateway error, the pool stops
+     * building into a wall, and the admins get mail. Matched on what Fly says, since they publish no status for
+     * it and the wording differs by call — the org allowance, the region's hardware and a volume that cannot be
+     * placed are all the same fact to a reader waiting for a sandbox. */
+    describe(`isFlyCapacity`, () => {
+        it(`recognises the provider having nothing left, however it says it`, async () => {
+            stubFetch([
+                {
+                    match: (_method, url) => url.includes(`/machines`),
+                    respond: () => json({ error: `failed to launch VM: You have reached the maximum number of machines for this app` }, 422),
+                },
+                { match: (_method, url) => url.includes(`/volumes`), respond: () => json({ error: `insufficient capacity in iad` }, 422) },
+            ]);
+            const machineConfig = flyMachineConfig({
+                name: `app`,
+                image: `ghcr.io/intentic/sandbox:stable`,
+                baseImage: `ghcr.io/intentic/sandbox:stable`,
+                guest: { cpus: 2, memoryMb: 4096 },
+                volumeId: `vol_1`,
+            });
+            const refused = await createMachine(`tok`, `app`, { name: `app`, region: `iad`, config: machineConfig }).catch(
+                (error: unknown) => error,
+            );
+            const placed = await createVolume(`tok`, `app`, `iad`, 20).catch((error: unknown) => error);
+            expect(isFlyCapacity(refused)).toBe(true);
+            expect(isFlyCapacity(placed)).toBe(true);
+        });
+
+        it(`is not fooled by the refusals that mean something else entirely`, async () => {
+            stubFetch([
+                { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ error: `unauthorized` }, 401) },
+                { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `not found` }, 404) },
+            ]);
+            const rejected = await createApp(`tok`, `intentic`, `app`).catch((error: unknown) => error);
+            const gone = await getMachine(`tok`, `app`, `m1`).catch((error: unknown) => error);
+            expect(isFlyCapacity(rejected)).toBe(false);
+            expect(isFlyCapacity(gone)).toBe(false);
+            /* AND NEVER A CALL THAT DID NOT LAND. A timeout carries no status, and reading "we could not ask"
+             * as "we are full" would take the lane off a page over one bad minute at the provider. */
+            expect(isFlyCapacity(new FlyError(`Fly did not answer POST /machines within 30s`))).toBe(false);
+        });
     });
 });

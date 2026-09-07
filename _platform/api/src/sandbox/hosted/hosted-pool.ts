@@ -6,7 +6,8 @@ import type { Config } from "../../config.js";
 import { encryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
-import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine } from "./fly.js";
+import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly.js";
+import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
 /* THE WARM POOL'S LIFECYCLE, everything except the claim, which lives beside provisionHosted (hosted.ts)
@@ -119,6 +120,64 @@ const poolMachineHealth = async (config: Config, row: { appName: string; machine
     }
 };
 
+/* STOCK BACK TO TARGET, region by region, inside whatever room the provider still has.
+ *
+ * WHAT THE FLEET MAY GROW BY is read after the pass above has destroyed everything it is going to destroy, so
+ * the slots those teardowns just freed count as free.
+ *
+ * THE POOL IS THE WRONG THING TO SPEND THE LAST MACHINES ON. Stock is an accelerator: it turns a person's
+ * three-minute first boot into fifteen seconds, and it is worth a great deal right up until the moment it
+ * competes with that person for the last slot on the provider. Past the ceiling, prewarming would take the
+ * machines somebody is about to ask for and hold them empty — and, since this runs every five minutes forever,
+ * it would do it while writing a failure line per region per tick into the log an operator has to read to
+ * notice they are full. So building stops at the ceiling, and the room that is left belongs to arrivals. */
+const refillStock = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    live: Map<string, { id: string; appName: string }[]>,
+    target: number,
+): Promise<void> => {
+    let headroom = (await hostedCapacity(prisma, config)).headroom;
+    // Both regions the route can pick from (region.ts) hold their own stock, a warm iad machine is useless
+    // to the EEA caller the residency promise covers. One knob sizes both; dedup covers a single-region setup.
+    for (const region of new Set([config.hosted.region, config.hosted.regionEu].filter((entry) => entry !== ``))) {
+        const stock = live.get(region) ?? [];
+        for (const surplus of stock.slice(target)) {
+            // oxlint-disable-next-line eslint/no-await-in-loop
+            await destroyPoolMachine(prisma, config, surplus).catch((error: unknown) =>
+                logger.error({ err: error, app: surplus.appName }, `hosted pool: shrinking failed; retried next tick`),
+            );
+        }
+        for (let missing = stock.length; missing < target; missing += 1) {
+            if (headroom <= 0) {
+                logger.warn(
+                    { region, want: target, have: stock.length },
+                    `hosted pool: no room on the provider for warm stock; what is left is being kept for people`,
+                );
+                break;
+            }
+            headroom -= 1;
+            /* A build refused for CAPACITY ends the tick's building rather than this region's: the allowance is
+             * the org's, so the next region would meet the same wall, and the answer to it is a quota, not a
+             * retry. Latched (hosted-capacity.ts) so the wizard can say "full" before somebody presses a button
+             * whose answer we already know. Every other failure is one machine's, and the loop carries on. */
+            // oxlint-disable-next-line eslint/no-await-in-loop
+            const atCapacity = await buildPoolMachine(prisma, config, logger, region).then(
+                () => false,
+                (error: unknown) => {
+                    logger.error({ err: error, region }, `hosted pool: build failed; retried next tick`);
+                    return isFlyCapacity(error);
+                },
+            );
+            if (atCapacity) {
+                noteProviderAtCapacity(region);
+                headroom = 0;
+            }
+        }
+    }
+};
+
 /* One reconcile pass. Deliberately sequential and per-row-guarded: the pool is small (a handful of machines),
  * the Fly API is rate-limited, and a tick that half-succeeds converges on the next one. */
 export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
@@ -194,23 +253,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         }
         live.set(row.region, [...(live.get(row.region) ?? []), row]);
     }
-    // Both regions the route can pick from (region.ts) hold their own stock, a warm iad machine is useless
-    // to the EEA caller the residency promise covers. One knob sizes both; dedup covers a single-region setup.
-    for (const region of new Set([config.hosted.region, config.hosted.regionEu].filter((entry) => entry !== ``))) {
-        const stock = live.get(region) ?? [];
-        for (const surplus of stock.slice(target)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            await destroyPoolMachine(prisma, config, surplus).catch((error: unknown) =>
-                logger.error({ err: error, app: surplus.appName }, `hosted pool: shrinking failed; retried next tick`),
-            );
-        }
-        for (let missing = stock.length; missing < target; missing += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            await buildPoolMachine(prisma, config, logger, region).catch((error: unknown) =>
-                logger.error({ err: error, region }, `hosted pool: build failed; retried next tick`),
-            );
-        }
-    }
+    await refillStock(prisma, config, logger, live, target);
 };
 
 /* One locked, error-swallowed reconcile, the interval's tick, and also the nudge a claim fires the moment it

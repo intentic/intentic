@@ -22,6 +22,7 @@ import {
     wakeHosted,
 } from "./hosted/hosted.js";
 import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/hosted-build.js";
+import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
@@ -40,6 +41,8 @@ const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
 
 // How each way a build can be refused (hosted-build.ts) is answered on the wire. Nothing here is a fault of
 // the platform's: the two NOT_FOUNDs are a lane or a machine that does not exist, the rest are the brakes.
+// `capacity` is the one that is not the ASKER's doing at all — the provider has no machine to build on — so it
+// answers SERVICE_UNAVAILABLE, the same word provisioning uses for the same fact.
 const REFUSAL_CODES = {
     off: `NOT_FOUND`,
     "no-machine": `NOT_FOUND`,
@@ -49,6 +52,7 @@ const REFUSAL_CODES = {
     daily: `TOO_MANY_REQUESTS`,
     ceiling: `TOO_MANY_REQUESTS`,
     budget: `PAYMENT_REQUIRED`,
+    capacity: `SERVICE_UNAVAILABLE`,
 } as const satisfies Record<HostedBuildRefusal, string>;
 
 // The machine states the browser knows how to narrate, taken FROM the contract so the two can never drift.
@@ -303,7 +307,7 @@ export const sandboxRoutes = {
         if (!hostedEnabled(context.config)) {
             return { enabled: false, remaining: 0 };
         }
-        const [used, slots, budget, plan] = await Promise.all([
+        const [used, slots, budget, plan, capacity] = await Promise.all([
             context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } }),
             hostedSlotsOf(context.prisma, context.config, user.id),
             // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it,
@@ -313,10 +317,22 @@ export const sandboxRoutes = {
             // Said separately from "unmetered": a platform with no ceiling is also unmetered, and its card
             // must not claim a plan nobody bought.
             hostedPlanEnabled(context.config) ? onHostedPlan(context.prisma, context.config, user.id) : Promise.resolve(false),
+            /* IS THERE A MACHINE LEFT AT ALL, asked of the fleet rather than of this account (hosted-capacity.ts).
+             * The per-user allowance above answers "may you have another one"; this answers "is there one to
+             * give", and the two are unrelated: a brand-new account with its whole allowance unspent gets
+             * nothing from a provider that is full. Asked HERE because this is the read the wizard makes before
+             * it draws anything — a browser arrival provisions without being asked (setupArrival.ts), so a lane
+             * that cannot deliver has to be knowable BEFORE that, or the first screen of the product is a
+             * failed provision. Region-aware: warm stock that the residency rule would not let this caller
+             * claim is not stock they can be promised. */
+            hostedCapacity(context.prisma, context.config, hostedRegionFor(context.config.hosted, context.headers)),
         ]);
         return {
             enabled: true,
             remaining: Math.max(0, slots - used),
+            // Absent unless it is true, like every other optional here: a lane with room says nothing about
+            // capacity at all, which is the only version of this field that cannot age into a scare.
+            ...(capacity.full ? { full: true } : {}),
             ...(budget.metered
                 ? { hours: { allowance: Math.round(budget.allowanceMinutes / 60), remaining: Math.floor(budget.remainingMinutes / 60) } }
                 : {}),
@@ -366,6 +382,15 @@ export const sandboxRoutes = {
              * read with no lock behind it, so a second tab, a retried request or the desktop app beside the
              * browser can both pass it. The machine exists, which is exactly what was asked for, so this
              * answers with it rather than with a gateway error the reader can do nothing about. */
+            /* THERE IS NO MACHINE TO GIVE (hosted-capacity.ts): our fleet is on its ceiling, or the provider
+             * refused the create. Not a gateway fault and emphatically not this reader's doing, so it is
+             * answered as the temporary state it is, with the sentence the card shows verbatim, and the offer
+             * they read a moment ago now says `full` too. SERVICE_UNAVAILABLE rather than BAD_GATEWAY because
+             * the difference is the whole point: one says something broke, the other says come back or use the
+             * other rung, and only the second is true. */
+            if (error instanceof HostedAtCapacity) {
+                throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
+            }
             if (!(error instanceof HostedAlreadyProvisioned)) {
                 throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
             }
@@ -513,6 +538,13 @@ export const sandboxRoutes = {
                 await rebuildOnMovedBase(context.prisma, context.config, context.logger, hosted, { id: user.id, email: user.email.toLowerCase() });
             }
         } catch (error) {
+            /* The rebuild half of this route (a machine the provider no longer has) provisions, so it meets a
+             * full fleet like any other provision. Said in the same words, on the button somebody is already
+             * pressing in frustration: their sandbox, its name and its address all survive, there is simply no
+             * hardware to put under it this minute. */
+            if (error instanceof HostedAtCapacity) {
+                throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
+            }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }
         return { ok: true };

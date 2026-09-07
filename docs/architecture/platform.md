@@ -34,7 +34,13 @@ Who pays for scale is a design decision, not an accident:
   agent turns, dev servers and builds cost intentic nothing. The exception is the **hosted starter**, the
   machine a browser arrival is given (Fly, one microVM per sandbox), which intentic does pay for: it is
   bounded by an hour allowance per account and by the idle-stop that puts it to sleep the moment nobody is
-  connected, and it is the rung a user leaves the moment they want power rather than convenience. (Corollary: intentic sets no `--cpus` cap;
+  connected, and it is the rung a user leaves the moment they want power rather than convenience. It is
+  bounded a third way, by the provider: a Fly org's machine allowance is finite, so the platform counts its
+  own fleet — sandboxes, warm stock, builders — against `HOSTED_MAX_MACHINES` and treats running out as a
+  fact to state rather than a failure to report. The setup page says there are no machines free and points at
+  the rung that runs on the reader's own computer, the warm pool stops prewarming so the last slots go to
+  people, and the admins are mailed, because raising an allowance is a person's job
+  (`_platform/api/src/sandbox/hosted/hosted-capacity.ts`). (Corollary: intentic sets no `--cpus` cap;
   a sandbox that saturates the CPU is the user's machine's problem. Memory is the one exception, and it
   is a narrow one: the local shape carries a `--memory`/`--memory-swap` cap, because user-owned compute
   still means a runaway build must not be able to take the user's desktop down with it, and a cgroup is

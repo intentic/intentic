@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { listAppNames } from "./fly.js";
+import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedEnabled } from "./hosted.js";
 
 /* WHAT IS ACTUALLY ON FLY, said in one screen, the operator's view the Fly console cannot give.
@@ -77,7 +78,12 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
 // every wake but never witnesses the machine putting itself to sleep, so a machine that idled out reads
 // `awake` until the usage sweep closes its stretch (hosted-usage.ts). Good enough for a glance, and the one
 // number that is exact is the tally.
-export const renderHostedFleet = (entries: HostedFleetEntry[]): string => {
+//
+// `capacity` puts the fleet against its ceiling on the same line, because "12 taken · 2 warm" answers how many
+// there are and never how many more there may be — which is the number an operator is actually looking for
+// when they run this at all (hosted-capacity.ts). Omitted where no ceiling is configured: a made-up limit
+// under a real count would be worse than none.
+export const renderHostedFleet = (entries: HostedFleetEntry[], capacity?: { used: number | undefined; cap: number; full: boolean }): string => {
     const rows = entries.map((entry) => [
         entry.role.toUpperCase(),
         entry.region,
@@ -94,16 +100,27 @@ export const renderHostedFleet = (entries: HostedFleetEntry[]): string => {
             .join(`  `)
             .trimEnd();
     const tally = (role: HostedFleetRole) => entries.filter((entry) => entry.role === role).length;
+    // Only where there is a ceiling to be against: `used` is counted for exactly that question, so with no
+    // ceiling configured there is no number here and no honest denominator to put it over.
+    const room =
+        capacity === undefined || capacity.cap === 0 || capacity.used === undefined
+            ? ``
+            : ` · ${capacity.used} of ${capacity.cap} machines${capacity.full ? ` — FULL, nobody can be given a new one` : ``}`;
     return [
         line([`ROLE`, `REGION`, `APP`, `OWNER`, `POWER`]),
         ...rows.map(line),
         ``,
-        `${tally(`taken`)} taken · ${tally(`warm`)} warm · ${tally(`claiming`)} claiming · ${tally(`orphan`)} orphaned`,
+        `${tally(`taken`)} taken · ${tally(`warm`)} warm · ${tally(`claiming`)} claiming · ${tally(`orphan`)} orphaned${room}`,
     ].join(`\n`);
 };
 
 /* Run it: `pnpm --filter @intentic/api fleet`. A read-only script against the live platform's config and
  * database, it starts nothing, changes nothing, and is safe to point at production, which is the whole
  * reason it exists rather than a set of remembered curl commands. */
-export const printHostedFleet = async (prisma: PrismaClient, config: Config): Promise<string> =>
-    hostedEnabled(config) ? renderHostedFleet(await hostedFleet(prisma, config)) : `The hosted lane is off, no Fly credential configured.`;
+export const printHostedFleet = async (prisma: PrismaClient, config: Config): Promise<string> => {
+    if (!hostedEnabled(config)) {
+        return `The hosted lane is off, no Fly credential configured.`;
+    }
+    const [entries, capacity] = await Promise.all([hostedFleet(prisma, config), hostedCapacity(prisma, config)]);
+    return renderHostedFleet(entries, capacity);
+};

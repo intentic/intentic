@@ -683,6 +683,16 @@ export type HostedHours = z.infer<typeof HostedHoursSchema>;
 export const HostedOfferSchema = z.object({
     enabled: z.boolean(),
     remaining: z.number().int().nonnegative(),
+    /* THE PLATFORM HAS NO MACHINE TO GIVE ANYBODY right now: its fleet is on the ceiling its provider allows
+     * and there is no warm stock left to hand over (hosted-capacity.ts). Nothing to do with `remaining`, which
+     * is this account's own allowance — a brand-new account with everything unspent still gets nothing from a
+     * full provider, and the two were conflated exactly once, on the screen where it mattered most.
+     *
+     * It is here so the wizard can say it BEFORE the button. A browser arrival starts a machine without being
+     * asked, so without this the first screen of the product, on the day we fill up, is a failed provision
+     * wearing our provider's own error message. Absent means there is room; present and true means the lane
+     * says so plainly and points at the rung that runs on the reader's own computer instead. */
+    full: z.boolean().optional(),
     hours: HostedHoursSchema.optional(),
     // True when the caller is on the hosted plan (or comped onto it): no hours, and the card says "always
     // on" rather than "free", which is the other reason `hours` can be absent (a platform with no ceiling).

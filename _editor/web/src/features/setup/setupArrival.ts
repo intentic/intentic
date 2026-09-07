@@ -52,6 +52,13 @@ export interface ArrivalInput {
     // The platform hosts sandboxes at all (`sandbox.hostedOffer`), and this account has an allowance left.
     readonly hostedOffered: boolean;
     readonly hostedSpent: boolean;
+    /* THE PLATFORM HAS NO MACHINE LEFT FOR ANYBODY (`hostedOffer.full`): its fleet is at the ceiling its
+     * provider allows, with no warm stock to hand over. A different fact from `hostedSpent`, which is about
+     * this account's own allowance, and the reason it belongs HERE rather than only on the card: a browser
+     * arrival starts a machine without being asked, so on the day we fill up this would be the product's very
+     * first screen failing, with a provider's error message on it, for somebody who has done nothing but sign
+     * up. Knowing beforehand turns that into the picker, where the other rung is a working answer today. */
+    readonly hostedFull: boolean;
     // The platform mints addresses, so a pasted command or an app handoff has something to redeem.
     readonly commandOffered: boolean;
     /* A rung chosen BEFORE this page, off `?machine=`: the public site's /where-it-runs cards link through
@@ -65,10 +72,10 @@ export interface ArrivalInput {
     readonly elsewhere: boolean;
 }
 
-// Is there a machine of ours to give this account: the platform hosts, and the allowance is not already spent
-// on some other sandbox. Its own predicate because both the explicit ask and the browser default gate on it,
-// and they must never disagree about what "on offer" means.
-const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && !input.hostedSpent;
+// Is there a machine of ours to give this account: the platform hosts, it is not out of machines, and the
+// allowance is not already spent on some other sandbox. Its own predicate because both the explicit ask and
+// the browser default gate on it, and they must never disagree about what "on offer" means.
+const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && !input.hostedSpent && !input.hostedFull;
 
 export const arrivalFor = (input: ArrivalInput): Arrival => {
     // An errand in progress, or a reader who has just been sent here to look at their options. Both are

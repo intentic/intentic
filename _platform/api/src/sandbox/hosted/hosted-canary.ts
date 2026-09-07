@@ -8,6 +8,7 @@ import type { Config } from "../../config.js";
 import { mintSandbox } from "../mint-sandbox.js";
 import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
+import { HostedAtCapacity, hostedCapacity } from "./hosted-capacity.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
 
 /* DOES SIGNING UP STILL GET YOU A WORKING MACHINE? Asked by doing it, on a timer, rather than by waiting for
@@ -147,6 +148,28 @@ const waitForStarter = async (url: string, deadlineMs: number, sleep: (ms: numbe
     return false;
 };
 
+// Nothing was proved and nothing failed: the answer for a run that should not happen at all.
+const skipped = (detail: string): CanaryResult => ({ ok: true, announcedInMs: undefined, starterServingInMs: undefined, warm: false, detail });
+
+/* WHEN THIS RUN MUST NOT HAPPEN, answered before anything is minted or spent.
+ *
+ * The lane being OFF is the ordinary one. The lane being FULL is the interesting one: this check spends a real
+ * machine to prove a real sign-up would get one, and on a full fleet those are the same machine — so a canary
+ * that ran anyway would either take the slot the next person needs, or (far more likely) fail to get one and
+ * mail the admins that provisioning is broken, which is a false sentence about a platform that is merely at
+ * its ceiling. Capacity has its own alarm, in the watch that can say the true thing about it
+ * (hosted-health.ts); this one stands down and says why. */
+const standDown = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<CanaryResult | undefined> => {
+    if (!hostedEnabled(config) || config.hosted.canaryEmail === ``) {
+        return skipped(`canary off`);
+    }
+    if ((await hostedCapacity(prisma, config)).full) {
+        logger.warn({}, `hosted canary: the lane is full; standing down so the machines that are left go to people`);
+        return skipped(`skipped: the lane is at capacity`);
+    }
+    return undefined;
+};
+
 /* One run, start to finish, answering what it proved. Never throws: a canary that can take the process down
  * with it is a liability rather than a check. */
 export const runHostedCanary = async (
@@ -156,8 +179,9 @@ export const runHostedCanary = async (
     sleep: (ms: number) => Promise<void> = pause,
 ): Promise<CanaryResult> => {
     const email = config.hosted.canaryEmail;
-    if (!hostedEnabled(config) || email === ``) {
-        return { ok: true, announcedInMs: undefined, starterServingInMs: undefined, warm: false, detail: `canary off` };
+    const standing = await standDown(prisma, config, logger);
+    if (standing !== undefined) {
+        return standing;
     }
     const ownerId = await ensureCanaryUser(prisma, email);
     await collectPreviousRuns(prisma, config, logger, ownerId);
@@ -208,7 +232,17 @@ export const runHostedCanary = async (
             announcedInMs: undefined,
             starterServingInMs: undefined,
             warm: false,
-            detail: error instanceof Error ? error.message : `provisioning failed`,
+            /* A FULL LANE IS SAID IN THE OPERATOR'S WORDS, not in the reader's. The refusal this run met
+             * carries the sentence the setup page shows somebody who wanted a sandbox ("set it up on your own
+             * computer in the meantime"), which is the wrong half of the story to put in a mail to the person
+             * who can raise the allowance. The next run stands down before provisioning at all: this refusal
+             * is what teaches the platform it is full (hosted-capacity.ts). */
+            detail:
+                error instanceof HostedAtCapacity
+                    ? `the provider has no machines left for this platform, so a new sandbox cannot be created at all`
+                    : error instanceof Error
+                      ? error.message
+                      : `provisioning failed`,
         };
     } finally {
         await teardown(prisma, config, logger, sandbox.id);

@@ -9,6 +9,7 @@ const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     fresh: true,
     hostedOffered: true,
     hostedSpent: false,
+    hostedFull: false,
     commandOffered: true,
     requestedMachine: undefined,
     elsewhere: false,
@@ -30,6 +31,29 @@ describe(`the surface answers, not the reader`, () => {
         expect(arrivalFor(arrival({ hostedSpent: true }))).toBe(`choose`);
         // In the app the handoff redeems a setup code, so a platform that mints none has nothing to hand over.
         expect(arrivalFor(arrival({ inApp: true, commandOffered: false }))).toBe(`choose`);
+    });
+});
+
+/* THE PLATFORM IS OUT OF MACHINES: its provider gives it a finite number and they are all in use. A separate
+ * fact from `hostedSpent` (that one is about this account's allowance) and it has to be known HERE rather than
+ * only on the card, because this is the decision that starts a machine without anybody asking. Firing the
+ * provision anyway would make the product's first screen, on the day we fill up, a failed provision carrying
+ * our provider's own error message — for somebody who has done nothing but sign up. */
+describe(`a platform with no machines left`, () => {
+    it(`shows the picker instead of starting one that cannot be started`, () => {
+        expect(arrivalFor(arrival({ hostedFull: true }))).toBe(`choose`);
+    });
+
+    // Even from the site's "Start instantly" card: the click is honoured wherever it can be, and this is the
+    // one place it cannot. The picker draws the rung with "no machines free" on it and the other rung beside.
+    it(`ignores an explicit ask for a rung the platform cannot serve right now`, () => {
+        expect(arrivalFor(arrival({ hostedFull: true, requestedMachine: `hosted` }))).toBe(`choose`);
+    });
+
+    // The app's own answer is untouched: it installs on the computer it is running on, which needs nothing
+    // from our fleet at all.
+    it(`leaves the desktop app's own answer alone`, () => {
+        expect(arrivalFor(arrival({ hostedFull: true, inApp: true }))).toBe(`local`);
     });
 });
 

@@ -409,6 +409,20 @@ const hostedRow = computed(() => created.value?.hosted ?? null);
 // one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
 // says why it cannot be taken instead.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
+/* AN ATTEMPT THAT WAS REFUSED FOR ROOM, remembered beside the offer. The offer is the platform's own answer
+ * and normally arrives first, but it is answered by whichever replica takes the read, and a refusal this
+ * browser has already MET is a harder fact than a count read a moment later somewhere else. Cleared only by
+ * the reader asking again (`recheckCapacity`), never by the refresh that follows the failed attempt, which
+ * would put the button that just failed straight back on screen. */
+const hostedRefusedForRoom = ref(false);
+/* THE PLATFORM IS OUT OF MACHINES, which is not the same sentence as `hostedSpent` and must never be said in
+ * its words: one is "you already have yours", the other is "there are none left for anybody", and only the
+ * second is temporary and none of the reader's doing. A row that already HAS a machine is unaffected — it is
+ * booting, or asleep, and full says nothing about a machine that exists — so this only ever gates starting a
+ * new one. */
+const hostedFull = computed(
+    () => hostedOffered.value && (hostedOffer.value?.full === true || hostedRefusedForRoom.value) && hostedRow.value === null,
+);
 /* WHAT THE PROVISION SPINE CAN OFFER, decided in setupLanes.ts off the two arrival reads and the row's own
  * hardware. Four answers, and three of them are things to SAY rather than a lane to take.
  *
@@ -519,11 +533,17 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * An owner on the plan (or comped onto it) sends no hours and reads "always on": their card
                    * must not say free about a thing they pay for. Only a platform with no ceiling at all
                    * reads the bare way. */
-                  meta: hostedOffer.value?.plan
-                      ? `On your plan · always on`
-                      : hostedHours.value === null
-                        ? `Free · ready in seconds`
-                        : `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`,
+                  /* AND WHEN THERE ARE NONE LEFT, the badge says so instead of a price. A rung whose cost
+                   * reads "Free · ready in seconds" over a fleet that cannot serve anybody is the picker
+                   * advertising the one thing it can't do; the rung stays on screen (hiding it explains
+                   * nothing, and the card behind it is where the alternative lives) wearing the fact. */
+                  meta: hostedFull.value
+                      ? `No machines free right now`
+                      : hostedOffer.value?.plan
+                        ? `On your plan · always on`
+                        : hostedHours.value === null
+                          ? `Free · ready in seconds`
+                          : `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`,
                   note: `Runs on our servers`,
               },
           ]
@@ -907,6 +927,18 @@ const runHere = (): void => {
     );
 };
 
+/* The platform refusing because it has no machine to give (sandbox.routes.ts answers SERVICE_UNAVAILABLE, 503,
+ * for exactly this and nothing else). Told apart from every other failure because it is the one that is not
+ * broken: there is nothing to retry and nothing on this side to fix, so the card stops offering a button and
+ * starts offering the other rung. */
+const isAtCapacity = (err: unknown): boolean => {
+    if (err && typeof err === `object`) {
+        const e = err as { code?: unknown; status?: unknown };
+        return e.code === `SERVICE_UNAVAILABLE` || e.status === 503;
+    }
+    return false;
+};
+
 // oRPC surfaces a disabled endpoint as NOT_FOUND (404): the signal that the intentic-provided path is off.
 const isNotFound = (err: unknown): boolean => {
     if (err && typeof err === `object`) {
@@ -1098,6 +1130,16 @@ const refreshHostedOffer = async (): Promise<void> => {
     }
 };
 
+/* THE RETRY FOR A FULL FLEET, and deliberately not a second attempt at provisioning. There is nothing to
+ * retry — the platform knows whether it has room — so this drops the refusal this browser is holding and asks
+ * again. If the answer is still "full" the card is unchanged and nothing was spent; if a machine has been
+ * freed since, the button comes back and works. */
+const recheckCapacity = async (): Promise<void> => {
+    hostedRefusedForRoom.value = false;
+    hostedError.value = undefined;
+    await refreshHostedOffer();
+};
+
 /* Give THIS sandbox a machine the platform runs, then let the ordinary announce watch take over. The row is
  * already there (created on arrival like every lane's), so a refusal: capacity weather, the allowance
  * already spent, a platform whose provider credential is wrong, costs nothing but the attempt: the reason
@@ -1118,6 +1160,9 @@ const provisionHosted = async (): Promise<boolean> => {
         track(`sandbox_hosted_created`, {});
         return true;
     } catch (err) {
+        // No machines left is not a failure to report as one: the card below replaces itself with what to do
+        // instead, and the notice is suppressed while it does (see the template).
+        hostedRefusedForRoom.value = isAtCapacity(err);
         hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
         return false;
     } finally {
@@ -1160,7 +1205,12 @@ const restartHosted = async (): Promise<void> => {
         hostedMachine.value = undefined;
         hostedSince.value = Date.now();
     } catch (err) {
-        hostedError.value = noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
+        // A rebuild (the machine is gone from the provider) needs a NEW machine, so it meets a full fleet like
+        // any other provision, and says so the same way rather than as a restart that mysteriously failed.
+        hostedRefusedForRoom.value = isAtCapacity(err);
+        hostedError.value = hostedRefusedForRoom.value
+            ? noticeOf(`We're out of machines right now, so we can't build you another one this minute.`, { tone: `warning` })
+            : noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
     } finally {
         hostedBusy.value = false;
     }
@@ -1528,6 +1578,7 @@ const arrive = async (): Promise<void> => {
         fresh: createdHere.value,
         hostedOffered: hostedOffered.value,
         hostedSpent: hostedSpent.value,
+        hostedFull: hostedFull.value,
         commandOffered: commandOffered.value,
         requestedMachine: asked,
         elsewhere: elsewhere.value,
@@ -2340,7 +2391,13 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                             <Icon name="spinner" spin class="self-center" /> Assigned as your machine starts…
                                         </span>
-                                        <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
+                                        <!-- …and when there is no machine to be had, the address line must not
+                                             promise one either: "when your machine starts" sits directly above
+                                             "we're out of machines right now", and one line of a card should
+                                             not be quietly contradicting the next. -->
+                                        <span v-else :class="`${factSlot} text-xs text-muted`">{{
+                                            hostedFull ? `Assigned when a machine frees up` : `Assigned when your machine starts`
+                                        }}</span>
                                     </template>
                                     <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
                                          spinner nor the escape hatch (both ways off the default address mint a code
@@ -2453,8 +2510,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                         </div>
 
                         <!-- Whatever went wrong on THIS step, said on this step. Keeping it separate from the
-                             arrival notice prevents a lane change from erasing the reason. -->
-                        <Notice v-if="hostedError" :of="hostedError" />
+                             arrival notice prevents a lane change from erasing the reason.
+                             A FULL FLEET IS NOT DRAWN TWICE: the card below says it in full, in the words a
+                             person can act on, so the red notice from the attempt that discovered it would be
+                             the same fact a second time wearing an alarm. -->
+                        <Notice v-if="hostedError && !hostedFull" :of="hostedError" />
 
                         <!-- THE HOSTED WAIT. Nothing to run and nothing to copy: the platform is doing the work
                             , but "the platform is doing the work" was the entire message for every one of the
@@ -2525,6 +2585,34 @@ const warmSandboxCredential = async (): Promise<void> => {
                                  small print under a picker they were only reading.
                                  `hostedError` above already says why a previous attempt failed, so this doubles
                                  as the retry without having to call itself one. -->
+                            <!-- WE ARE OUT OF MACHINES. Not an error and not this reader's doing: our provider
+                                 gives us a finite number of them and they are all in use, which is a state with
+                                 a date on it rather than a fault with a retry. So the button that cannot work
+                                 is not drawn at all — a "Start my machine" that fails every time it is pressed
+                                 is the page lying to somebody about what it can do — and what IS on offer takes
+                                 its place: the rung beside this one runs the sandbox on the reader's own
+                                 computer, in a couple of minutes, today, and it never had a limit.
+                                 `Check again` is the honest version of the retry: the platform learns it has
+                                 room the moment a machine is freed, and this re-reads that rather than
+                                 attempting a provision we already know the answer to. -->
+                            <template v-else-if="hostedFull">
+                                <p class="flex items-start gap-2 text-xs text-content">
+                                    <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
+                                    <span>We're out of machines right now — every one we run is in use.</span>
+                                </p>
+                                <p class="text-xs leading-relaxed text-muted">
+                                    Nothing to do with your account, and we're adding more. Setting it up on your own computer takes a couple of
+                                    minutes and has no limits at all, or check back a little later and we'll have room.
+                                </p>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <Button label="Set it up on my own computer" class="w-full justify-center md:w-fit" @click="chooseMachine(`mine`)">
+                                        <template #icon><Icon name="desktop" /></template>
+                                    </Button>
+                                    <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
+                                        Check again
+                                    </button>
+                                </div>
+                            </template>
                             <template v-else>
                                 <Button
                                     :label="hostedError ? `Try again` : `Start my machine`"

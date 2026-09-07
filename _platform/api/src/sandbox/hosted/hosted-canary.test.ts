@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { runHostedCanary } from "./hosted-canary.js";
+import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { testIngressConfig } from "../../testing.js";
 
 /* WHAT THE CANARY IS FOR, in one sentence: the health sweep can see a machine go missing, and cannot see a
@@ -52,8 +53,16 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
             update: vi.fn().mockResolvedValue(sandbox),
             delete: vi.fn().mockResolvedValue(sandbox),
         },
-        hostedMachine: { create: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-canary` }) },
-        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([]) },
+        // The counts are how the run asks whether the lane has any machines left before it spends one
+        // (hosted-capacity.ts). An empty fleet with no stock: this platform's whole capacity is whatever the
+        // case's own config and refusals say it is.
+        hostedMachine: {
+            create: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-canary` }),
+            count: vi.fn().mockResolvedValue(0),
+        },
+        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+        hostedBuild: { count: vi.fn().mockResolvedValue(0) },
         ...over,
     } as unknown as PrismaClient;
 };
@@ -98,6 +107,9 @@ const stubProviders = (over: { machine?: () => Response; starter?: () => Respons
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    // A capacity refusal is remembered for a few minutes, in the module rather than in any fixture: one case
+    // teaching the next that the provider is full would make the rest of this file describe a different world.
+    forgetProviderCapacity();
 });
 
 describe(`the provisioning canary`, () => {
@@ -142,12 +154,38 @@ describe(`the provisioning canary`, () => {
     });
 
     it(`fails, and still cleans up, when the provider refuses to build at all`, async () => {
-        stubProviders({ machine: () => json({ error: `no capacity in iad` }, 422) });
+        stubProviders({ machine: () => json({ error: `the machine could not be created` }, 500) });
         const prisma = prismaWith(new Date());
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(false);
-        expect(result.detail).toContain(`no capacity in iad`);
+        expect(result.detail).toContain(`the machine could not be created`);
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
+    });
+
+    /* A FULL LANE IS A DIFFERENT REPORT FROM A BROKEN ONE, and telling them apart is the whole value of this
+     * check: "provisioning is broken" about a platform that has merely run out of machines sends an operator
+     * looking for a fault that does not exist, and the refusal a reader would meet ("set it up on your own
+     * computer in the meantime") is the wrong half of the story to mail the person who can raise the
+     * allowance. This run is also what teaches the platform it is full, so the next one stands down. */
+    it(`says the lane is out of machines in the operator's words, not the reader's`, async () => {
+        stubProviders({ machine: () => json({ error: `You have reached the maximum number of machines for this app` }, 422) });
+        const prisma = prismaWith(new Date());
+        const result = await runHostedCanary(prisma, config(), logger, nap);
+        expect(result.ok).toBe(false);
+        expect(result.detail).toBe(`the provider has no machines left for this platform, so a new sandbox cannot be created at all`);
+        expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
+    });
+
+    /* …and the run after it spends nothing at all. On a fleet at its ceiling the canary's machine and the next
+     * person's are the same machine, so a check that provisioned anyway would take somebody's sandbox to prove
+     * that sandboxes can be taken. */
+    it(`stands down entirely while the lane is full`, async () => {
+        const fetchSpy = vi.fn();
+        vi.stubGlobal(`fetch`, fetchSpy);
+        noteProviderAtCapacity(`iad`);
+        const result = await runHostedCanary(prismaWith(new Date()), config(), logger, nap);
+        expect(result).toMatchObject({ ok: true, detail: `skipped: the lane is at capacity` });
+        expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it(`does nothing at all when it is switched off, or the lane is`, async () => {

@@ -186,6 +186,23 @@ export const configSchema = z.object({
             // Hosted sandboxes per user. The free promise is ONE instant box each; more is a product decision,
             // not a config bump someone makes casually. HOSTED_PER_USER.
             perUser: z.coerce.number().int().positive().default(1),
+            /* THE WHOLE FLEET'S CEILING: how many machines this platform may hold on its provider at once,
+             * counting people's sandboxes, the warm stock waiting for them and any overlay builder in flight.
+             * A provider has its own limit (a Fly org's machine allowance, ours a hundred) and it is enforced
+             * the only way a provider can: by refusing the create, at the moment somebody is watching a page
+             * for their first sandbox.
+             *
+             * Set to a shade under the provider's own number, and the refusal stops being a surprise: the lane
+             * says it is full BEFORE the button (hosted-capacity.ts, sandbox.routes.ts's hostedOffer), a
+             * browser arrival stops starting machines it cannot get, and the warm pool leaves the last slots
+             * for people instead of prewarming into the wall. The provider's own refusal is still handled,
+             * because the two counts can drift (a machine created outside the platform, a raised quota nobody
+             * told us about); this knob is what keeps anybody from having to meet it.
+             *
+             * 0 (the default) means the platform imposes no ceiling of its own and learns it from the provider
+             * instead, which is the right answer for a self-hoster whose org allowance is theirs to know.
+             * HOSTED_MAX_MACHINES. */
+            maxMachines: z.coerce.number().int().nonnegative().default(0),
             // Minutes of nobody-watching-nothing-running before the daemon exits and the machine stops,
             // rides into the box as IDLE_STOP_MINUTES. 0 disables (always-on). HOSTED_IDLE_STOP_MINUTES.
             idleStopMinutes: z.coerce.number().int().nonnegative().default(20),

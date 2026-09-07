@@ -73,6 +73,26 @@ export class FlyError extends Error {
  * while a 500 or a dead socket is a bad minute at the provider that must change nothing at all. */
 export const isFlyGone = (error: unknown): boolean => error instanceof FlyError && error.status === 404;
 
+/* FLY REFUSING BECAUSE THERE IS NO MACHINE TO GIVE, which is the one provider failure that is nobody's fault
+ * and everybody's problem. An org has a machine allowance (ours is a hundred), a region has real hardware in
+ * it, and both answer the same shape: the request is well-formed, the credential is good, and the machine is
+ * not created.
+ *
+ * It is told apart because every surface above wants to say something ELSE about it. A gateway error with
+ * Fly's own sentence in it ("Fly refused POST /apps/intentic-sbx-a1b2/machines: You have reached the maximum
+ * number of machines for this app") is our infrastructure's private vocabulary put in front of somebody who
+ * signed up ninety seconds ago, under a retry button that cannot work until an operator raises a quota. Named
+ * here, it becomes a fact the platform can act on: refuse the lane in plain words, stop building warm stock
+ * into a wall, and mail the people who can actually fix it.
+ *
+ * MATCHED ON WHAT FLY SAYS rather than on a status code, because they do not publish one for this and the
+ * observed answers differ by call (create, update and volume placement all have their own). A status is still
+ * required, though: a timeout or a dead socket carries none, and reading "we could not ask" as "we are full"
+ * would black the lane out over one bad minute at the provider. */
+const CAPACITY_WORDS = /maximum number of machines|machine limit|limit of machines|reached the limit|capacity|quota|insufficient/i;
+export const isFlyCapacity = (error: unknown): boolean =>
+    error instanceof FlyError && error.status !== undefined && error.status !== 404 && CAPACITY_WORDS.test(error.message);
+
 // Fly's error envelope on a non-2xx: { error: "…" }.
 const errorSchema = z.object({ error: z.string() });
 

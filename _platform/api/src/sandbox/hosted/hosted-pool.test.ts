@@ -34,6 +34,8 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
+            // The schema's own default: no ceiling, so the refill's room is unlimited unless a case says so.
+            maxMachines: 0,
             ...over,
         },
     }) as unknown as Config;
@@ -55,16 +57,21 @@ const poolRow = (over?: Record<string, unknown>) => ({
     ...over,
 });
 
+/* The counts exist because the refill asks how much room is left on the provider before it builds anything
+ * (hosted-capacity.ts). They are only READ on a platform that has a ceiling, so a case that is not about one
+ * never touches them; the ceiling's own cases set them to say how full the fleet is. */
 const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({
         hostedPoolMachine: {
             findMany: vi.fn().mockResolvedValue([]),
+            count: vi.fn().mockResolvedValue(0),
             create: vi.fn().mockResolvedValue({}),
             update: vi.fn().mockResolvedValue({}),
             delete: vi.fn().mockResolvedValue({}),
             ...overrides?.[`hostedPoolMachine`],
         },
-        hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), ...overrides?.[`hostedMachine`] },
+        hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0), ...overrides?.[`hostedMachine`] },
+        hostedBuild: { count: vi.fn().mockResolvedValue(0), ...overrides?.[`hostedBuild`] },
     }) as never;
 
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
@@ -121,6 +128,36 @@ describe(`reconcileHostedPool`, () => {
         expect(posted.config.env[`OWNER_EMAIL`]).toBeUndefined();
         expect(create).toHaveBeenCalledTimes(2);
         expect(create.mock.calls[0]?.[0]).toMatchObject({ data: { state: `building`, image: `ghcr.io/intentic/sandbox:stable` } });
+    });
+
+    /* STOCK IS THE WRONG THING TO SPEND THE LAST MACHINES ON. Prewarming is worth a great deal right up until
+     * it competes with a person for the last slot the provider allows: past the ceiling it would take the
+     * machines somebody is about to ask for and hold them empty, and — since this runs every five minutes
+     * forever — write a failure line per region per tick into the log an operator has to read to notice they
+     * are full. So the refill stops, says so once, and leaves the room for arrivals. */
+    it(`builds nothing once the fleet is at the ceiling the provider allows`, async () => {
+        const create = vi.fn().mockResolvedValue({});
+        const calls = stubFetch(builderRoutes);
+        const prisma = fakePrisma({
+            hostedPoolMachine: { create, count: vi.fn().mockResolvedValue(4) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(96) },
+        });
+        await reconcileHostedPool(prisma, config({ maxMachines: 100 }), logger);
+        expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(0);
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    // …and the room that IS left is used: four short of a hundred is four machines the pool may still build,
+    // one per region here, so the ceiling brakes the pool rather than switching it off.
+    it(`builds up to the room the ceiling leaves`, async () => {
+        const create = vi.fn().mockResolvedValue({});
+        const calls = stubFetch(builderRoutes);
+        const prisma = fakePrisma({
+            hostedPoolMachine: { create, count: vi.fn().mockResolvedValue(0) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(96) },
+        });
+        await reconcileHostedPool(prisma, config({ maxMachines: 100 }), logger);
+        expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(2);
     });
 
     /* THE APP IS NAMED AFTER AN IDENTITY MINTED AT BUILD, before anybody has asked for the machine. The edge
