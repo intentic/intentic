@@ -4,7 +4,7 @@
  * (_shared/sandbox-contract/src/contract-lock.ts explains the pair). Three readers ask what a newer lock no
  * longer offers: the checkout gate that refuses an undeclared shrink at the push (_tools/checks/contract-shrink.mjs),
  * the landing drafter that forces the `!` and the Breaking-Note into the commit message
- * (_sandbox/sandbox/src/git/contract-shrink.ts), and the tests that hold both to the same judgment. One
+ * (_sandbox/sandbox/src/git/changes/contract-shrink.ts), and the tests that hold both to the same judgment. One
  * implementation here, hand-written JavaScript rather than compiled TypeScript for the same reason node.mjs
  * beside it is: the gate runs before `pnpm install`, so it imports this file by relative path and nothing else.
  *

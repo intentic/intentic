@@ -50,7 +50,7 @@ import { publishRuntimeChange } from "../../system/runtime-watch.js";
 const MAX_REPOS = 12;
 
 // One repo's contribution: the paths this agent still claims there, described exactly as the commit that
-// records them would be, plus what those paths would REMOVE from the wire contract (git/contract-shrink.ts,
+// records them would be, plus what those paths would REMOVE from the wire contract (git/changes/contract-shrink.ts,
 // read here, beside the diff, so the two describe the same claim). Undefined when it claims nothing, the
 // land put nothing here, or history has already absorbed all of it.
 const claimedDiff = async (services: Services, id: string, repo: string): Promise<{ diff: RepoDiff; removed: string[] } | undefined> => {

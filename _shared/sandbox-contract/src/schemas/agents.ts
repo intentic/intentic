@@ -170,7 +170,7 @@ export const LandedMessageSchema = z.object({
      * release harvest can put it under "Breaking changes" and the update card can warn with it before the
      * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
      * and to omit it when in doubt, except when the landing shrinks a wire-contract lock, where the sentence
-     * is REQUIRED and mechanically guaranteed (the daemon's git/contract-shrink.ts) rather than judged. */
+     * is REQUIRED and mechanically guaranteed (the daemon's git/changes/contract-shrink.ts) rather than judged. */
     breaking: z
         .string()
         .optional()

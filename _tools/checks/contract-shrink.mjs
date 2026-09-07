@@ -12,8 +12,9 @@
  * A LINKED WORKTREE STANDS DOWN TOO. Every conversation runs in one, and a conversation is the one place this
  * gate can never be satisfied: landing carries work to the main tree as PATCHES, so a declaring commit written
  * on a conversation's branch never joins any range a push is checked on. The declaration is the landing draft's
- * to write (git/contract-shrink.ts detects the shrink in the claim, agents/landed-subject.ts forces the `!` and
- * the Breaking-Note into the message), and the commit that draft becomes joins a range this gate still checks.
+ * to write (git/changes/contract-shrink.ts detects the shrink in the claim, agents/land/landed-subject.ts forces
+ * the `!` and the Breaking-Note into the message), and the commit that draft becomes joins a range this gate
+ * still checks.
  * Recognized by shape: a checkout whose git dir is not its common dir is a linked worktree. */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

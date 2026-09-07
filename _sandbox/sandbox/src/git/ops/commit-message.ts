@@ -387,7 +387,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
             ? `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and put a "!" immediately before the colon: "feat!:" without a scope, "feat(scope)!:" with one, never "feat!(scope):". This is rare; when in doubt, omit it.`
             : undefined,
         /* THE FORCED CASE, replacing the judgment call above whenever the detector already knows the answer
-         * (git/contract-shrink.ts): this commit removes named wire surfaces, so whether it breaks something is
+         * (git/changes/contract-shrink.ts): this commit removes named wire surfaces, so whether it breaks something is
          * not the model's to weigh, only what the warning sentence should say. Stated with the removed paths
          * in front of it because the sentence has to be ABOUT them, and a model told only "this is breaking"
          * writes a warning about whatever the diff's largest file was. Independent of wantsNote: the note is a
