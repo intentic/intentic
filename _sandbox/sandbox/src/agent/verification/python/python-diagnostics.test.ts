@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
-import { pyrightErrors, ruffFindings } from "./python-diagnostics.js";
+import { droppedRules, pyrightErrors, ruffFindings } from "./python-diagnostics.js";
 
 /* THE TWO PARSERS BETWEEN THIS DAEMON AND A TOOL IT DOES NOT OWN. Both read a format someone else versions, and
  * both have the same duty at the edge: a payload that cannot be understood is "not checked", never "checked and
@@ -70,8 +70,11 @@ const PYRIGHT_JSON = JSON.stringify({
     summary: { filesAnalyzed: 1, errorCount: 2, warningCount: 1 },
 });
 
+// The two facts that decide what pyright is allowed to say: an environment behind it, and a gate in front of it.
+const WHOLE = droppedRules({ environment: true, gated: false });
+
 test("with an environment, every error is reported, warnings are not, and positions become one-based", () => {
-    expect(pyrightErrors(PYRIGHT_JSON, asIs, true)).toEqual([
+    expect(pyrightErrors(PYRIGHT_JSON, asIs, WHOLE)).toEqual([
         '/work/app/main.py:12:5: error reportAttributeAccessIssue: Cannot access attribute "titel" for class "str"',
         '/work/app/main.py:3:8: error reportMissingImports: Import "httpx" could not be resolved',
     ]);
@@ -80,8 +83,31 @@ test("with an environment, every error is reported, warnings are not, and positi
 test("without an environment the unresolved-import errors are dropped and the rest still stands", () => {
     // Dropped rather than reported, because with no `.venv` they say only that we already knew there was none —
     // and dropping them is what lets the file's own errors be reported instead of a wall of missing imports.
-    expect(pyrightErrors(PYRIGHT_JSON, asIs, false)).toEqual([
+    expect(pyrightErrors(PYRIGHT_JSON, asIs, droppedRules({ environment: false, gated: false }))).toEqual([
         '/work/app/main.py:12:5: error reportAttributeAccessIssue: Cannot access attribute "titel" for class "str"',
+    ]);
+});
+
+// The one finding both tools produce: ruff calls it F821, pyright calls it reportUndefinedVariable, and it is
+// the same missing name at the same position.
+const UNDEFINED_NAME_JSON = JSON.stringify({
+    generalDiagnostics: [
+        {
+            file: `${WORKSPACE_ROOT}/app/main.py`,
+            severity: "error",
+            message: '"missing_helper" is not defined',
+            range: { start: { line: 1, character: 11 }, end: { line: 1, character: 25 } },
+            rule: "reportUndefinedVariable",
+        },
+    ],
+});
+
+test("what the ruff gate already said, pyright does not say again — and says when the gate did not run", () => {
+    // With ruff's answer in hand the model must see one line for one missing name, not the same fault twice in
+    // two vocabularies; with no ruff in the sandbox pyright is the only thing that can report it, so it does.
+    expect(pyrightErrors(UNDEFINED_NAME_JSON, asIs, droppedRules({ environment: true, gated: true }))).toEqual([]);
+    expect(pyrightErrors(UNDEFINED_NAME_JSON, asIs, droppedRules({ environment: true, gated: false }))).toEqual([
+        '/work/app/main.py:2:12: error reportUndefinedVariable: "missing_helper" is not defined',
     ]);
 });
 
@@ -89,18 +115,18 @@ test("a payload this cannot read is not a clean file", () => {
     // Each of these is a real way the run can end: a tool that printed something else, a version that renamed
     // the field, a process killed mid-write. Every one must answer "could not read" so the caller says the file
     // went unchecked; an empty array here would be a clean bill of health nobody issued.
-    expect(pyrightErrors("", asIs, true)).toBeUndefined();
-    expect(pyrightErrors("Traceback (most recent call last):", asIs, true)).toBeUndefined();
-    expect(pyrightErrors(JSON.stringify({ version: "1.1.413", summary: {} }), asIs, true)).toBeUndefined();
-    expect(pyrightErrors('{"generalDiagnostics": {"file": "x"}}', asIs, true)).toBeUndefined();
+    expect(pyrightErrors("", asIs, WHOLE)).toBeUndefined();
+    expect(pyrightErrors("Traceback (most recent call last):", asIs, WHOLE)).toBeUndefined();
+    expect(pyrightErrors(JSON.stringify({ version: "1.1.413", summary: {} }), asIs, WHOLE)).toBeUndefined();
+    expect(pyrightErrors('{"generalDiagnostics": {"file": "x"}}', asIs, WHOLE)).toBeUndefined();
     // A run that really found nothing is a different answer, and it is the empty list.
-    expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [] }), asIs, true)).toEqual([]);
+    expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [] }), asIs, WHOLE)).toEqual([]);
 });
 
 test("a diagnostic missing the parts it should have is still reported, with what it has", () => {
     // Pyright omits `rule` on syntax and internal errors, and a payload with no range at all has been seen from
     // a crashed analysis. Reporting the claim at 1:1 beats dropping an error because its position was missing.
-    expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [{ file: "/work/a.py", severity: "error", message: "Expected expression" }] }), asIs, true)).toEqual([
+    expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [{ file: "/work/a.py", severity: "error", message: "Expected expression" }] }), asIs, WHOLE)).toEqual([
         "/work/a.py:1:1: error error: Expected expression",
     ]);
 });

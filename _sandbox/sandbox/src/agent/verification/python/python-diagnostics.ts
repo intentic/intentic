@@ -21,7 +21,9 @@ import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
  *   asked for — the same reason the TypeScript side drops warnings and suggestions.
  *
  *   IS IT TYPE-CORRECT — pyright, and only where an environment exists to resolve imports against. This is the
- *   half that sees a wrong attribute, a bad call, a return that does not match its annotation.
+ *   half that sees a wrong attribute, a bad call, a return that does not match its annotation. Where the two
+ *   tools answer the SAME question — an undefined name is `F821` to one and `reportUndefinedVariable` to the
+ *   other — the gate keeps it and pyright is held quiet (GATE_RULES), so one fault is one line.
  *
  * WHAT AN ABSENT ENVIRONMENT DOES, and why it is not silence. Without a `.venv` pyright resolves no third-party
  * import and reports every one of them as missing: confident, specific, and uninformative, which is the failure
@@ -169,15 +171,16 @@ interface PyrightDiagnostic {
 const positionOf = (start: PyrightPosition | undefined): string =>
     `${typeof start?.line === "number" ? start.line + 1 : 1}:${typeof start?.character === "number" ? start.character + 1 : 1}`;
 
-// Which diagnostics the model is shown: errors only, minus the import-resolution rules when there was no
-// environment for pyright to resolve against, where they say nothing except that we knew there was no environment.
-const shown = (severity: unknown, rule: string | undefined, keepUnresolvedImports: boolean): boolean =>
-    severity === "error" && (keepUnresolvedImports || rule === undefined || !UNRESOLVED_IMPORT_RULES.has(rule));
+// Which diagnostics the model is shown: errors only, minus the rules this run has already decided pyright must
+// not speak on (`dropped`, below). A diagnostic with no rule at all is always shown — that is a syntax or
+// internal error, and nothing in `dropped` can be about it.
+const shown = (severity: unknown, rule: string | undefined, dropped: ReadonlySet<string>): boolean =>
+    severity === "error" && (rule === undefined || !dropped.has(rule));
 
 // One diagnostic as the model reads it, or undefined for one it is not shown.
-const pyrightLine = (entry: PyrightDiagnostic, named: (file: string) => string, keepUnresolvedImports: boolean): string | undefined => {
+const pyrightLine = (entry: PyrightDiagnostic, named: (file: string) => string, dropped: ReadonlySet<string>): string | undefined => {
     const rule = typeof entry.rule === "string" ? entry.rule : undefined;
-    if (!shown(entry.severity, rule, keepUnresolvedImports)) {
+    if (!shown(entry.severity, rule, dropped)) {
         return undefined;
     }
     const file = typeof entry.file === "string" ? named(entry.file) : "";
@@ -186,7 +189,7 @@ const pyrightLine = (entry: PyrightDiagnostic, named: (file: string) => string, 
     return `${file}:${positionOf(entry.range?.start)}: error ${rule ?? "error"}: ${String(entry.message ?? "").split("\n")[0]}`;
 };
 
-export const pyrightErrors = (stdout: string, named: (file: string) => string, keepUnresolvedImports: boolean): string[] | undefined => {
+export const pyrightErrors = (stdout: string, named: (file: string) => string, dropped: ReadonlySet<string>): string[] | undefined => {
     let parsed: unknown;
     try {
         parsed = JSON.parse(stdout);
@@ -198,13 +201,27 @@ export const pyrightErrors = (stdout: string, named: (file: string) => string, k
         return undefined;
     }
     return (diagnostics as PyrightDiagnostic[])
-        .map((entry) => pyrightLine(entry, named, keepUnresolvedImports))
+        .map((entry) => pyrightLine(entry, named, dropped))
         .filter((line): line is string => line !== undefined);
 };
 
 // What pyright says when it has no environment to resolve against, and the only diagnostics dropped when the
 // environment is missing. Everything else it reports about the file is about the file.
-const UNRESOLVED_IMPORT_RULES = new Set(["reportMissingImports", "reportMissingModuleSource"]);
+const UNRESOLVED_IMPORT_RULES = ["reportMissingImports", "reportMissingModuleSource"];
+
+/* THE ONE QUESTION BOTH TOOLS ANSWER. The split at the top of this file gives the undefined-name question to
+ * ruff (`F821`), and pyright answers it too, in the same words about the same position — so a file with one
+ * missing helper in it reported two findings, and the model reads two findings as two things to fix. The tool
+ * that OWNS the question keeps it: ruff's answer needs no environment, so it is the one that is there on every
+ * file, and pyright's copy is the duplicate. Dropped only when ruff actually ran; with no ruff in the sandbox
+ * pyright is the only thing that can say it, and then it says it. */
+const GATE_RULES = ["reportUndefinedVariable"];
+
+/* Which rules pyright is not shown on, for the two reasons a run can have: no environment to resolve imports
+ * against, and a gate that already answered the same question. Assembled by the caller, because only it knows
+ * whether ruff ran and whether an interpreter was found. */
+export const droppedRules = ({ environment, gated }: { environment: boolean; gated: boolean }): ReadonlySet<string> =>
+    new Set([...(environment ? [] : UNRESOLVED_IMPORT_RULES), ...(gated ? GATE_RULES : [])]);
 
 // Said once per turn, alongside real findings rather than instead of them: the syntax and undefined-name gate
 // still ran and its answer stands. Named as a limit of this check, never as an instruction to install anything —
@@ -239,19 +256,21 @@ const gateFindings = async (
 };
 
 // The type half. Undefined ⇒ pyright is not here, did not finish, or answered in a shape this cannot read.
+// `gated` is whether the ruff half answered: what it already said, pyright does not repeat.
 const typeFindings = async (
     file: string,
     cwd: string,
     interpreter: string | undefined,
     placement: CheckPlacement | undefined,
     named: (file: string) => string,
+    gated: boolean,
 ): Promise<string[] | undefined> => {
     if (!(await onPath("pyright"))) {
         return undefined;
     }
     const args = ["--outputjson", ...(interpreter === undefined ? [] : ["--pythonpath", interpreter]), file];
     const outcome = await run("pyright", args, cwd, placement);
-    return outcome.answered ? pyrightErrors(outcome.stdout, named, interpreter !== undefined) : undefined;
+    return outcome.answered ? pyrightErrors(outcome.stdout, named, droppedRules({ environment: interpreter !== undefined, gated })) : undefined;
 };
 
 /* The two halves assembled. Both silent for lack of running is `unavailable`; either one having run makes the
@@ -278,7 +297,7 @@ export const runPythonDiag = async ({ file, placement, named }: DiagRequest): Pr
     if (gate?.some((finding) => finding.code === SYNTAX_CODE) === true) {
         return assembled(gate, undefined, undefined);
     }
-    const types = await typeFindings(file, cwd, interpreter, placement, named);
+    const types = await typeFindings(file, cwd, interpreter, placement, named, gate !== undefined);
     return assembled(gate, types, noteFor(gate, types, interpreter));
 };
 
