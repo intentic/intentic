@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { packageRoot } from "@intentic/constants/node";
 import { gitInit } from "@intentic/scaffold";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Services } from "../composition.js";
@@ -132,9 +133,11 @@ describe("seedStarterSite", () => {
     });
 
     // The path the Dockerfile writes to and this module reads from, in one place on each side. A rename that
-    // touches only one of them leaves every new sandbox opening empty, with nothing failing anywhere.
+    // touches only one of them would leave every new sandbox opening empty with nothing else failing, so the two
+    // sides are read against each other here.
     it("reads the tree from the path the image bakes", () => {
-        expect(STARTER_BAKED_DIR).toBe("/opt/starter");
+        const dockerfile = readFileSync(join(packageRoot(import.meta.url), "Dockerfile"), "utf8");
+        expect(/intentic scaffold add-app --dir (\S+)/.exec(dockerfile)?.[1]).toBe(STARTER_BAKED_DIR);
     });
 });
 

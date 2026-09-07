@@ -13,6 +13,7 @@ import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
@@ -35,13 +36,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         join(root, `${STATE_DIR}`, "config", "automations.json"),
         join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
     );
-    await automations.upsert({
-        id: automationId,
-        trigger: { kind: "listener", provider: "ci", ...narrow },
-        prompt: "handle ci",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-        enabled: true,
-    });
+    await automations.upsert(automationConfig(automationId, { trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci" }));
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
@@ -183,13 +178,9 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         join(root, `${STATE_DIR}`, "config", "automations.json"),
         join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
     );
-    await automations.upsert({
-        id: "wh-gitlab",
-        trigger: { kind: "listener", provider: "ci", eventType: "pipeline_succeeded" },
-        prompt: "p",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-        enabled: true,
-    });
+    await automations.upsert(
+        automationConfig("wh-gitlab", { trigger: { kind: "listener", provider: "ci", eventType: "pipeline_succeeded" }, prompt: "p" }),
+    );
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,

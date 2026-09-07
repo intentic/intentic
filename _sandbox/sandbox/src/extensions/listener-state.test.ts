@@ -2,6 +2,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
+import { automationRecord } from "../harness/route-stores.testing.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
 const services = (automations: AutomationRecord[], capabilities: Capability[]): Pick<Services, "automations" | "capabilities"> =>
@@ -10,15 +11,8 @@ const services = (automations: AutomationRecord[], capabilities: Capability[]): 
         capabilities: { list: async () => capabilities },
     }) as unknown as Pick<Services, "automations" | "capabilities">;
 
-const listenerAutomation = (id: string, extra: Partial<AutomationRecord> = {}): AutomationRecord => ({
-    id,
-    trigger: { kind: "listener", provider: "discord" },
-    prompt: `wake:${id}`,
-    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-    enabled: true,
-    runs: [],
-    ...extra,
-});
+const listenerAutomation = (id: string, extra: Partial<AutomationRecord> = {}): AutomationRecord =>
+    automationRecord(id, { trigger: { kind: "listener", provider: "discord" }, ...extra });
 
 test("listenerState returns the provider's enabled listener automations and its connector configs", async () => {
     const state = await listenerState(
@@ -27,7 +21,7 @@ test("listenerState returns the provider's enabled listener automations and its 
                 listenerAutomation("live"),
                 listenerAutomation("off", { enabled: false }),
                 listenerAutomation("other", { trigger: { kind: "listener", provider: "slack" } }),
-                { id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
+                automationRecord("cron", { prompt: "p" }),
             ],
             [
                 { id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } },

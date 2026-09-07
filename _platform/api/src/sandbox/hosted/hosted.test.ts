@@ -9,6 +9,15 @@ import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHos
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { testIngressConfig } from "../../testing.js";
 
+/* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
+ * time in production, polled up to sixty times. Here the wait is a no-op: every case that crosses it is about
+ * WHICH provider states count as settled and what is asked of Fly in each, never about how long settling
+ * takes, and the six that crossed it in real time were most of this package's test wall-clock. */
+vi.mock("node:timers/promises", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("node:timers/promises")>()),
+    setTimeout: async () => undefined,
+}));
+
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
 // The hosted lane's config, enabled: tests narrow fields per case.

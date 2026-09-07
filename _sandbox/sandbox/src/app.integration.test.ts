@@ -25,7 +25,7 @@ import { testConfig } from "./testing.js";
 import { clientFor, collect, errorCode, postJson, rejectAuth, rejectForbidden } from "./harness/route-client.testing.js";
 import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
-import { memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
+import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
 import { runAgentTurn } from "./harness/route-turns.testing.js";
 import { windowOf } from "./sessions/transcript-record.js";
 
@@ -416,9 +416,9 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
 
 test("POST /automations/:id/fire skips bearer auth, enforces the door's token from the query or a bearer header, and records a run", async () => {
     const store = memoryAutomationsStore([
-        { id: "deploy", trigger: { kind: "event" }, prompt: "handle the event", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
-        { id: "paused", trigger: { kind: "event" }, prompt: "x", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false, runs: [] },
-        { id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "x", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
+        automationRecord("deploy", { trigger: { kind: "event" }, prompt: "handle the event" }),
+        automationRecord("paused", { trigger: { kind: "event" }, prompt: "x", enabled: false }),
+        automationRecord("cron", { prompt: "x" }),
     ]);
     // Bearer auth rejects everything, so a 200 proves the route's exemption; the door's token is the only gate.
     const composed = services({ automations: store, auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } });
@@ -448,12 +448,12 @@ test("POST /automations/:id/fire skips bearer auth, enforces the door's token fr
 
 test("automations.run fires by hand on the real path: a disabled automation too, and past the approval gate", async () => {
     const store = memoryAutomationsStore([
-        { id: "cron", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "sweep the logs", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
+        automationRecord("cron", { trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "sweep the logs" }),
         // Trying a prompt BEFORE switching the automation on is the main reason to press Run now, so: unlike the
         // webhook, which fails closed at 409 against an outside sender: an off automation still fires by hand.
-        { id: "paused", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false, runs: [] },
+        automationRecord("paused", { trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", enabled: false }),
         // requireApproval would hold a scheduled fire in the owner's queue. Their own click is the approval.
-        { id: "gated", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", requireApproval: true, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
+        automationRecord("gated", { trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", requireApproval: true }),
     ]);
     const client = clientFor(createApp(services({ automations: store })));
 
@@ -473,14 +473,12 @@ test("automations.run fires by hand on the real path: a disabled automation too,
 });
 
 test("automations.setEnabled changes only enablement on a security-sensitive automation", async () => {
-    const support = {
-        id: "support",
-        trigger: { kind: "listener" as const, provider: "webchat", eventType: "message", allowedOrigins: ["https://site.example"] },
+    const support = automationRecord("support", {
+        trigger: { kind: "listener", provider: "webchat", eventType: "message", allowedOrigins: ["https://site.example"] },
         prompt: "answer support questions",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         webchat: {
-            access: "google" as const,
-            antiBot: "turnstile" as const,
+            access: "google",
+            antiBot: "turnstile",
             googleClientId: "client-id",
             turnstileSiteKey: "site-key",
             turnstileSecret: "secret-key",
@@ -488,9 +486,8 @@ test("automations.setEnabled changes only enablement on a security-sensitive aut
         allowedTools: ["Read", "Grep"],
         account: "night-account",
         holdForSeconds: 30,
-        enabled: true,
-        runs: [{ at: 1, outcome: "completed" as const }],
-    };
+        runs: [{ at: 1, outcome: "completed" }],
+    });
     const store = memoryAutomationsStore([support]);
     const client = clientFor(createApp(services({ automations: store })));
 
@@ -501,14 +498,10 @@ test("automations.setEnabled changes only enablement on a security-sensitive aut
 
 test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist, reflects CORS, and records a run", async () => {
     const store = memoryAutomationsStore([
-        {
-            id: "support",
+        automationRecord("support", {
             trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://site.example"] },
             prompt: "help the visitor",
-            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-            enabled: true,
-            runs: [],
-        },
+        }),
     ]);
     // Bearer auth rejects everything, so reaching the route at all (not a 401) proves the exemption; the origin
     // allowlist is the real gate. The widget's own origin is deliberately NOT in allowOrigins: /webchat reflects

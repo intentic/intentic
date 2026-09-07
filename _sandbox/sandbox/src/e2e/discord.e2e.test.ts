@@ -11,6 +11,7 @@ import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, dockerRun, startSandboxContainer, until } from "../harness/e2e-harness.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 // The Tier-3 real Discord + Whisper e2e: the ext-discord gateway process on a REAL bot token receives a REAL
@@ -110,14 +111,13 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 120_000);
 
     it("a real channel message reaches the listener automation and is held for approval", async () => {
-        await client.automations.upsert({
-            id: "e2e-discord",
-            trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
-            prompt: "noop",
-            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-            requireApproval: true,
-            enabled: true,
-        });
+        await client.automations.upsert(
+            automationConfig("e2e-discord", {
+                trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
+                prompt: "noop",
+                requireApproval: true,
+            }),
+        );
 
         // The listener reconciler attaches the gateway within its 30s interval; keep posting a nonce until a
         // held wake carrying it appears (each post is a new message, so the recent-id dedup never bites).
@@ -186,12 +186,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it.skipIf(Object.keys(CLAUDE_CREDS).length === 0)(
         "a real message wakes a real agent turn to completion (no approval hold)",
         async () => {
-            await client.automations.upsert({
-                id: "e2e-agent",
-                trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
-                prompt: "This is an automated end-to-end check. Do not use any tools. Reply with the single word: done.",
-                models: [{ provider: "claude", model: "claude-sonnet-4-6" }],                enabled: true,
-            });
+            await client.automations.upsert(
+                automationConfig("e2e-agent", {
+                    trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
+                    prompt: "This is an automated end-to-end check. Do not use any tools. Reply with the single word: done.",
+                }),
+            );
             const nonce = `intentic-e2e-agent-${randomBytes(6).toString("hex")}`;
             let lastSent = 0;
             const run = await until(

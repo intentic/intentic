@@ -10,6 +10,7 @@ import { pack } from "tar-stream";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, startSandboxContainer, until } from "../harness/e2e-harness.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 // The Tier-2 daemon e2e: boot the REAL sandbox image (built from this repo's Dockerfile, the same artifact CI
@@ -209,7 +210,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 120_000);
 
     it("automation approval hold: a webhook fire on a requireApproval automation lands in the queue, reject drops it", async () => {
-        await client.automations.upsert({ id: "e2e-approval", trigger: { kind: "event" }, prompt: "noop", requireApproval: true, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+        await client.automations.upsert(automationConfig("e2e-approval", { trigger: { kind: "event" }, prompt: "noop", requireApproval: true }));
         // The webhook's token is not on the record: the daemon attaches it to the listed summary for the
         // owner (webhookToken), which is what an operator copies off the row.
         const { automations } = await client.automations.list();
@@ -237,7 +238,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 60_000);
 
     it("automation guard: a failing guard records the run as skipped and never wakes the agent", async () => {
-        await client.automations.upsert({ id: "e2e-guard", trigger: { kind: "event" }, guard: "exit 1", prompt: "noop", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+        await client.automations.upsert(automationConfig("e2e-guard", { trigger: { kind: "event" }, guard: "exit 1", prompt: "noop" }));
         const { automations } = await client.automations.list();
         const fireToken = automations.find((automation) => automation.id === "e2e-guard")?.webhookToken;
 
@@ -250,14 +251,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // A disabled automation refuses to fire at all. The re-post carries no token: the door keeps its own
         // across every save, which is what makes the same URL still answer (409, not 401) below.
-        await client.automations.upsert({
-            id: "e2e-guard",
-            trigger: { kind: "event" },
-            guard: "exit 1",
-            prompt: "noop",
-            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-            enabled: false,
-        });
+        await client.automations.upsert(
+            automationConfig("e2e-guard", { trigger: { kind: "event" }, guard: "exit 1", prompt: "noop", enabled: false }),
+        );
         expect((await fetch(`${base}/automations/e2e-guard/fire?token=${fireToken}`, { method: "POST" })).status).toBe(409);
         await client.automations.remove({ id: "e2e-guard" });
     }, 60_000);
@@ -265,14 +261,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it("run now: a schedule automation nobody has waited for fires by hand, guard and all", async () => {
         // The whole point of Run now is a cron you would otherwise have to wait until 3 a.m. to try. Its guard
         // still runs: a by-hand fire that skipped it would prove nothing about the real one.
-        await client.automations.upsert({
-            id: "e2e-run-now",
-            trigger: { kind: "schedule", cron: "0 3 * * *" },
-            guard: "exit 1",
-            prompt: "noop",
-            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-            enabled: true,
-        });
+        await client.automations.upsert(
+            automationConfig("e2e-run-now", { trigger: { kind: "schedule", cron: "0 3 * * *" }, guard: "exit 1", prompt: "noop" }),
+        );
         expect(await client.automations.run({ id: "e2e-run-now" })).toEqual({ ok: true });
         const skipped = await until(async () => {
             const { automations } = await client.automations.list();
@@ -285,13 +276,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 60_000);
 
     it("run now: a chat listener refuses, because a by-hand fire carries none of the messages it exists to handle", async () => {
-        await client.automations.upsert({
-            id: "e2e-run-now-listener",
-            trigger: { kind: "listener", provider: "discord" },
-            prompt: "noop",
-            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-            enabled: true,
-        });
+        await client.automations.upsert(
+            automationConfig("e2e-run-now-listener", { trigger: { kind: "listener", provider: "discord" }, prompt: "noop" }),
+        );
         // Refused rather than run: firing this by hand could only wake an agent told to handle events and given
         // none, and that pointless turn would hold the automation against a real mention arriving behind it.
         await expect(client.automations.run({ id: "e2e-run-now-listener" })).rejects.toThrow(/real message/);

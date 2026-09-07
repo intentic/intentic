@@ -22,6 +22,7 @@ import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { TranscriptAgent } from "../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../harness/route-services.testing.js";
+import { automationConfig } from "../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../../settings/settings-store.js";
 import { resolveRequest } from "../tools/agent-requests.js";
@@ -825,7 +826,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     const services = await journalServices(root, false);
 
     await services.turnJournal.recordTurn(journalled("rs-off"));
-    await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+    await services.automations.upsert(automationConfig("nightly", { prompt: "sweep" }));
     await services.turnJournal.recordFire({
         kind: "automation",
         automationId: "nightly",
@@ -908,14 +909,9 @@ test("a failed interrupted-transcript append retains the journal for a later boo
 test("an interrupted fire records `interrupted`, then re-fires with its snapshotted payload through the guard", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     // The guard passes only because the payload reached it: proof the re-fire runs the real gate, not around it.
-    await services.automations.upsert({
-        id: "hook",
-        trigger: { kind: "event" },
-        guard: `test "$AUTOMATION_PAYLOAD" = "ping"`,
-        prompt: "handle it",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-        enabled: true,
-    });
+    await services.automations.upsert(
+        automationConfig("hook", { trigger: { kind: "event" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"`, prompt: "handle it" }),
+    );
     const origin = { automationId: "hook", provider: "webhook" };
     await services.turnJournal.recordFire({
         kind: "automation",
@@ -942,14 +938,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
 
 test("a re-fire skips the approval gate: the wake was already past it when the daemon died", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
-    await services.automations.upsert({
-        id: "gated",
-        trigger: { kind: "schedule", cron: "* * * * *" },
-        prompt: "sweep",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-        requireApproval: true,
-        enabled: true,
-    });
+    await services.automations.upsert(automationConfig("gated", { prompt: "sweep", requireApproval: true }));
     await services.turnJournal.recordFire({ kind: "automation", automationId: "gated", conversationId: "a-gated-1", startedAt: 10_000, attempts: 0 });
 
     const prompts: string[] = [];
@@ -961,7 +950,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
 
 test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
-    await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false });
+    await services.automations.upsert(automationConfig("off", { prompt: "sweep", enabled: false }));
     await services.turnJournal.recordFire({ kind: "automation", automationId: "off", conversationId: "a-off-1", startedAt: 10_000, attempts: 0 });
     await services.turnJournal.recordFire({
         kind: "automation",

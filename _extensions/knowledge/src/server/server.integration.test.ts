@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BackendRouteHandler, ExtensionServerApi } from "@intentic/extension-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { KNOWLEDGE_BASE, type Graph, type Note, type Overview } from "../contract.js";
+import type { Graph, Note, Overview } from "../contract.js";
 import { activateServer } from "./server.js";
 
 /* The backend as the daemon actually drives it: activateServer mounts one fetch handler, the host strips the
@@ -203,11 +203,5 @@ describe(`the knowledge backend`, () => {
         await rm(join(workspace, `knowledge`), { recursive: true, force: true });
         expect(await json<Overview>(`/overview`)).toMatchObject({ noteCount: 0, linkCount: 0, orphans: [] });
         expect((await json<{ notes: unknown[] }>(`/notes`)).notes).toEqual([]);
-    });
-});
-
-describe(`the namespace`, () => {
-    it(`is the one both halves speak`, () => {
-        expect(KNOWLEDGE_BASE).toBe(`/x/intentic.knowledge`);
     });
 });

@@ -3,9 +3,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { Automation } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 
 // A store over fresh temp paths (the .intentic dir doesn't exist yet: the store must create it on write).
 const tempStore = (): { store: AutomationsStore; path: string; runsPath: string } => {
@@ -15,23 +15,15 @@ const tempStore = (): { store: AutomationsStore; path: string; runsPath: string 
     return { store: fileAutomationsStore(path, runsPath), path, runsPath };
 };
 
-const automation = (id: string, cron = "* * * * *"): Automation => ({
-    id,
-    trigger: { kind: "schedule", cron },
-    prompt: "check the inbox",
-    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-    enabled: true,
-});
-
 test("upsert appends, then edits by id keeping the run history", async () => {
     const { store } = tempStore();
     expect(await store.list()).toEqual([]);
-    await store.upsert(automation("inbox"));
-    await store.upsert(automation("standup", "0 9 * * *"));
+    await store.upsert(automationConfig("inbox"));
+    await store.upsert(automationConfig("standup", { trigger: { kind: "schedule", cron: "0 9 * * *" } }));
     expect((await store.list()).map((record) => record.id)).toEqual(["inbox", "standup"]);
     await store.recordRun("inbox", { at: 1, outcome: "completed" });
     // Re-upserting the same id edits the config but keeps the recorded runs.
-    await store.upsert({ ...automation("inbox", "*/5 * * * *"), enabled: false });
+    await store.upsert(automationConfig("inbox", { trigger: { kind: "schedule", cron: "*/5 * * * *" }, enabled: false }));
     const edited = await store.get("inbox");
     expect(edited?.trigger).toEqual({ kind: "schedule", cron: "*/5 * * * *" });
     expect(edited?.enabled).toBe(false);
@@ -41,15 +33,14 @@ test("upsert appends, then edits by id keeping the run history", async () => {
 
 test("setEnabled changes only the switch on the current record", async () => {
     const { store } = tempStore();
-    await store.upsert({
-        id: "support",
-        trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] },
-        prompt: "answer support questions",
-        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-        webchat: { antiBot: "turnstile", turnstileSecret: "secret" },
-        allowedTools: ["Read"],
-        enabled: true,
-    });
+    await store.upsert(
+        automationConfig("support", {
+            trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] },
+            prompt: "answer support questions",
+            webchat: { antiBot: "turnstile", turnstileSecret: "secret" },
+            allowedTools: ["Read"],
+        }),
+    );
     await store.recordRun("support", { at: 1, outcome: "completed" });
     const before = await store.get("support");
 
@@ -60,7 +51,7 @@ test("setEnabled changes only the switch on the current record", async () => {
 
 test("recordRun prepends newest-first, caps the history, and drops runs for removed automations", async () => {
     const { store } = tempStore();
-    await store.upsert(automation("inbox"));
+    await store.upsert(automationConfig("inbox"));
     for (let i = 1; i <= 25; i++) {
         await store.recordRun("inbox", { at: i, outcome: "completed" });
     }
@@ -79,7 +70,7 @@ test("recordRun prepends newest-first, caps the history, and drops runs for remo
  * must land entirely in the untracked ledger, leaving the reviewed file byte-identical. */
 test("recording a run leaves the tracked manifest untouched and writes only the ledger", async () => {
     const { store, path, runsPath } = tempStore();
-    await store.upsert(automation("inbox"));
+    await store.upsert(automationConfig("inbox"));
     const manifestBefore = await readFile(path, "utf8");
 
     await store.recordRun("inbox", { at: 1, outcome: "completed", conversationId: "cnv_1" });
@@ -93,8 +84,8 @@ test("recording a run leaves the tracked manifest untouched and writes only the 
 
 test("removing an automation takes its run history with it", async () => {
     const { store, runsPath } = tempStore();
-    await store.upsert(automation("inbox"));
-    await store.upsert(automation("standup", "0 9 * * *"));
+    await store.upsert(automationConfig("inbox"));
+    await store.upsert(automationConfig("standup", { trigger: { kind: "schedule", cron: "0 9 * * *" } }));
     await store.recordRun("inbox", { at: 1, outcome: "completed" });
     await store.recordRun("standup", { at: 2, outcome: "completed" });
 
@@ -107,11 +98,11 @@ test("removing an automation takes its run history with it", async () => {
 // the hole the two separately-queued files leave, closed by upsert rather than by a lock across both.
 test("an automation re-created under a used id starts with no runs", async () => {
     const { store } = tempStore();
-    await store.upsert(automation("inbox"));
+    await store.upsert(automationConfig("inbox"));
     await store.recordRun("inbox", { at: 1, outcome: "error", detail: "boom" });
     await store.remove("inbox");
 
-    await store.upsert(automation("inbox"));
+    await store.upsert(automationConfig("inbox"));
     expect((await store.get("inbox"))?.runs).toEqual([]);
 });
 
@@ -120,7 +111,12 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
     expect(await store.list()).toEqual([]);
-    await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true }]));
+    await writeFile(
+        path,
+        JSON.stringify([
+            { id: "x", trigger: { kind: "bogus" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true },
+        ]),
+    );
     expect(await store.list()).toEqual([]);
 });
 
@@ -129,7 +125,7 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
  * as an absent manifest would silently stop every automation in the sandbox. */
 test("a corrupt ledger costs the history but still lists and fires the automations", async () => {
     const { store, runsPath } = tempStore();
-    await store.upsert(automation("inbox"));
+    await store.upsert(automationConfig("inbox"));
     await store.recordRun("inbox", { at: 1, outcome: "completed" });
     await writeFile(runsPath, "{ not valid json");
 

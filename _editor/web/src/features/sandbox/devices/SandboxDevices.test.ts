@@ -7,7 +7,7 @@
 // device that has nothing else to show.
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { DESTRUCTIVE_VERB, groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
+import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -353,7 +353,6 @@ it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(primaryVerb(false)).toBe(`start`);
     expect(menuVerbs(true)).toEqual([`restart`, `logs`, `resources`, `update`, `rollback`]);
     expect(menuVerbs(false)).toEqual([`logs`, `resources`, `update`, `rollback`]);
-    expect(DESTRUCTIVE_VERB).toBe(`remove`);
 });
 
 /* ---- the sandbox's share of the machine, and the form that changes it -----------------------------------

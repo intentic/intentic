@@ -62,6 +62,31 @@ const withoutTmux = (): void => {
     vi.stubEnv("INTENTIC_AGENT_TMUX", "0");
 };
 
+/* THE GRACE WINDOW, WITHOUT THE WAIT. A steered stream ends on a second of silence after its last result
+ * (sdk-stream.ts STEER_GRACE_MS), and four cases below reach that ending. Waited out in real time they were the
+ * four slowest tests in this file, a second each, and what the second measured was the constant rather than the
+ * ordering. So the work runs under a fake setTimeout and the clock is walked forward a window per pass until the
+ * work settles: the same sequence of events, none of the waiting. Only setTimeout is faked, so Date and
+ * everything else on the loop stay real. */
+const withoutTheGraceWait = async <T>(work: () => Promise<T>): Promise<T> => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+        let settled = false;
+        const pending = work().finally(() => {
+            settled = true;
+        });
+        for (;;) {
+            if (settled) {
+                return await pending;
+            }
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the loop IS the clock: one window per pass
+            await vi.advanceTimersByTimeAsync(1_000);
+        }
+    } finally {
+        vi.useRealTimers();
+    }
+};
+
 // Without a vitest config there is no unstubEnvs, so a stub outlives its test and the mode leaks down the file.
 afterEach(() => vi.unstubAllEnvs());
 
@@ -1390,7 +1415,7 @@ test("after the last result a steered stream settles: the grace window closes th
             drained.push(String(message.message.content));
         }
     };
-    const events = await collect({ ...request, steering }, sdkLike);
+    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, sdkLike));
     expect(events).toEqual([{ kind: "done" }]);
     expect(drained).toEqual(["add a /ping route", "absorbed mid-turn"]);
     expect(steering.push("too late")).toBe(false);
@@ -1532,7 +1557,7 @@ test("children settled with no wake turn: the grace window closes the input so t
             drained.push(String(message.message.content));
         }
     };
-    const events = await collect({ ...request, conversationId: "c-nowake", steering }, sdkLike);
+    const events = await withoutTheGraceWait(() => collect({ ...request, conversationId: "c-nowake", steering }, sdkLike));
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "subagent", id: "call-1", subagentKind: "subagent", agentType: "Explore", description: "audit chapter 4" },
@@ -1609,7 +1634,7 @@ test("an instant empty result redelivers the prompt instead of ending the turn o
         }
     };
     const steering = new SteeringQueue();
-    const events = await collect({ ...request, steering }, swallowing);
+    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, swallowing));
     // The same words, delivered twice, and the empty result never reached the client: no zero-usage frame,
     // only the follow-up turn that actually answered.
     expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
@@ -1634,7 +1659,7 @@ test("redelivery is once per turn: a second empty answer surfaces instead of loo
         }
     };
     const steering = new SteeringQueue();
-    const events = await collect({ ...request, steering }, swallowingTwice);
+    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, swallowingTwice));
     // One redelivery, not a loop, and the second empty answer is a different problem, so it is surfaced.
     expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
     expect(events).toEqual([{ kind: "usage", inputTokens: 0, outputTokens: 0, numTurns: 0 }, { kind: "done" }]);

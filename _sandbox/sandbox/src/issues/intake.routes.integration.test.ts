@@ -14,6 +14,7 @@ import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
 import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -60,14 +61,8 @@ const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }])
         yield* events;
     };
 
-const intake = (id: string, extra: Partial<Automation> = {}): Automation => ({
-    id,
-    trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN] },
-    prompt: `fix:${id}`,
-    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-    enabled: true,
-    ...extra,
-});
+const intake = (id: string, extra: Partial<Automation> = {}): Automation =>
+    automationConfig(id, { trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN] }, prompt: `fix:${id}`, ...extra });
 
 const crash = (over: Partial<IssueReport> = {}): IssueReport => ({
     kind: "crash",
@@ -258,7 +253,7 @@ test("a disabled intake and an unknown one answer differently, because they are 
     expect((await post(app, "bugs", {})).status).toBe(409);
     expect((await post(app, "nope", {})).status).toBe(404);
     // A Front Desk id is not an intake id: the two public surfaces do not answer for each other.
-    await services.automations.upsert({ id: "chat", trigger: { kind: "listener", provider: "webchat" }, prompt: "hi", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+    await services.automations.upsert(automationConfig("chat", { trigger: { kind: "listener", provider: "webchat" }, prompt: "hi" }));
     expect((await post(app, "chat", {})).status).toBe(404);
 });
 

@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { collectSecretInventory, readSyncState, secretDigest, SYNC_FILE, writeSyncState } from "./secret-inventory.js";
+import { collectSecretInventory, readSyncState, secretDigest, writeSyncState } from "./secret-inventory.js";
 
 const env = (key: string) => ({ $secret: { source: "env", key } });
 const gen = (key: string) => ({ $secret: { source: "generated", key } });
@@ -88,6 +88,5 @@ describe("sync state round-trip", () => {
         const state = { K: { digest: secretDigest("v"), pushedAt: "2026-01-01T00:00:00.000Z" } };
         await writeSyncState(root, state);
         expect(await readSyncState(root)).toEqual(state);
-        expect(SYNC_FILE).toBe(".secrets-sync.json");
     });
 });

@@ -10,6 +10,7 @@ import type { z } from "zod";
 import { fileTurnJournal } from "../agent/run/turn-journal.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Services } from "../composition.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
@@ -54,15 +55,6 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], 
         yield* events;
     };
 
-const automation = (id: string, extra: Partial<Automation> = {}): Automation => ({
-    id,
-    trigger: { kind: "schedule", cron: "* * * * *" },
-    prompt: `wake:${id}`,
-    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-    enabled: true,
-    ...extra,
-});
-
 // One conversation as the registry holds it, with only what the sessions gate reads chosen: when it was
 // opened, by whom (an origin, or a fire's `a-` name), and whether a turn ever ran in it.
 const conversation = (id: string, createdAt: number, extra: Partial<PersistedAgent> = {}): PersistedAgent => ({
@@ -81,7 +73,7 @@ const conversation = (id: string, createdAt: number, extra: Partial<PersistedAge
     ...extra,
 });
 
-const gatedNightly = (id: string): Automation => automation(id, { trigger: { kind: "schedule", cron: "* * * * *", afterSessions: 30 } });
+const gatedNightly = (id: string): Automation => automationConfig(id, { trigger: { kind: "schedule", cron: "* * * * *", afterSessions: 30 } });
 
 const DAY = 86_400_000;
 
@@ -90,7 +82,7 @@ const pastDue = (): number => Date.now() + 61_000;
 
 test("a due cron wakes the agent once and records a completed run", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("inbox"));
+    await services.automations.upsert(automationConfig("inbox"));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
@@ -101,7 +93,7 @@ test("a due cron wakes the agent once and records a completed run", async () => 
 
 test("a failing guard skips the wake and records why; a passing guard wakes", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("guarded", { guard: "echo nothing new; exit 1" }));
+    await services.automations.upsert(automationConfig("guarded", { guard: "echo nothing new; exit 1" }));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
@@ -113,7 +105,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
 
     // Editing the guard keeps the history; the next due tick now wakes and prepends a completed run.
     await automationIdle("guarded");
-    await services.automations.upsert(automation("guarded", { guard: "true" }));
+    await services.automations.upsert(automationConfig("guarded", { guard: "true" }));
     await scheduler.tick(pastDue() + 61_000);
     await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2), SETTLES);
     expect((await services.automations.get("guarded"))?.runs[0]?.outcome).toBe("completed");
@@ -122,7 +114,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
 
 test("guards receive the reserved workspace-root directory to prune", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
+    await services.automations.upsert(automationConfig("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
     const prompts: string[] = [];
     await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
     expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
@@ -209,8 +201,8 @@ test("a re-fire on the conversation a fire already minted is not measured agains
 
 test("event automations never tick; fireAutomation hands the payload to the guard and the prompt", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("hook", { trigger: { kind: "event" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"` }));
-    await services.automations.upsert(automation("sched"));
+    await services.automations.upsert(automationConfig("hook", { trigger: { kind: "event" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"` }));
+    await services.automations.upsert(automationConfig("sched"));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
@@ -242,7 +234,7 @@ test("event automations never tick; fireAutomation hands the payload to the guar
 test("the automation's own ladder resolves onto the wake, tier and all, with no run role behind it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(
-        automation("pinned", { models: [{ provider: "codex", model: "gpt-5-codex", harness: "claude-code", effort: "high", thinking: true }] }),
+        automationConfig("pinned", { models: [{ provider: "codex", model: "gpt-5-codex", harness: "claude-code", effort: "high", thinking: true }] }),
     );
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
@@ -268,7 +260,7 @@ test("the automation's own ladder resolves onto the wake, tier and all, with no 
 
 test("outside and scheduled fires both open isolated conversations, and only provenance differs", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("support"));
+    await services.automations.upsert(automationConfig("support"));
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
         inputs.push(input);
@@ -301,7 +293,7 @@ test("outside and scheduled fires both open isolated conversations, and only pro
 
 test("a held external wake snapshots its provenance, so approving it opens the same conversation", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("gated-chat", { requireApproval: true }));
+    await services.automations.upsert(automationConfig("gated-chat", { requireApproval: true }));
     const record = (await services.automations.get("gated-chat")) as AutomationRecord;
     const origin = { automationId: "gated-chat", provider: "webchat", channelId: "v-7", author: "visitor" };
     await fireAutomation(services, record, fakeWake([]), { payload: "help", origin, title: "visitor: help" });
@@ -311,7 +303,7 @@ test("a held external wake snapshots its provenance, so approving it opens the s
 
 test(`a requireApproval automation holds the wake instead of running it; cleared: "both" runs it`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("gated", { requireApproval: true }));
+    await services.automations.upsert(automationConfig("gated", { requireApproval: true }));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
@@ -332,7 +324,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
 test("a holdForSeconds fire is held with a deadline, and the tick releases it once the countdown passes on a quiet fleet", async () => {
     const live: string[] = ["turn-1"];
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, live);
-    await services.automations.upsert(automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
+    await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
@@ -361,11 +353,11 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
 
 test("cancelling is just removing the hold, and disabling the automation mid-countdown counts as the cancel", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
+    await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
-    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }), models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false });
+    await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1, enabled: false }));
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
     // The stale hold is dropped rather than left to fire the day the automation is re-enabled.
@@ -375,9 +367,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
 
 test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I'm slow"`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(
-        automation("gated-fixer", { trigger: { kind: "event" }, requireApproval: true, holdForSeconds: 1 }),
-    );
+    await services.automations.upsert(automationConfig("gated-fixer", { trigger: { kind: "event" }, requireApproval: true, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts));
@@ -391,7 +381,7 @@ test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I
 
 test("a streamed wake pipes text deltas to the sink, ends it, and tells the agent not to self-send", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("chat"));
+    await services.automations.upsert(automationConfig("chat"));
     const prompts: string[] = [];
     const wake = fakeWake(prompts, [{ kind: "delta", text: "Hel" }, { kind: "delta", text: "lo" }, { kind: "done" }]);
     const chunks: string[] = [];
@@ -417,7 +407,7 @@ test("a streamed wake pipes text deltas to the sink, ends it, and tells the agen
 
 test("a wake that dies tells the sink why before closing it: an empty close reads as nothing to say", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("dead-air"));
+    await services.automations.upsert(automationConfig("dead-air"));
     const wake = fakeWake([], [{ kind: "error", message: "no credits" }, { kind: "done" }]);
     const frames: string[] = [];
     const record = (await services.automations.get("dead-air")) as AutomationRecord;
@@ -435,9 +425,9 @@ test("a wake that dies tells the sink why before closing it: an empty close read
 
 test("disabled automations and not-yet-due crons never fire; agent errors land as error runs", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("off", { enabled: false }));
-    await services.automations.upsert(automation("later", { trigger: { kind: "schedule", cron: "0 0 1 1 *" } }));
-    await services.automations.upsert(automation("broken"));
+    await services.automations.upsert(automationConfig("off", { enabled: false }));
+    await services.automations.upsert(automationConfig("later", { trigger: { kind: "schedule", cron: "0 0 1 1 *" } }));
+    await services.automations.upsert(automationConfig("broken"));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts, [{ kind: "error", message: "no credits" }, { kind: "done" }]));
     await scheduler.tick(pastDue());
@@ -450,7 +440,7 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
 
 test("a wake journals itself while in flight and clears the entry when it settles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("nightly", { trigger: { kind: "event" } }));
+    await services.automations.upsert(automationConfig("nightly", { trigger: { kind: "event" } }));
     const record = (await services.automations.get("nightly")) as AutomationRecord;
     // Observed from INSIDE the wake: the entry exists exactly for the window where the daemon could die.
     let inFlightEntry: unknown;
@@ -478,8 +468,8 @@ test("a wake journals itself while in flight and clears the entry when it settle
 
 test("a guard that skips never journals, and an error run still clears its entry", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("skipper", { guard: "exit 1" }));
-    await services.automations.upsert(automation("failer"));
+    await services.automations.upsert(automationConfig("skipper", { guard: "exit 1" }));
+    await services.automations.upsert(automationConfig("failer"));
     const journalled: number[] = [];
     const peeking: WakeFn = async function* () {
         journalled.push((await services.turnJournal.list()).length);
@@ -500,7 +490,7 @@ test("a guard that skips never journals, and an error run still clears its entry
 
 test("the journal entry carries no stream note, so a re-fire sends its own reply", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("chat-note"));
+    await services.automations.upsert(automationConfig("chat-note"));
     const record = (await services.automations.get("chat-note")) as AutomationRecord;
     // The live sink dies with the daemon, so a wake still told "your reply is delivered live" would answer into
     // nothing. The note belongs to THIS fire; the journal keeps only the trigger inputs.
@@ -516,7 +506,7 @@ test("the journal entry carries no stream note, so a re-fire sends its own reply
 
 test(`cleared: "approval" skips the approval gate but still runs the guard: the answer a test-fire wants`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("gated-hand", { requireApproval: true }));
+    await services.automations.upsert(automationConfig("gated-hand", { requireApproval: true }));
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-hand")) as AutomationRecord;
     // Pressing the button IS the approval, so the wake runs instead of landing in the owner's own queue.
@@ -525,7 +515,7 @@ test(`cleared: "approval" skips the approval gate but still runs the guard: the 
     expect(await services.heldWakes.list()).toEqual([]);
 
     // The guard is NOT skipped: "skipped by guard" is the most useful thing a by-hand fire can report.
-    await services.automations.upsert(automation("gated-guard", { requireApproval: true, guard: "echo not today; exit 1" }));
+    await services.automations.upsert(automationConfig("gated-guard", { requireApproval: true, guard: "echo not today; exit 1" }));
     const guarded = (await services.automations.get("gated-guard")) as AutomationRecord;
     await fireAutomation(services, guarded, fakeWake(prompts), { cleared: "approval" });
     expect(prompts).toEqual(["wake:gated-hand"]);
@@ -534,8 +524,8 @@ test(`cleared: "approval" skips the approval gate but still runs the guard: the 
 
 test("a run record carries the stable conversation even when the provider mints no runtime session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("traced"));
-    await services.automations.upsert(automation("sessionless"));
+    await services.automations.upsert(automationConfig("traced"));
+    await services.automations.upsert(automationConfig("sessionless"));
     const withSession = fakeWake([], [{ kind: "session", sessionId: "sess-42" }, { kind: "done" }]);
     await fireAutomation(services, (await services.automations.get("traced")) as AutomationRecord, withSession);
     const traced = (await services.automations.get("traced"))?.runs[0];
@@ -566,7 +556,7 @@ const fireUntil = async (services: Services, id: string, times: number): Promise
 
 test("an automation that keeps failing is disabled at the configured streak", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationFailureLimit: 2 });
-    await services.automations.upsert(automation("spinner"));
+    await services.automations.upsert(automationConfig("spinner"));
     await fireUntil(services, "spinner", 1);
     // One failure is not a pattern: the job stays live.
     expect((await services.automations.get("spinner"))?.enabled).toBe(true);
@@ -579,7 +569,7 @@ test("an automation that keeps failing is disabled at the configured streak", as
 
 test("the guard is off by default: a job may fail forever until the owner asks for it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("stubborn"));
+    await services.automations.upsert(automationConfig("stubborn"));
     await fireUntil(services, "stubborn", 5);
     expect((await services.automations.get("stubborn"))?.enabled).toBe(true);
 });
@@ -587,7 +577,7 @@ test("the guard is off by default: a job may fail forever until the owner asks f
 // A run that succeeds breaks the streak, so an intermittent failure never accumulates into a quarantine.
 test("a successful run resets the streak", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationFailureLimit: 2 });
-    await services.automations.upsert(automation("flaky"));
+    await services.automations.upsert(automationConfig("flaky"));
     await fireUntil(services, "flaky", 1);
     await fireAutomation(services, (await services.automations.get("flaky")) as AutomationRecord, fakeWake([]));
     await fireUntil(services, "flaky", 1);
@@ -596,7 +586,7 @@ test("a successful run resets the streak", async () => {
 
 test("an admission-floor hold parks a wake whose automation asked for nothing, and it never auto-runs", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "hold" } });
-    await services.automations.upsert(automation("plain"));
+    await services.automations.upsert(automationConfig("plain"));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
@@ -614,7 +604,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
 
 test("an admission-floor deny refuses the wake and says so on the run record", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "deny" } });
-    await services.automations.upsert(automation("refused"));
+    await services.automations.upsert(automationConfig("refused"));
     const prompts: string[] = [];
     const record = (await services.automations.get("refused")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts));
@@ -627,7 +617,7 @@ test("an admission-floor deny refuses the wake and says so on the run record", a
 
 test("a deny refuses even an approved replay: approve-then-tighten does not execute", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "deny" } });
-    await services.automations.upsert(automation("revoked"));
+    await services.automations.upsert(automationConfig("revoked"));
     const prompts: string[] = [];
     const record = (await services.automations.get("revoked")) as AutomationRecord;
     // The owner approved this wake before the policy tightened; the checks re-run live, so it still refuses.
@@ -639,7 +629,7 @@ test("a deny refuses even an approved replay: approve-then-tighten does not exec
 test("the webchat floor keys off its own source: a listener rule does not reach the Front Desk, nor vice versa", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
     await services.automations.upsert(
-        automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
+        automationConfig("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
     );
     const prompts: string[] = [];
     const record = (await services.automations.get("door")) as AutomationRecord;
@@ -652,7 +642,7 @@ test("the webchat floor keys off its own source: a listener rule does not reach 
 
     const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } });
     await heldServices.automations.upsert(
-        automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
+        automationConfig("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
     );
     const heldPrompts: string[] = [];
     const heldRecord = (await heldServices.automations.get("door")) as AutomationRecord;
@@ -681,7 +671,7 @@ const gatedWake = (prompts: string[]): { wake: WakeFn; started: Promise<void>; r
 
 test("a fire meeting a running one is dropped by default, and the sink is told why rather than left silent", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("busy"));
+    await services.automations.upsert(automationConfig("busy"));
     const prompts: string[] = [];
     const { wake, started, release } = gatedWake(prompts);
     const record = (await services.automations.get("busy")) as AutomationRecord;
@@ -703,7 +693,7 @@ test("a fire meeting a running one is dropped by default, and the sink is told w
 
 test(`overlap: "queue" makes an inbound message wait its turn instead of being lost`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("busy"));
+    await services.automations.upsert(automationConfig("busy"));
     const prompts: string[] = [];
     const { wake, started, release } = gatedWake(prompts);
     const record = (await services.automations.get("busy")) as AutomationRecord;
@@ -731,7 +721,7 @@ test(`overlap: "queue" makes an inbound message wait its turn instead of being l
 
 test("the queue survives a run that fails: the next fire still gets its turn", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("busy"));
+    await services.automations.upsert(automationConfig("busy"));
     const prompts: string[] = [];
     const record = (await services.automations.get("busy")) as AutomationRecord;
     const started = Promise.withResolvers<void>();

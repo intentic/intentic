@@ -10,6 +10,7 @@ import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
+import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
@@ -38,14 +39,8 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
         yield* events;
     };
 
-const listenerAutomation = (id: string, extra: Partial<Automation> = {}): Automation => ({
-    id,
-    trigger: { kind: "listener", provider: "discord" },
-    prompt: `wake:${id}`,
-    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
-    enabled: true,
-    ...extra,
-});
+const listenerAutomation = (id: string, extra: Partial<Automation> = {}): Automation =>
+    automationConfig(id, { trigger: { kind: "listener", provider: "discord" }, ...extra });
 
 const message = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
     provider: "discord",
@@ -74,7 +69,7 @@ test("state returns the provider's enabled listener automations and its connecto
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
     await services.automations.upsert(listenerAutomation("st-live"));
     await services.automations.upsert(listenerAutomation("st-off", { enabled: false }));
-    await services.automations.upsert({ id: "st-cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+    await services.automations.upsert(automationConfig("st-cron", { prompt: "p" }));
     await services.capabilities.upsert({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } });
     const res = await appFor(services, fakeWake([])).request("/listeners/discord/state");
     expect(res.status).toBe(200);

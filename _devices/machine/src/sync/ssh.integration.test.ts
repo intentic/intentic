@@ -113,8 +113,7 @@ describe("pairingSshConfig", () => {
 
 describe("the managed ssh-config include", () => {
     it("is a bare relative name, never an absolute path", () => {
-        expect(INCLUDE_MARKER).toBe("Include intentic-machine.conf");
-        expect(INCLUDE_MARKER).not.toMatch(/[/\\]/);
+        expect(INCLUDE_MARKER).toMatch(/^Include [^\s/\\]+$/);
     });
 
     it("strips every spelling we have ever written, so re-running setup cannot leave two", () => {

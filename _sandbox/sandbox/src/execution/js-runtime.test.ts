@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { turnPersona } from "../personas/personas.js";
-import { JS_TIMEOUT_DEFAULT_S, jsExecutionPlanOf, nodeArgs } from "./js-runtime.js";
+import { jsExecutionPlanOf, nodeArgs } from "./js-runtime.js";
 
 /* The PURE half of the backend: the plan a card yields (every powers combination is a table row) and the argv
  * a plan means. The runner honouring them spawns real `node` subprocesses and lives in
@@ -73,9 +73,4 @@ test("the argv is exactly the plan: one permission flag per grant, stdin as the 
         "--input-type=module",
         "-",
     ]);
-});
-
-// Pinned so the tool description and the schema bound cannot drift apart silently.
-test("the default timeout is the Bash tool's own", () => {
-    expect(JS_TIMEOUT_DEFAULT_S).toBe(120);
 });

@@ -16,6 +16,15 @@ import {
 } from "./hosted-build.js";
 import { hostedInstanceId } from "./hosted.js";
 
+/* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
+ * time in production, polled up to sixty times. Here the wait is a no-op: every case that crosses it is about
+ * WHICH provider states count as settled and what is asked of Fly in each, never about how long settling
+ * takes, and the six that crossed it in real time were most of this package's test wall-clock. */
+vi.mock("node:timers/promises", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("node:timers/promises")>()),
+    setTimeout: async () => undefined,
+}));
+
 /* THE BRAKES, PINNED. Every way a build can cost the platform money has a control in hosted-build.ts, and each
  * one is a test here: a refusal spends nothing (no token minted, no machine made, no row written), a start
  * takes the row's guard first and releases it on failure, a finished build is charged to its owner once and

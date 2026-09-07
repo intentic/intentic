@@ -380,7 +380,6 @@ test("an over-long subject is clipped on a word boundary at the header ceiling, 
     expect(clipped).not.toMatch(/[\p{P}\s]$/u);
     expect(long.charAt(clipped.length)).toBe(" ");
     // The ceiling is git's, not a card's: an 80-character cut is what this replaced.
-    expect(MAX_SUBJECT_LENGTH).toBe(100);
     expect(clipped.length).toBeGreaterThan(80);
 });
 

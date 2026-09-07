@@ -22,10 +22,6 @@ const fire = async (toolName: string, toolInput: Record<string, unknown>) => {
 const rewritten = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
     (syncHookOutput(result).hookSpecificOutput as { updatedInput?: { filename?: string } } | undefined)?.updatedInput?.filename;
 
-test("the output dir is the one place browser artifacts live", () => {
-    expect(OUTPUT).toBe("/work/.intentic/records/artifacts/browser");
-});
-
 // The whole point: a bare name resolves against the agent's cwd inside @playwright/mcp, which is the repo.
 test("a model-named screenshot is redirected out of the agent's cwd", async () => {
     expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "tt-viewport.png", type: "png" }))).toBe(

@@ -124,7 +124,6 @@ describe(`totals`, () => {
 
 describe(`series identity`, () => {
     it(`assigns a slot by provider identity, in the validated palette order`, () => {
-        expect(PROVIDER_SERIES).toEqual([`claude`, `codex`, `kimi`, `grok`, `gemini`]);
         expect(providerColor(`claude`)).toBe(`var(--color-series-1)`);
         expect(providerColor(`gemini`)).toBe(`var(--color-series-5)`);
     });

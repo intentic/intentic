@@ -227,6 +227,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    vi.useRealTimers();
 });
 
 // The regression this file is named for: a fresh account gets a sandbox by arriving, and is never shown a field.
@@ -595,11 +596,13 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     sandboxes.value = [hosted];
     list.mockResolvedValue([hosted]);
     refresh.mockResolvedValue([{ ...hosted, announceRefusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } }]);
+    // The poll is what learns this: the row the page was mounted with knew nothing. It runs every 3s, and the
+    // clock is walked to that tick rather than waited on. Only the interval is faked: the mount's own macrotask
+    // flush and vi.waitFor's polling stay on real time.
+    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
     const el = await mount();
-
-    // The poll is what learns this: the row the page was mounted with knew nothing. It runs every 3s, so the
-    // wait here is for one tick of it rather than for a render.
-    await vi.waitFor(() => expect(el.textContent).toContain(`old.example.dev`), { timeout: 6_000, interval: 50 });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.waitFor(() => expect(el.textContent).toContain(`old.example.dev`));
     expect(el.textContent).toContain(`sandbox-abc.sbx.test`);
     // …and the step list is gone: a list still ticking beside "here is what broke" argues with itself.
     expect(el.textContent).not.toContain(`Putting it on the internet`);
