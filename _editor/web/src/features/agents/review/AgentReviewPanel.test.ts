@@ -9,13 +9,14 @@ import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic/api-c
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
 import { agentHistoryKey } from "../fleet/useAgentHistory";
 import { queryClient } from "../../../lib/queryPersistence";
 import { AGENT_DIFF, WORKSPACE_MODULES } from "../../../lib/queryKeys";
 import { router } from "../../../router";
+import { IconStub } from "@intentic/ui/testing";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
@@ -127,15 +128,7 @@ const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChang
     });
     // Registered app-wide by installUi in the real page. Icon prints the glyph it was handed, because WHICH
     // glyph a mark wears is the link between the report's group heading and the rows it is talking about.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

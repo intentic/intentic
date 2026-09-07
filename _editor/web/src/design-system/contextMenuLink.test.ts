@@ -4,6 +4,7 @@ import type { MenuItem } from "primevue/menuitem";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 /* A MENU ROW THAT GOES SOMEWHERE IS A LINK, and this is the file that keeps it one.
  *
@@ -29,7 +30,7 @@ const mountMenu = async (model: MenuItem[]): Promise<void> => {
     const menu = ref<{ show: (event: Event) => void } | undefined>();
     app = createApp(defineComponent({ setup: () => () => h(ContextMenu, { ref: menu, model }) }));
     app.use(PrimeVue);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(host);
     menu.value?.show(new MouseEvent(`contextmenu`, { bubbles: true }));
     await nextTick();

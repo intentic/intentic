@@ -10,7 +10,8 @@
 //      the same nothing — in a window with no shell around it, and therefore no Usage tab to go and check in.
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The rail's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -35,7 +36,7 @@ const mount = (accounts: Partial<OauthAccount>[], routed: TranslatorAccounts = N
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this test off the whole UI plugin.
     app = createApp({ render: () => h(ChatCapacityRail) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

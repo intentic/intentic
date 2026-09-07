@@ -21,6 +21,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { PERSONAS } from "../../../lib/queryKeys";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
@@ -39,7 +40,7 @@ const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(ChatTabList, { onSelect: (id: string) => selected.push(id) }) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

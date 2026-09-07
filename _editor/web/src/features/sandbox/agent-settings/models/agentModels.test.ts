@@ -24,6 +24,7 @@ import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time browser globals the sibling suite stands in for (@intentic/ui's useDevice reads
 // window.matchMedia; environment.ts reads window.env).
@@ -115,7 +116,7 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(AgentModels) });
     app.use(PrimeVue);
     app.use(router);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

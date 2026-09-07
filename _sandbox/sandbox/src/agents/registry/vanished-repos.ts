@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
 import type { Logger } from "pino";
+import { pathExists } from "../../path-exists.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
@@ -48,15 +48,6 @@ export interface VanishedRepoDeps {
 // "root" is the /work workspace repo itself (worktrees.mainDir), never a repo that can vanish.
 const ROOT = "root";
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 /* One pass. Returns the repos it dropped, empty in the steady state, which is every run but the one after a
  * deletion: the cost of finding nothing is one `access` per distinct repo any conversation names, and no git
  * at all.
@@ -76,7 +67,7 @@ export const dropVanishedRepos = async (deps: VanishedRepoDeps): Promise<string[
     }
     const gone: string[] = [];
     for (const [repo, ids] of named) {
-        if (await exists(agentWorktrees.mainDir(repo))) {
+        if (await pathExists(agentWorktrees.mainDir(repo))) {
             continue;
         }
         gone.push(repo);

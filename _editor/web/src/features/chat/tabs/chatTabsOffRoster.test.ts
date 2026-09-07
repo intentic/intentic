@@ -34,6 +34,7 @@ import { resetChat, useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat component needs: the same set chatTabsReveal.test.ts installs.
 vi.hoisted(() => {
@@ -46,7 +47,7 @@ const mountList = async (): Promise<void> => {
     host = document.createElement(`div`);
     document.body.appendChild(host);
     app = createApp({ render: () => h(ChatTabList) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

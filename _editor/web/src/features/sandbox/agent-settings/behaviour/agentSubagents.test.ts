@@ -14,8 +14,9 @@ import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import { postureOf, POSTURES, SPAWN_KEY, withPosture } from "../safety/spawnPosture";
+import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {
@@ -35,7 +36,7 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentSubagents) });
     app.use(PrimeVue);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

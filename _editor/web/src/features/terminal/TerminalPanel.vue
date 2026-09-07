@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice, vAction } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice, usePointerResize, vAction } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
@@ -1099,34 +1099,19 @@ watch(
     },
 );
 
-const resizing = ref(false);
 // The panel's bottom viewport offset, captured at drag start: its height is the pointer's distance above it.
 let panelBottom = 0;
-
-const startResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    panelBottom = root.value?.getBoundingClientRect().bottom ?? 0;
-    resizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
-
-const onResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    setHeight(panelBottom - event.clientY);
-};
-
-const endResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    resizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
+const {
+    resizing,
+    start: startResize,
+    move: onResize,
+    end: endResize,
+} = usePointerResize(
+    (event) => setHeight(panelBottom - event.clientY),
+    () => {
+        panelBottom = root.value?.getBoundingClientRect().bottom ?? 0;
+    },
+);
 </script>
 
 <template>

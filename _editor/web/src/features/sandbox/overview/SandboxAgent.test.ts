@@ -16,6 +16,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
+import { IconStub } from "@intentic/ui/testing";
 
 // The page's whole world: a settings read that has landed (so nothing renders the blocked notice) and a sandbox
 // that answers. What this file is about is the strip above them, not what any group does with the object.
@@ -91,7 +92,7 @@ const mount = async (query: Record<string, string> = {}): Promise<{ el: HTMLElem
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxAgent) });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.mount(el);

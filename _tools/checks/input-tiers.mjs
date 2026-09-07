@@ -54,11 +54,7 @@
  * HOW AN EXCEPTION IS SPELLED: an entry in ALLOWED, keyed by file and by the exact finding, carrying the
  * reason — the same shape as button-tiers.mjs and tailwind-bypass.mjs, and for the same reason. An entry that
  * no longer matches anything is reported as stale, so the list cannot outlive the code it excuses. */
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { repoRoot } from "../constants/src/node.mjs";
-
-const root = repoRoot(import.meta.url);
+import { at, blank, classWordsOf, finishFindings, tags, templateSource, templatesUnder, waiverList } from "./lib/templates.mjs";
 
 /* ── WHAT COUNTS AS WHAT ──────────────────────────────────────────────────────────────────────────────────*/
 
@@ -131,70 +127,19 @@ const ALLOWED = new Map([
     ],
 ]);
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor`, `_extensions`], {
-    cwd: root,
-    encoding: `utf8`,
-    maxBuffer: 64 * 1024 * 1024,
-})
-    .split(`\0`)
-    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
-    .filter((path) => existsSync(`${root}/${path}`) && path.endsWith(`.vue`));
-
-/* The template and only the template, BLANKED rather than stripped so a line number computed off the result is
- * the line number in the file. The <script> block goes because this repo's design notes are long comments full
- * of example markup; the <style> block and the template's own <!-- --> notes go for the same reason. */
-const blanked = (m) => m.replace(/[^\n]/gu, ` `);
-const blank = (source) =>
-    source
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, blanked)
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gu, blanked)
-        .replace(/<!--[\s\S]*?-->/gu, blanked);
-
-/* A tag walk, not a parser — attribute values are consumed as units so a `>` inside `:class="{…}"` or a
- * template literal cannot end a tag early. Same expression as button-tiers.mjs, and for the same reason. */
-const TAG = /<(\/?)([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|`[^`]*`|[^>"'`])*?)(\/?)>/gu;
-
+const tracked = templatesUnder(`_editor`, `_extensions`);
 const findings = [];
-const used = new Set();
-const at = (path, source, index) => `${path}:${source.slice(0, index).split(`\n`).length}`;
-/* Both `class="…"` and `:class="…"`, joined: geometry hidden in a bound class is the same geometry.
- *
- * THE PUNCTUATION BECOMES WHITESPACE, and that is not tidying. A bound class is usually an ARRAY of template
- * literals — `:class="[`field-bare …`, readonly ? `caret-transparent` : ``]"` — so the first class in it is
- * preceded by a backtick, not by a space. Every rule here anchors on `(?:^|\s)`, so without this the two most
- * carefully written fields in the kit (CodeField, ProseField) read as fields wearing nothing at all: the gate
- * would report exactly the call sites that got it right. */
-const classesOf = (attrs) =>
-    [...attrs.matchAll(/:?class="([^"]*)"/gu)]
-        .map((m) => m[1])
-        .join(` `)
-        .replace(/[`',]/gu, ` `)
-        .replace(/\s+/gu, ` `)
-        .trim();
-
-/** A waiver hit is recorded so stale entries can be reported; a miss returns false and the finding stands. */
-const waived = (path, key) => {
-    const reason = ALLOWED.get(path)?.get(key);
-    if (reason === undefined) {
-        return false;
-    }
-    used.add(JSON.stringify([path, key]));
-    return true;
-};
+const { waived, stale } = waiverList(ALLOWED, `input-tiers.mjs`);
 
 for (const path of tracked) {
-    const source = readFileSync(`${root}/${path}`, `utf8`);
-    const scan = blank(source);
+    const scan = blank(templateSource(path));
 
-    TAG.lastIndex = 0;
-    let tag;
-    while ((tag = TAG.exec(scan)) !== null) {
-        const [, closing, name, attrs] = tag;
+    for (const { closing, name, attrs, index } of tags(scan)) {
         if (closing === `/`) {
             continue;
         }
-        const classes = classesOf(attrs);
-        const where = at(path, scan, tag.index);
+        const classes = classWordsOf(attrs);
+        const where = at(path, scan, index);
 
         const isNative = name === `input` || name === `textarea`;
         const type = /\btype="([^"]*)"/u.exec(attrs)?.[1] ?? (name === `textarea` ? `textarea` : `text`);
@@ -280,24 +225,10 @@ for (const path of tracked) {
     }
 }
 
-/* A waiver whose code is gone stops being an exception and becomes a lie about the codebase. Reported as a
- * finding rather than a warning, because the only way a list like this stays honest is if it fails. */
-for (const [path, entries] of ALLOWED) {
-    for (const key of entries.keys()) {
-        if (!used.has(JSON.stringify([path, key]))) {
-            findings.push({ at: path, why: `stale ALLOWED entry in input-tiers.mjs: nothing in this file matches \`${key}\` any more, so drop it` });
-        }
-    }
-}
+findings.push(...stale());
 
-if (findings.length > 0) {
-    for (const { at: where, why } of findings.toSorted((a, b) => a.at.localeCompare(b.at))) {
-        console.error(`${where}  ${why}`);
-    }
-    console.error(
-        `\n${findings.length} problem(s) with input tiers. The app has one field: \`ui-field-box\`, in three variants and two sizes, and its focus state never paints outside its own box.`,
-    );
-    process.exit(1);
-}
-
-console.log(`${tracked.length} templates: every field is on the design system, focus has one answer, and no ring paints outside its box`);
+finishFindings(
+    findings,
+    `with input tiers. The app has one field: \`ui-field-box\`, in three variants and two sizes, and its focus state never paints outside its own box.`,
+    `${tracked.length} templates: every field is on the design system, focus has one answer, and no ring paints outside its box`,
+);

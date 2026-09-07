@@ -6,10 +6,11 @@
 // two evidence halves are independent, so each has to read as a sentence on its own and both have to read as
 // one when they arrive together. Mounted with plain Vue and the same glyph/tooltip stubs UnsentMark.test uses.
 import { describe, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 import type { UnfinishedWork } from "@intentic/sandbox-contract";
 
 import UnfinishedMark from "./UnfinishedMark.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 let app: App | undefined;
 let opens: Partial<Record<string, boolean>> = {};
@@ -19,15 +20,7 @@ const render = (work: UnfinishedWork, now?: number): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp({ render: () => h(UnfinishedMark, { work, now }) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     opens = {};
     app.directive(`tooltip`, {
         mounted: (_el, binding) => {

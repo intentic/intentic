@@ -16,7 +16,8 @@
 import { COMMAND_RULE_CATALOG } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const { default: AgentSafetyRules } = await import("./AgentSafetyRules.vue");
 
@@ -27,7 +28,7 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentSafetyRules) });
     app.use(PrimeVue);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

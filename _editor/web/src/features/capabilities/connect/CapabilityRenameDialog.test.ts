@@ -7,7 +7,8 @@
 // for spelling a name the way people spell things.
 import PrimeVue from "primevue/config";
 import { expect, it } from "vitest";
-import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const { default: CapabilityRenameDialog } = await import("./CapabilityRenameDialog.vue");
 
@@ -25,15 +26,7 @@ const mount = (): { open: () => void; renamed: () => string[] } => {
                 onRename: (to: string) => renamed.push(to),
             }),
     });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.use(PrimeVue);
     app.mount(el);
     return {

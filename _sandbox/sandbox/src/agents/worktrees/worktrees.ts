@@ -1,5 +1,6 @@
-import { access, lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
@@ -97,15 +98,6 @@ export interface AgentWorktrees {
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
 }
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 /* ROOT, THEN THE REST TOGETHER, the shape every pass over a composition takes, and the one thing about a
  * composition that is genuinely ordered.
  *
@@ -200,7 +192,7 @@ export const createAgentWorktrees = (
             return true;
         }
         const gitdir = (await readFile(pointer, "utf8").catch(() => ``)).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-        return gitdir !== undefined && (await exists(gitdir));
+        return gitdir !== undefined && (await pathExists(gitdir));
     };
 
     // Per-repo op chains (the history.ts serialize pattern): worktree add/remove and land all touch the repo's
@@ -287,7 +279,7 @@ export const createAgentWorktrees = (
 
     const repairOne = async (id: string, repo: string): Promise<void> => {
         const target = worktreeDir(id, repo);
-        if (await exists(join(target, ".git"))) {
+        if (await pathExists(join(target, ".git"))) {
             return;
         }
         /* Past the early return is the RESTORE path, so the branch may be parked, an archived agent the user
@@ -301,7 +293,7 @@ export const createAgentWorktrees = (
         );
         // The worktree analogue of history's healGitPointer: repair rewrites the worktree's .git file and the
         // admin dir's gitdir backlink. A fully deleted worktree dir is re-attached from its surviving branch.
-        if (await exists(target)) {
+        if (await pathExists(target)) {
             await git(mainDir(repo), ["worktree", "repair", target]).catch((error: unknown) =>
                 logger.warn({ err: error, repo }, "agents: worktree repair failed"),
             );
@@ -358,7 +350,7 @@ export const createAgentWorktrees = (
             mirrors.map(async (rel) => {
                 const target = join(worktree, rel);
                 // The dir the mirror belongs to, a package the agent's branch does not carry gets nothing.
-                if (!ignored.has(rel) || !(await exists(join(worktree, dirname(rel))))) {
+                if (!ignored.has(rel) || !(await pathExists(join(worktree, dirname(rel))))) {
                     return;
                 }
                 // The mirror's FORM is a property of the container (namespace or not), and worktrees outlive
@@ -411,7 +403,7 @@ export const createAgentWorktrees = (
      * commitWorktreeRemainder's call, on the index, and not this probe's. */
     const preserveOne = async (id: string, repo: string, title: string | undefined): Promise<void> => {
         const worktree = worktreeDir(id, repo);
-        if (!(await exists(join(worktree, ".git")))) {
+        if (!(await pathExists(join(worktree, ".git")))) {
             return; // Never created, or already retired: nothing to preserve.
         }
         // The repository this checkout belongs to is gone (see repoBehind): no git command can run here, so
@@ -500,8 +492,8 @@ export const createAgentWorktrees = (
         conversationDir,
         worktreeDir,
         mainDir,
-        exists: (id) => exists(conversationDir(id)),
-        attached: (id, repo) => exists(join(worktreeDir(id, repo), ".git")),
+        exists: (id) => pathExists(conversationDir(id)),
+        attached: (id, repo) => pathExists(join(worktreeDir(id, repo), ".git")),
         snapshot: async () => {
             const repos = await liveRepos();
             const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await headSha(mainDir(repo)) })));
@@ -591,7 +583,7 @@ export const createAgentWorktrees = (
             // Root is the workspace itself and cannot be the repo that vanished; asking for it would move a
             // whole conversation's checkout to the trash on the strength of a momentarily unreadable /work.
             const target = worktreeDir(id, repo);
-            if (repo === "root" || !(await exists(target))) {
+            if (repo === "root" || !(await pathExists(target))) {
                 return;
             }
             // Encoded like the git dirs beside it (history.ts reapGitDir): a nested repo id holds slashes, and

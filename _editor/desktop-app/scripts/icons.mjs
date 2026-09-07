@@ -3,74 +3,31 @@
  *
  * Run: `node scripts/icons.mjs`  (from _editor/desktop-app). Its output is committed.
  *
- * ONE DRAWING, NOT A SECOND LOGO. The lotus here is not redrawn: it is read out of
- * `_site/site/src/components/ornaments.ts`, the same string the bar, every bullet, every frame finial,
- * and `scripts/icons.mjs` on the site render from. A desktop icon that is a hand-copy of the logo is a
- * logo that will one day be two logos — which is what the old letterform bitmaps in src-tauri/icons/ were.
+ * ONE DRAWING, NOT A SECOND LOGO. The lotus here is not redrawn: the petals, the crop and the ember come
+ * from `_site/site/scripts/lotus.mjs`, which reads them out of the ornament kit the bar, every bullet and
+ * every frame finial render from. A desktop icon that is a hand-copy of the logo is a logo that will one
+ * day be two logos — which is what the old letterform bitmaps in src-tauri/icons/ were.
  *
- * The petal-only crop and the ember fill match the site's favicon script exactly: at tray and taskbar
- * sizes the leaves are mud and the plate is a smudge, so five petals fill the square on a transparent
- * ground. See _site/site/scripts/icons.mjs for that reasoning in full.
+ * The petal-only crop and the ember fill are therefore not decided here: they are the same object the
+ * favicon ladder and the browser extension's PNGs are drawn from, and lotus.mjs carries the reasoning.
+ * What is left in this file is the OS's own answer: which containers a desktop bundle needs, at which sizes.
  *
  * Output lands in src-tauri/icons/, the directory tauri.conf.json already names.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import sharp from "sharp";
 
-const here = import.meta.dirname;
-const DESKTOP = join(here, "..");
-const ORNAMENTS = join(DESKTOP, "../../_site/site/src/components/ornaments.ts");
-const OUT = join(DESKTOP, "src-tauri/icons");
+import { buildIco, icon, petals } from "../../../_site/site/scripts/lotus.mjs";
 
-const EMBER = "#e07b27";
+const OUT = join(import.meta.dirname, "..", "src-tauri/icons");
 
-const kit = await readFile(ORNAMENTS, "utf8");
-const lotusSvg = /export const LOTUS = `([\s\S]*?)`;/u.exec(kit)?.[1];
-if (!lotusSvg) {
-    throw new Error(`No LOTUS export found in ${ORNAMENTS}`);
-}
-const allPaths = lotusSvg.match(/<path\b[^>]*\/>/gu) ?? [];
-const petals = allPaths.filter((path) => !path.includes('opacity=".42"'));
-if (petals.length !== allPaths.length - 2) {
-    throw new Error(`Expected two .42-opacity leaves in LOTUS, found ${allPaths.length - petals.length}`);
-}
-
-const PETALS_BOX = "7.2 2.6 17.6 20.2";
-
-const icon = (size) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${PETALS_BOX}" fill="${EMBER}">
-  ${petals.join("\n  ")}
-</svg>`;
-
+const paths = petals();
 const png = (size) =>
-    sharp(Buffer.from(icon(size)))
+    sharp(Buffer.from(icon(size, paths)))
         .png({ compressionLevel: 9 })
         .toBuffer();
-
-const buildIco = (images) => {
-    const header = Buffer.alloc(6);
-    header.writeUInt16LE(0, 0);
-    header.writeUInt16LE(1, 2);
-    header.writeUInt16LE(images.length, 4);
-
-    let offset = 6 + images.length * 16;
-    const entries = images.map(({ size, data }) => {
-        const entry = Buffer.alloc(16);
-        entry.writeUInt8(size >= 256 ? 0 : size, 0);
-        entry.writeUInt8(size >= 256 ? 0 : size, 1);
-        entry.writeUInt8(0, 2);
-        entry.writeUInt8(0, 3);
-        entry.writeUInt16LE(1, 4);
-        entry.writeUInt16LE(32, 6);
-        entry.writeUInt32LE(data.length, 8);
-        entry.writeUInt32LE(offset, 12);
-        offset += data.length;
-        return entry;
-    });
-
-    return Buffer.concat([header, ...entries, ...images.map((image) => image.data)]);
-};
 
 /* ICNS is a typed container of PNG layers. The set mirrors what `tauri icon` writes via icns.json. */
 const ICNS_LAYERS = [

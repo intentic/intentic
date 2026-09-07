@@ -7,6 +7,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
+import { IconStub } from "@intentic/ui/testing";
 
 // The globals a mounted workspace component reads at import time; jsdom has none of them.
 vi.hoisted(() => {
@@ -29,7 +30,7 @@ const mountStrip = async (): Promise<void> => {
     app = createApp({
         render: () => h(FileTabs, { tabs: TABS, active: `src/peeked.ts`, preview: preview.value, onKeep: (id: string) => kept.push(id) }),
     });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {
         mounted(el: HTMLElement, binding: { value?: unknown }): void {
             el.setAttribute(`data-tooltip`, String(binding.value));

@@ -5,7 +5,8 @@
 // inside the thing the two buttons download. What this panel EXPLAINS (what the command does, and the one line
 // that removes it again) is the same in both windows; only the offer to install it is not.
 import { expect, it, vi } from "vitest";
-import { createApp, defineComponent, h } from "vue";
+import { createApp, h } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui's useDevice reads matchMedia at module
 // scope, environment.ts reads window.env and throws without it.
@@ -23,7 +24,7 @@ const render = (): string => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const app = createApp({ render: () => h(SetupRunDetails, { cleanup: `curl -fsSL https://intentic.dev/cleanup.sh | sh` }) });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     const text = el.textContent ?? ``;

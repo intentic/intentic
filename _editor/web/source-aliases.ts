@@ -60,6 +60,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Two components a bundle may want without the barrel — the shared transcript page pulls exactly these
     // two and nothing else. Ahead of the barrel for the same reason as the markdown pair above.
     "@intentic/ui/icon": fromRoot("_editor/ui/src/components/primitives/Icon.vue"),
+    // The kit's own stand-ins, for the suites that mount a view: `Icon` is registered app-wide by installUi, so
+    // every component test has to register something for that name, and one shared fake is the difference
+    // between a fixture that can be updated with the component and sixteen that cannot.
+    "@intentic/ui/testing": fromRoot("_editor/ui/src/testing.ts"),
     "@intentic/ui/markdown-view": fromRoot("_editor/ui/src/components/markdown/Markdown.vue"),
     "@intentic/ui/dag": fromRoot("_editor/ui/src/components/charts/dagLayout.ts"),
     // Same reason and the same ordering requirement again: splitting a path into name + directory is what every

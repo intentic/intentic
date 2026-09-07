@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { pathExists } from "../path-exists.js";
 import {
     type FileDiff,
     type Snapshot,
@@ -220,15 +221,6 @@ interface ScopeCommit {
     readonly label?: string;
 }
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 // Labels live in commit bodies and come from free-form prompts, collapse to one bounded line so `git log`
 // parsing and the timeline row stay tame.
 const sanitizeLabel = (label: string): string | undefined => {
@@ -289,7 +281,7 @@ export const createWorkspaceHistory = (
     const bare = (scope: Scope): { cwd: string; env: Record<string, string> } => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
 
     const ensureScope = async (scope: Scope): Promise<void> => {
-        if (await exists(scope.gitDir)) {
+        if (await pathExists(scope.gitDir)) {
             return;
         }
         await git(["init", "--bare", "-q", "--initial-branch=main", scope.gitDir], { cwd: historyRoot, env: {} });
@@ -300,11 +292,11 @@ export const createWorkspaceHistory = (
 
     // Rewrite the --separate-git-dir pointer file if the agent deleted it ("root" heals the /work repo's).
     const healGitPointer = async (scope: Scope): Promise<void> => {
-        if (await exists(join(scope.worktree, ".git"))) {
+        if (await pathExists(join(scope.worktree, ".git"))) {
             return;
         }
         const realGitDir = repoGitDir(historyRoot, scope.name);
-        if (await exists(realGitDir)) {
+        if (await pathExists(realGitDir)) {
             await writeFile(join(scope.worktree, ".git"), `gitdir: ${realGitDir}\n`);
         }
     };
@@ -330,7 +322,7 @@ export const createWorkspaceHistory = (
             return "fresh";
         }
         for (const path of paths) {
-            if (await exists(join(worktree, path))) {
+            if (await pathExists(join(worktree, path))) {
                 return "live";
             }
         }
@@ -368,7 +360,7 @@ export const createWorkspaceHistory = (
             const worktree = join(workspace.root, id);
             const gitDir = join(historyRoot, "gits", entry);
             try {
-                if (!(await exists(worktree))) {
+                if (!(await pathExists(worktree))) {
                     emptySince.delete(entry);
                     await reapGitDir(entry, "worktree deleted");
                     continue;

@@ -1,6 +1,7 @@
-import { access, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
+import { pathExists } from "../path-exists.js";
 import { gitContract, type GitChange, type GitChanges, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -77,15 +78,6 @@ const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: 
     return results;
 };
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 // Per-repo git ops over "root" (the /work repo) and every discovered repo under it ({repo} is the repo's
 // root-relative dir). An unknown {repo} is NOT_FOUND; a path that escapes the repo dir is BAD_REQUEST; a
 // missing file is NOT_FOUND. `changes` is the Changes panel's aggregated review set; commit/discard take
@@ -95,11 +87,11 @@ export const createGitRoutes = (services: Services) => {
     // Rewrite the --separate-git-dir pointer file if the agent deleted it, so every git route self-heals
     // (same convention as history's healGitPointer: /history/gits/<name>, "root" included).
     const healPointer = async (repo: string, dir: string): Promise<void> => {
-        if (await exists(join(dir, ".git"))) {
+        if (await pathExists(join(dir, ".git"))) {
             return;
         }
         const gitDir = repoGitDir(services.config.historyRoot, repo);
-        if (await exists(gitDir)) {
+        if (await pathExists(gitDir)) {
             await writeFile(join(dir, ".git"), `gitdir: ${gitDir}\n`);
         }
     };
@@ -110,7 +102,7 @@ export const createGitRoutes = (services: Services) => {
         }
         if (isValidRepoId(repo)) {
             const dir = join(services.workspace.root, repo);
-            if (await exists(dir)) {
+            if (await pathExists(dir)) {
                 await healPointer(repo, dir);
                 return dir;
             }

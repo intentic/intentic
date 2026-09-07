@@ -14,7 +14,8 @@
 // contract, and it is asserted as such rather than merely "present somewhere in the component", which is
 // what the old assertion said, and which stayed true throughout the failure it was meant to prevent.
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The header's way back to the board is a link now, so this mock has to carry a <RouterLink>: the real one
 // resolves its href out of a router this bare mount never installs.
@@ -144,15 +145,7 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp(AgentDetail);
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     await nextTick();

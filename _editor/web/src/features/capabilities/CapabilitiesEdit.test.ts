@@ -14,6 +14,7 @@ import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { VAULTED } from "@intentic/sandbox-contract";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
@@ -85,15 +86,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const app = createApp({ render: () => h(Capabilities) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.component(
         `RouterLink`,
         defineComponent({

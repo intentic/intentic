@@ -16,6 +16,7 @@
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const provider = ref<AgentProvider>(TRIAL_PROVIDER);
 const reachable = ref(true);
@@ -73,13 +74,7 @@ const mount = (): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatPaneNotices) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: { type: String, default: `` }, spin: Boolean },
-            setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

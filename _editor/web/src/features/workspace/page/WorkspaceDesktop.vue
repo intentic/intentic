@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow, usePointerResize } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -314,11 +314,21 @@ let dragDepth = 0;
 // would decline must not be accepted by a row just because the pointer was over one.
 let unwatchDragSource: (() => void) | undefined;
 
-const resizing = ref(false);
 const sidebar = ref<HTMLElement>();
 // The sidebar's left viewport offset, captured at drag start: its width is the pointer's distance from it (the
 // sidebar is not flush to the viewport edge; the shell's rail sits to its left).
 let sidebarLeft = 0;
+const {
+    resizing,
+    start: startResize,
+    move: onResize,
+    end: endResize,
+} = usePointerResize(
+    (event) => layout.setSidebarWidth(toAppPx(event.clientX - sidebarLeft)),
+    () => {
+        sidebarLeft = sidebar.value?.getBoundingClientRect().left ?? 0;
+    },
+);
 
 const clearFilter = (): void => {
     filter.value = ``;
@@ -807,30 +817,6 @@ const explorerTooltip = computed(() =>
 );
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
 
-const startResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    sidebarLeft = sidebar.value?.getBoundingClientRect().left ?? 0;
-    resizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
-
-const onResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    layout.setSidebarWidth(toAppPx(event.clientX - sidebarLeft));
-};
-
-const endResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    resizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
 </script>
 
 <template>

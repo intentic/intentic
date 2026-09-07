@@ -15,6 +15,7 @@ import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {
@@ -60,7 +61,7 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(AgentSafetyJudge) });
     app.use(PrimeVue);
     app.use(router);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

@@ -8,6 +8,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The sandbox singletons are the component's whole world (identity, reachability, the write), and the version
 // card + update prompt below the header are separate surfaces with their own daemon calls: stubbed so this
@@ -59,15 +60,7 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxOverview) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     // The upgrade card on a hosted sandbox links onward with a RouterLink, and this mount installs no router
     //: a stand-in that renders the anchor keeps the card in the tree instead of warning on every mount.
     app.component(

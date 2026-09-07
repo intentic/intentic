@@ -7,7 +7,8 @@
 // offered a button. These mount the real page and read the FIRST frame: the button is there, and the mint it
 // races was asked for without the shared overlay that timer existed to raise.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
 // environment.ts reads window.env and throws without it.
@@ -64,15 +65,7 @@ const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(DesktopAuth) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.mount(el);
     // The chain is several awaits deep (session, then the platform's credential, then Google's): a macrotask
     // flushes all of it, where a fixed count of ticks goes stale the moment one more await is added.

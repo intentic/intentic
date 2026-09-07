@@ -26,6 +26,7 @@ const newChat = () => {
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat component needs (see startAgent.test.ts), plus the one this file is
 // about: jsdom implements no scrollIntoView at all, so it is installed as the recorder the assertions read.
@@ -47,7 +48,7 @@ const mountList = async (): Promise<void> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(ChatTabList) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

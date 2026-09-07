@@ -8,7 +8,8 @@
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
@@ -38,7 +39,7 @@ const mount = (conversation: ReturnType<typeof chatWith>): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp({ render: () => h(ComposerTierChip, { conversation: conversation as never }) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(host);
     return host;
 };

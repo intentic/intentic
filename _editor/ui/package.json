@@ -14,6 +14,10 @@
             "types": "./src/components/primitives/Icon.vue",
             "default": "./src/components/primitives/Icon.vue"
         },
+        "./testing": {
+            "types": "./src/testing.ts",
+            "default": "./src/testing.ts"
+        },
         "./markdown-view": {
             "types": "./src/components/markdown/Markdown.vue",
             "default": "./src/components/markdown/Markdown.vue"

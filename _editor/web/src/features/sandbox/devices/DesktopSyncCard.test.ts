@@ -11,6 +11,7 @@ import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice), exactly as SandboxDevices.test.ts cuts the same edge.
@@ -57,7 +58,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(DesktopSyncCard) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
     app.mount(el);

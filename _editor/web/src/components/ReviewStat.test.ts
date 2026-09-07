@@ -10,6 +10,7 @@ import { createApp, h, nextTick } from "vue";
 import ReviewStat from "./ReviewStat.vue";
 import { useLayout } from "../shell/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
+import { IconStub } from "@intentic/ui/testing";
 
 const { showComments, toggleShowComments } = useLayout();
 
@@ -26,7 +27,7 @@ const render = (props: Props): HTMLElement => {
     const app = createApp({ render: () => h(ReviewStat, props) });
     // Both are global in the real app (installUi). The glyph is stubbed away because nothing here asserts on it;
     // the tooltip keeps its text, since which reading the hover offers is half of what this file is about.
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {
         mounted: (el: HTMLElement, binding: { value?: string }) => {
             if (binding.value !== undefined) {

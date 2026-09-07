@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import { ERRANDS, errandPrompt } from "../run/errands";
 import type { ChatMessage } from "./transcript";
+import { IconStub } from "@intentic/ui/testing";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
 const roster = vi.hoisted(() => ({ running: 0 }));
@@ -180,12 +181,7 @@ const mount = (subject: ChatMessage = message, extra: { doomed?: boolean } = {})
     document.body.append(element);
     app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true, ...extra }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
-    app.component(
-        `Icon`,
-        defineComponent({
-            render: () => h(`i`),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;
@@ -282,7 +278,7 @@ describe(`ChatMessageView loader`, () => {
         document.body.append(element);
         app = createApp({ render: () => h(ChatTurnStatus) });
         app.use(VueQueryPlugin, { queryClient: new QueryClient() });
-        app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
+        app.component(`Icon`, IconStub);
         app.mount(element);
         expect(element.textContent).toContain(`(35s)`);
     });
@@ -313,9 +309,11 @@ describe(`ChatMessageView question card`, () => {
         },
     });
 
-    // The mark of every option row, Other's included, in the order they are shown.
+    // The mark of every option row, Other's included, in the order they are shown. `data-icon` is what the
+    // kit's stand-in publishes the glyph as (ui/src/testing.ts); `name` is the prop it reads it from, which a
+    // component that declares the prop consumes rather than passing through as an attribute.
     const marks = (element: HTMLElement): (string | null)[] =>
-        [...element.querySelectorAll(`button[role="checkbox"] i, button[role="radio"] i`)].map((icon) => icon.getAttribute(`name`));
+        [...element.querySelectorAll(`button[role="checkbox"] i, button[role="radio"] i`)].map((icon) => icon.getAttribute(`data-icon`));
 
     // Picks are mirrored to localStorage per requestId: each case starts from an empty card.
     afterEach(() => localStorage.clear());

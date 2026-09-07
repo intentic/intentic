@@ -5,9 +5,10 @@
 // unit instead of a flat sibling list with a lone spinner stranded above it. Recursion that fails to resolve
 // draws nothing and throws nothing: only a mounted render catches it.
 import { afterEach, describe, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
+import { IconStub } from "@intentic/ui/testing";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
 // @intentic/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts
@@ -31,15 +32,7 @@ const mount = (tool: TranscriptTool, live = true, surface?: ChatSurface): HTMLEl
     // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin. Icon renders which glyph it was handed (and whether it spins), because that IS
     // what the liveness rule below decides; the tooltip's content is not under test.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name, class: this.spin ? `animate-spin` : undefined });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;
@@ -101,14 +94,14 @@ describe(`ChatToolCard`, () => {
     it(`spins a call in flight while its turn is live`, () => {
         const element = mount({ id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `pnpm test` });
         expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
-        expect(element.querySelector(`.animate-spin`)).not.toBeNull();
+        expect(element.querySelector(`[data-spin]`)).not.toBeNull();
     });
 
     it(`freezes a call the turn never finished: no animation on a transcript that is only a record`, () => {
         // How a stopped turn (and a session restored from disk with no tool_result) reads back: still
         // `in_progress`, but nothing will ever move it, so an animation there claims work that is not happening.
         const element = mount({ id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `pnpm test` }, false);
-        expect(element.querySelector(`.animate-spin`)).toBeNull();
+        expect(element.querySelector(`[data-spin]`)).toBeNull();
         expect(element.querySelector(`[data-icon="clock"]`)).not.toBeNull();
         expect(element.textContent).toContain(`interrupted`);
     });
@@ -124,6 +117,6 @@ describe(`ChatToolCard`, () => {
             },
             false,
         );
-        expect(element.querySelector(`.animate-spin`)).toBeNull();
+        expect(element.querySelector(`[data-spin]`)).toBeNull();
     });
 });

@@ -9,6 +9,7 @@
 // that says `false` turns it off, and the two must not collapse into each other on the way to the setting.
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 /* The model list itself is the app's own panel and has its own suite; here it is a stub that renders the footer
  * slot and can answer with a row, which is the same treatment the shell picker's test gives it. */
@@ -57,7 +58,7 @@ const mount = (props: Record<string, unknown>): HTMLElement => {
                 onPick: (pin: unknown) => picked.push(pin),
             }),
     });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

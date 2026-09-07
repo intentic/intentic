@@ -6,7 +6,8 @@
 // pinned is that flipping it actually rewrites the line the user copies.
 import PrimeVue from "primevue/config";
 import { expect, it, vi } from "vitest";
-import { createApp, defineComponent, h, ref } from "vue";
+import { createApp, h, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The two things the composable reads from a live sandbox: where it is, and a pairing token minted for the
 // capability. Everything else about the command is built here, which is what this test is about.
@@ -28,15 +29,7 @@ const mount = (): { open: () => void } => {
     const app = createApp({
         render: () => h(HostConnectDialog, { visible: visible.value, id: `my-desktop`, platform: `linux`, permissions: `run commands` }),
     });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     // PrimeVue's Dialog reads its own config off the plugin; without it the header fails to render at all.
     // The bare plugin, not installUi: the theme preset and the bundled icon sets are not what is on trial.

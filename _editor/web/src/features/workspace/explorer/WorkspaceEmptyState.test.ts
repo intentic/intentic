@@ -10,12 +10,13 @@ import { expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const mount = (empty: boolean): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     const app = createApp({ render: () => h(WorkspaceEmptyState, { empty }) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);

@@ -8,6 +8,7 @@ import type { Persona } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const personas = ref<Persona[]>([]);
 const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
@@ -41,7 +42,7 @@ const mount = (dir: string | undefined): void => {
             return () => h(DirectoryPersonas, { modelValue: model.value, "onUpdate:modelValue": (next: string | undefined) => (model.value = next) });
         },
     });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.component(
         `RouterLink`,
         defineComponent({

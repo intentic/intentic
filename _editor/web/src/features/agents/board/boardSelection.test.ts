@@ -24,6 +24,7 @@ import { resetAgents } from "../fleet/useAgents";
 import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted board needs (see startAgent.test.ts, which mounts this same view):
 // useDevice reads matchMedia at module scope: matches:false keeps the device DESKTOP, the only form factor
@@ -49,7 +50,7 @@ const mountBoard = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(AgentsView) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

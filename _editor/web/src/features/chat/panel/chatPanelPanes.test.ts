@@ -33,6 +33,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat surface needs (see startAgent.test.ts): useDevice reads matchMedia at
 // module scope (matches:false keeps the device DESKTOP, the only form factor with panes), environment.ts reads
@@ -73,7 +74,7 @@ const mountPanel = async (): Promise<void> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(ChatPanel) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

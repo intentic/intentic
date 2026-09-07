@@ -6,7 +6,8 @@
 // output rather than argued from the source.
 import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The app's chat components read browser globals at import time (useDevice reads matchMedia, its refs are
 // module-level). jsdom provides no matchMedia, so it is stood up before the imports evaluate: the same
@@ -40,15 +41,7 @@ const publish = (payload: SharePayload | null): HTMLElement => {
     app = createApp(ShareApp);
     // Icon and v-tooltip are registered globally by the page's own boot; stand-ins keep the test off the icon
     // collections, which are 28 KB of data that say nothing about what is on the page.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

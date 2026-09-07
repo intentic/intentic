@@ -25,6 +25,7 @@ import { openAgentConversation } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat component needs (see chatTabsReveal.test.ts): useDevice reads
 // matchMedia at module scope, environment.ts reads window.env, and jsdom implements neither ResizeObserver nor
@@ -43,7 +44,7 @@ const mountList = async (): Promise<HTMLElement> => {
     // Wired the way ChatPanel wires it: the list emits verbs and its host performs them, so a press on a close
     // affordance here has the same consequence it does in the app.
     app = createApp({ render: () => h(ChatTabList, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

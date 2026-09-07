@@ -5,8 +5,9 @@
 // component. Only a mounted render can answer that.
 import { afterEach, describe, expect, it } from "vitest";
 import type { TodoItem } from "@intentic/sandbox-contract";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 import ChatTodoList from "./ChatTodoList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const LIST: TodoItem[] = [
     { content: `Serialize git write routes`, status: `in_progress`, activeForm: `Serializing git write routes` },
@@ -21,15 +22,7 @@ const mount = (todos: TodoItem[], live: boolean): HTMLElement => {
     app = createApp({ render: () => h(ChatTodoList, { todos, live }) });
     // Icon is registered app-wide in the real app. The stand-in renders which glyph it was handed (and whether
     // it spins), because that IS what this component decides.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name, class: this.spin ? `animate-spin` : undefined });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.mount(element);
     return element;
 };
@@ -43,7 +36,7 @@ afterEach(() => {
 describe(`ChatTodoList`, () => {
     it(`spins the active row while the bubble is still streaming, in its present-tense form`, () => {
         const element = mount(LIST, true);
-        expect(element.querySelector(`.animate-spin`)).not.toBeNull();
+        expect(element.querySelector(`[data-spin]`)).not.toBeNull();
         expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
         expect(element.textContent).toContain(`Serializing git write routes`);
     });
@@ -52,7 +45,7 @@ describe(`ChatTodoList`, () => {
         // The reported bug: scrolling back through a session that finished long ago and finding a row still
         // spinning, which reads as an agent still working.
         const element = mount(LIST, false);
-        expect(element.querySelector(`.animate-spin`)).toBeNull();
+        expect(element.querySelector(`[data-spin]`)).toBeNull();
         expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
         // Still marked as the row the agent had reached: a filled dot where the spinner was.
         expect(element.querySelector(`[data-icon="circle-fill"]`)).not.toBeNull();

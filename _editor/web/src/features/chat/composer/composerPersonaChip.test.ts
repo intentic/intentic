@@ -4,8 +4,9 @@
  * it (whether there is a reading, which mode) is personaRoute's and has its own suite; this only checks that
  * what it decided is legible without a hover. */
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 import type { PersonaRoutePreview } from "../personas/personaRoute";
+import { IconStub } from "@intentic/ui/testing";
 
 const { default: ComposerPersonaChip } = await import("./ComposerPersonaChip.vue");
 
@@ -17,7 +18,7 @@ const mount = (preview: PersonaRoutePreview | undefined): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp({ render: () => h(ComposerPersonaChip, { preview, onPress: press }) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(host);
     return host;
 };

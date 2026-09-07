@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
+import { IMAGE_MIME } from "../../image-mime.js";
 import type { AcpAgentConfig, AgentCommand, AgentEvent } from "@intentic/sandbox-contract";
 import { whenAborted } from "../../abort.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
@@ -34,14 +35,6 @@ const SETUP_TIMEOUT_MS = 15_000;
 
 // How long a turn waits for Pi to settle after an abort was sent, before the process is killed outright.
 const ABORT_GRACE_MS = 5_000;
-
-const IMAGE_MIME: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-};
 
 // Raster attachments ride the prompt as native Pi ImageContent blocks; unreadable files degrade to a path
 // note (the acp-agent shape).

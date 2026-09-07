@@ -5,7 +5,8 @@
 // the two menus it replaced could never say: that choosing either of them is choosing INSTEAD of the other.
 import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, h, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
 
@@ -33,7 +34,7 @@ const mount = (armed: { loop?: string; workflow?: string } = {}): HTMLElement =>
             }),
     });
     // Icon is registered app-wide in the real app.
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(element);
     return element;
 };

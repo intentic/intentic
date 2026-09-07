@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
@@ -91,15 +91,6 @@ export interface RepoSync {
     readonly blocked?: true;
 }
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 /* Every path a span touches, `--no-renames` because the two lists below are INTERSECTED, and a rename that
  * collapses to its destination cannot intersect anything on the source side.
  *
@@ -152,7 +143,7 @@ const syncOne = async (
     const worktree = worktrees.worktreeDir(id, repo);
     // A retired checkout (an archived agent whose ensure has not re-attached it yet) has no index to rebase in.
     // Nothing is lost by skipping: the branch is untouched and the next attached turn syncs it.
-    if (!(await exists(join(worktree, ".git")))) {
+    if (!(await pathExists(join(worktree, ".git")))) {
         return undefined;
     }
     const head = await headSha(worktrees.mainDir(repo), git);

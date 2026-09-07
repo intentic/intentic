@@ -10,8 +10,9 @@
 // attribution says nothing three times.
 import type { EnvironmentItem } from "@intentic/api-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env). The brand CDN is stubbed to refuse, which
@@ -100,7 +101,7 @@ const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin.
     app = createApp({ render: () => h(EnvironmentContents, { groups, loading: false }) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
@@ -210,7 +211,7 @@ const mountLoading = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(EnvironmentContents, { groups: [], loading: true }) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

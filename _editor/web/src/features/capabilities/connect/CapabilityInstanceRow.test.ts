@@ -10,6 +10,7 @@ import { createApp, h } from "vue";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ConnectionState } from "../model/connections";
+import { IconStub } from "@intentic/ui/testing";
 
 // The row reaches for a router only through the rebuild hand-off, which none of these cases takes.
 vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: () => undefined }), RouterLink: { template: `<a><slot /></a>` } }));
@@ -28,7 +29,7 @@ const render = (status: CapabilitySummary[`status`], state: ConnectionState = ST
     });
     app.use(PrimeVue);
     // Globally registered in the real app; a bare span is all these assertions need of it.
-    app.component(`Icon`, { props: [`name`], template: `<span />` });
+    app.component(`Icon`, IconStub);
     app.mount(el);
     const html = el.innerHTML;
     app.unmount();

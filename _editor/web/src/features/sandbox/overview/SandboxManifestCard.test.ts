@@ -7,7 +7,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const reports = ref<ManifestProblemReport[]>([]);
 const repair = vi.fn<(request: ManifestRepair) => Promise<void>>(async () => undefined);
@@ -36,7 +37,7 @@ const mount = (problems: ManifestProblemReport[`problems`]): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxManifestCard) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

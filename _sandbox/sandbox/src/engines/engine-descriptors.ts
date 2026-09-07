@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { pathExists } from "../path-exists.js";
 import { errorMessage } from "@intentic/base/errors";
 import { type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { readPack } from "../environment/packs.js";
@@ -85,12 +85,6 @@ const packPin = async (pack: string, pattern: RegExp): Promise<string | undefine
     return matches.length === 1 ? matches[0] : undefined;
 };
 
-const exists = async (path: string): Promise<boolean> =>
-    access(path, constants.F_OK).then(
-        () => true,
-        () => false,
-    );
-
 // A binary that answers any of these is present and runnable, which is all a spawned engine's probe claims. A
 // non-zero exit still proves it launched (version-probe.ts's rule), so only ENOENT and a timeout are failures.
 const answersVersion = async (bin: string, args: readonly string[] = ["--version"]): Promise<string | undefined> => {
@@ -149,7 +143,7 @@ const claudeBinCandidates = (prefix: string): string[] => {
 
 const claudeBin = async (prefix: string): Promise<string | undefined> => {
     for (const candidate of claudeBinCandidates(prefix)) {
-        if (await exists(candidate)) {
+        if (await pathExists(candidate)) {
             return candidate;
         }
     }
@@ -245,7 +239,7 @@ const codexDescriptor: EngineDescriptor = {
     baked: () => packPin("codex", /@openai\/codex@(\S+)/g),
     verify: async (prefix) => {
         const { binPath } = await codexDescriptor.paths(prefix);
-        if (binPath === undefined || !(await exists(binPath))) {
+        if (binPath === undefined || !(await pathExists(binPath))) {
             return "the downloaded package has no codex wrapper";
         }
         // Run through this process's own Node rather than relying on the wrapper's executable bit, which npm
@@ -281,7 +275,7 @@ const opencodeDescriptor: EngineDescriptor = {
     baked: () => packPin("opencode", /opencode-ai@(\S+)/g),
     verify: async (prefix) => {
         const { binPath } = await opencodeDescriptor.paths(prefix);
-        return binPath === undefined || !(await exists(binPath)) ? "the downloaded package has no opencode binary" : answersVersion(binPath);
+        return binPath === undefined || !(await pathExists(binPath)) ? "the downloaded package has no opencode binary" : answersVersion(binPath);
     },
 };
 
@@ -306,7 +300,7 @@ const translatorDescriptor: EngineDescriptor = {
     baked: () => packPin("translator", /version=(\S+)/g),
     verify: async (prefix) => {
         const { binPath } = await translatorDescriptor.paths(prefix);
-        return binPath === undefined || !(await exists(binPath)) ? "the downloaded archive has no cli-proxy-api binary" : answersVersion(binPath);
+        return binPath === undefined || !(await pathExists(binPath)) ? "the downloaded archive has no cli-proxy-api binary" : answersVersion(binPath);
     },
 };
 

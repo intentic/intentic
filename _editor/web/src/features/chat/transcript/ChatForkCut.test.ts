@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "./transcript";
 import { ERRANDS } from "../run/errands";
+import { IconStub } from "@intentic/ui/testing";
 
 /* THE CUT'S MENU IS THE WHOLE FEATURE: three outcomes that differ in what happens to the conversation and to
  * the files, and the user picks between them by reading three rows. So what is asserted here is the menu: which
@@ -90,7 +91,7 @@ const mount = (cut: number): HTMLElement => {
     document.body.append(element);
     app = createApp({ render: () => h(ChatForkCut, { cut }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
-    app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

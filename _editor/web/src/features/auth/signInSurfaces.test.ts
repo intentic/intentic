@@ -14,7 +14,8 @@
 // table that holds every surface to it. A fourth surface added later belongs in `SURFACES` below; what it
 // costs to add is one line, and what it buys is never shipping that dead end again.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
 // environment.ts reads window.env and throws without it.
@@ -76,15 +77,7 @@ const mount = async (component: (typeof SURFACES)[number][`component`]): Promise
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(component) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.mount(el);
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();

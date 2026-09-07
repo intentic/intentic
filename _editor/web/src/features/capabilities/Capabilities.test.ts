@@ -7,6 +7,7 @@
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see startAgent.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
@@ -80,15 +81,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const app = createApp({ render: () => h(Capabilities) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     // Registered app-wide by the router plugin in the real app, which this mount deliberately does without.
     app.component(
         `RouterLink`,

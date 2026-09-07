@@ -20,7 +20,8 @@ import { SandboxSettingsSchema } from "@intentic/api-contract";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // These components' import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -81,7 +82,7 @@ const mount = (): HTMLElement => {
     // (the rules group's convention). PrimeVue goes on bare: its inputs read the injected config while
     // rendering: without the theme the app dresses it in, which this test has no opinion about.
     app.use(PrimeVue);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

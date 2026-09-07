@@ -10,6 +10,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
+import { IconStub } from "@intentic/ui/testing";
 
 // The globals a mounted workspace component reads at import time, plus the one this file is about: jsdom
 // implements no scrollIntoView at all, so it is installed as the recorder the assertions read.
@@ -35,7 +36,7 @@ const mountStrip = async (): Promise<void> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(FileTabs, { tabs: TABS, active: active.value }) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     await settle();

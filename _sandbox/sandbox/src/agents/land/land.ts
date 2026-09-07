@@ -1,6 +1,7 @@
-import { access, mkdtemp, rm, rmdir, stat } from "node:fs/promises";
+import { mkdtemp, rm, rmdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha } from "../../git/changes/changes.js";
@@ -28,15 +29,6 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // state anyone can resolve, and reporting it strands the agent on a red card with nothing to do about it.
 // Two independent mechanisms rule it out: anchorOf, when the main line's history contains the work, and the
 // reverse probe in classifyDelta, when it holds the CONTENT but not the commits.
-
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 // The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
 // no status change) from a real outcome, `repos` carries the advanced landedTips, and `diff` is the agent's
@@ -303,7 +295,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
         for (const { repo, base, landedTip } of entry.repos) {
             await worktrees.withRepoLock(repo, async () => {
                 const main = worktrees.mainDir(repo);
-                if (!(await exists(join(main, ".git")))) {
+                if (!(await pathExists(join(main, ".git")))) {
                     // The main checkout vanished, the same per-repo surface the land itself reports.
                     conflicts.push({ repo, paths: [], clean: 0 });
                     return;
@@ -471,7 +463,7 @@ export const landAgent = async (
                     const { repo, base } = composed;
                     let next: PersistedAgent["repos"][number] = composed;
                     const main = worktrees.mainDir(repo);
-                    if (!(await exists(join(main, ".git")))) {
+                    if (!(await pathExists(join(main, ".git")))) {
                         // The main checkout vanished, nothing to apply into; surfaced, not silently skipped. No
                         // path-level account exists for it, which is what an empty `paths` with nothing clean says.
                         conflicts.push({ repo, paths: [], clean: 0 });

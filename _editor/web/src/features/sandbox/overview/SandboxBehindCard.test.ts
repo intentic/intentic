@@ -10,6 +10,7 @@ import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-con
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
+import { IconStub } from "@intentic/ui/testing";
 
 // The one thing the card asks the daemon for: which sandbox it is looking at, so the command it prints names
 // that one rather than leaving a dev machine running several to guess.
@@ -32,7 +33,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxBehindCard) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.component(
         `Button`,
         defineComponent({

@@ -15,6 +15,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
@@ -155,15 +156,7 @@ const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(Setup) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     // The mount read (list + the hosted offer) and the create it decides on are several awaits deep: a
@@ -296,7 +289,7 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(Setup) });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     await nextTick();

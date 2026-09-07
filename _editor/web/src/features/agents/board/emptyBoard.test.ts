@@ -18,6 +18,7 @@ import { PANELS } from "../../../lib/queryKeys";
 import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The same import-time globals the other mounted-component tests stand up (see startAgent.test.ts).
 // matches:false keeps the device DESKTOP, which is the form factor this landing is about.
@@ -53,7 +54,7 @@ const mount = (component: unknown): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     const app = createApp({ render: () => h(component as never) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

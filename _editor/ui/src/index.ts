@@ -292,6 +292,9 @@ export { type Device, useDevice } from "./composables/useDevice.js";
  * chat panel is never as wide as the screen. */
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
+/* Every draggable divider in the app: the chat's left edge, the terminal's top, the explorer's and the review
+ * list's, the agent rail's right. The pointer-capture dance is identical in all five and only the setter is not. */
+export { type PointerResize, usePointerResize } from "./composables/usePointerResize.js";
 /* The scroll position belongs to the reader, but only for as long as it is ABOUT something. On a page-scrolling
  * surface, changing what a view is showing leaves the old document's offset pointing into the new one. */
 export { useScrollReset } from "./composables/useScrollReset.js";

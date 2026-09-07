@@ -8,7 +8,8 @@
 //   nine meters in one column with nothing to say which three belonged to which sign-in.
 import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -38,7 +39,7 @@ const mount = (accounts: OauthAccount[]): HTMLElement => {
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin.
     app = createApp({ render: () => h(PlanLimitsPanel) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

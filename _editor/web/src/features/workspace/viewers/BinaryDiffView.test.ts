@@ -4,7 +4,8 @@
 // surface that said "Binary file: no text diff to show." over a PNG, so the assertion that matters is that an
 // <img> reaches the DOM with the fetched bytes behind it, which only a mounted render can show.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The component's import chain pulls in app-wide singletons that read browser/runtime globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env), stood up for the
@@ -48,7 +49,7 @@ const mount = (props: { path: string; before?: string; after?: string }): HTMLEl
     app = createApp({ render: () => h(BinaryDiffView, props) });
     // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin.
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

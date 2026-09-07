@@ -10,6 +10,7 @@ import { beforeAll, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic/api-contract";
 import CodebaseHealth from "./CodebaseHealth.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 /* The mocks' state is hoisted rather than declared below the imports, so the component can be imported
  * statically: a vi.mock factory runs at the mocked module's first import, and with a static import of the panel
@@ -37,7 +38,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     const app = createApp({ render: () => h(CodebaseHealth, { repo: `root` }) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

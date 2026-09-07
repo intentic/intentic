@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic/api-contract";
-import { Button, ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
+import {
+    Button,
+    ChangeStatusMark,
+    ui,
+    explorerColorClass,
+    iconForEntry,
+    Notice,
+    SegmentedControl,
+    useDevice,
+    useExplorerStyle,
+    usePointerResize,
+} from "@intentic/ui";
 import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
@@ -689,32 +700,18 @@ const openChanges = (): void => {
 // persistence as the workspace explorer's edge: drag to size, double-click to reset, remembered after.
 // Pointer capture rather than window listeners, so a drag that outruns the 6px strip still tracks.
 const listEl = ref<HTMLElement>();
-const resizing = ref(false);
 let listLeft = 0;
-
-const startResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    listLeft = listEl.value?.getBoundingClientRect().left ?? 0;
-    resizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
-
-const onResize = (event: PointerEvent): void => {
-    if (resizing.value) {
-        shell.setReviewListWidth(toAppPx(event.clientX - listLeft));
-    }
-};
-
-const endResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    resizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
+const {
+    resizing,
+    start: startResize,
+    move: onResize,
+    end: endResize,
+} = usePointerResize(
+    (event) => shell.setReviewListWidth(toAppPx(event.clientX - listLeft)),
+    () => {
+        listLeft = listEl.value?.getBoundingClientRect().left ?? 0;
+    },
+);
 </script>
 
 <template>

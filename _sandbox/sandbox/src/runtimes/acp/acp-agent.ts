@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
+import { IMAGE_MIME } from "../../image-mime.js";
 import { type ContentBlock, type McpServer, methods, type PromptResponse, type SessionNotification } from "@agentclientprotocol/sdk";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -32,14 +33,6 @@ export interface AcpTimeouts {
     readonly maxTurnMs: number;
 }
 const DEFAULT_TIMEOUTS: AcpTimeouts = { inactivityMs: 120_000, maxTurnMs: 30 * 60_000 };
-
-const IMAGE_MIME: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-};
 
 // Native image blocks when the agent advertises image prompts; unreadable files degrade to a path note.
 const imageBlocks = async (paths: readonly string[]): Promise<{ blocks: ContentBlock[]; unread: string[] }> => {

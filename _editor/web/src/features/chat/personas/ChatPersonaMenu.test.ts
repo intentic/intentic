@@ -5,7 +5,8 @@
 // actually reach an account, and what "no persona at all" means on the attended side of the line.
 import type { Persona } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, h, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
 
@@ -38,7 +39,7 @@ const mount = (picked?: string): HTMLElement => {
     document.body.append(element);
     app = createApp({ render: () => h(ChatPersonaMenu, { picked, onPicked: (id: string | undefined) => events.push(id) }) });
     // Icon is registered app-wide in the real app.
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(element);
     return element;
 };

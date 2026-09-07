@@ -20,8 +20,9 @@ import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 import ChatCommandBlock from "./ChatCommandBlock.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The hook the two halves meet on. Spelled once, asserted on both sides.
 const HOOK = `chat-command-block`;
@@ -39,7 +40,7 @@ const mount = (program: ProgramAsk): HTMLElement => {
     document.body.append(element);
     app = createApp({ render: () => h(ChatCommandBlock, { program }) });
     // Registered app-wide in the real app; only reached by the show-all toggle, which a short program has none of.
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(element);
     return element;
 };

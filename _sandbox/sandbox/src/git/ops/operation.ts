@@ -1,5 +1,6 @@
-import { access, lstat, readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* THE OPERATION A WORKTREE IS HALTED IN THE MIDDLE OF, and the way out of it.
@@ -14,15 +15,6 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  * this reads the same evidence git does rather than parsing its prose. */
 
 export type GitOperation = "merge" | "rebase" | "cherry-pick" | "revert";
-
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 /* Whether the sequencer still holds QUEUED picks. The todo list is shared by cherry-pick and revert, which
  * distinguish themselves by the verb on each line, so the first real line names the operation.
@@ -81,17 +73,17 @@ export const operationInProgress = async (dir: string): Promise<GitOperation | u
      * `git am` SHARES. An `am` in progress is not a rebase and `git rebase --abort` is not what ends it, so the
      * `applying` marker inside distinguishes them and we report nothing rather than offering an abort that
      * would fail. */
-    if (await exists(join(gitDir, "rebase-merge"))) {
+    if (await pathExists(join(gitDir, "rebase-merge"))) {
         return "rebase";
     }
-    if (await exists(join(gitDir, "rebase-apply"))) {
-        return (await exists(join(gitDir, "rebase-apply", "applying"))) ? undefined : "rebase";
+    if (await pathExists(join(gitDir, "rebase-apply"))) {
+        return (await pathExists(join(gitDir, "rebase-apply", "applying"))) ? undefined : "rebase";
     }
 
-    if (await exists(join(gitDir, "REVERT_HEAD"))) {
+    if (await pathExists(join(gitDir, "REVERT_HEAD"))) {
         return "revert";
     }
-    if (await exists(join(gitDir, "CHERRY_PICK_HEAD"))) {
+    if (await pathExists(join(gitDir, "CHERRY_PICK_HEAD"))) {
         return "cherry-pick";
     }
     // Markers cleared but the sequence unfinished, see queuedSequence.
@@ -103,7 +95,7 @@ export const operationInProgress = async (dir: string): Promise<GitOperation | u
     /* Checked LAST, after the rebase markers, and that order matters: a rebase that stops on a
      * conflicted merge commit writes MERGE_HEAD too, and there `git merge --abort` is not what ends the
      * operation, `git rebase --abort` is. Reading MERGE_HEAD first would offer the wrong escape hatch. */
-    return (await exists(join(gitDir, "MERGE_HEAD"))) ? "merge" : undefined;
+    return (await pathExists(join(gitDir, "MERGE_HEAD"))) ? "merge" : undefined;
 };
 
 // End the operation and return the worktree to where it started. Git's own `--abort` for each verb; the caller

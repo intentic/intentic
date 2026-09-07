@@ -16,7 +16,8 @@
  * and this strip saying otherwise put two contradicting sentences on screen at once. */
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
@@ -83,13 +84,7 @@ const mount = (): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatAccountPanel) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: { type: String, default: `` }, spin: Boolean },
-            setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

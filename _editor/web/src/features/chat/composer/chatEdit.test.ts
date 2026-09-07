@@ -21,6 +21,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "../panel/ChatPanel.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
 vi.hoisted(() => {
@@ -87,7 +88,7 @@ const mountPanel = async (): Promise<void> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(ChatPanel) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

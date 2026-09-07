@@ -9,6 +9,7 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The tab's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -80,7 +81,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxSecrets) });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.component(
         `RouterLink`,
         defineComponent({

@@ -10,7 +10,8 @@
 // hold both halves: the app window gets the hand-off, an ordinary browser keeps Google's own button, and
 // neither one is ever offered the other's.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
 // environment.ts reads window.env and throws without it.
@@ -44,15 +45,7 @@ const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(GoogleSigninGate) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.mount(el);
     await nextTick();
     await nextTick();

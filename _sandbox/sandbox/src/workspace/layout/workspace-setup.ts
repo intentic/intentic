@@ -1,5 +1,6 @@
-import { access, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import { onPath } from "../../platform/boot/on-path.js";
@@ -60,15 +61,6 @@ export interface ProjectSetupStatus extends WorkspaceProject {
 // punctuation collapse to `_`. The `--install` suffix matches the `--add_apps` convention, an underscore
 // inside the suffix means it can never collide with an app panel key (`<repo>--<app>`, app being a slug).
 export const installPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--install`;
-
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 // The `packageManager` declaration, when this dir has a package.json to read it from. An unreadable or
 // malformed manifest yields undefined and detection falls back to the lockfile, never an error, since this
@@ -143,7 +135,7 @@ export const setupStateOf = async (
     if (processes.running(installPanelKey(project.dir))) {
         return { state: "installing" };
     }
-    if (await exists(join(root, project.dir, project.recipe.marker))) {
+    if (await pathExists(join(root, project.dir, project.recipe.marker))) {
         if (project.recipe.ecosystem !== "node") {
             return { state: "ready" };
         }

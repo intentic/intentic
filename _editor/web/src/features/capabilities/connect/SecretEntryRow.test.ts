@@ -9,6 +9,7 @@ import { expect, it, vi } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
+import { IconStub } from "@intentic/ui/testing";
 
 const setGate = { mutateAsync: vi.fn(async () => undefined) };
 const removeGate = { mutateAsync: vi.fn(async () => undefined) };
@@ -52,7 +53,7 @@ const mount = () => {
     document.body.append(el);
     const app = createApp({ render: () => h(SecretEntryRow, { row: ROW, expanded: true }) });
     app.use(PrimeVue);
-    app.component(`Icon`, { props: [`name`], template: `<span />` });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     const flip = async (): Promise<void> => {

@@ -10,7 +10,8 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 
@@ -69,15 +70,7 @@ const mount = async (): Promise<HTMLElement> => {
             return () => h(WorkspaceTree, { tree: TREE });
         },
     });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);

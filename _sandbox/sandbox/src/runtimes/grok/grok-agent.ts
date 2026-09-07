@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { IMAGE_MIME } from "../../image-mime.js";
 import { errorMessage } from "@intentic/base/errors";
 import type { Event, FilePartInput, ToolPart } from "@opencode-ai/sdk";
 import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
@@ -76,14 +77,6 @@ export interface GrokTurn {
     readonly signal: AbortSignal;
 }
 export type GrokRunner = (turn: GrokTurn) => AsyncIterable<Event>;
-
-const IMAGE_MIME: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-};
 
 // Native image parts for OpenCode's prompt, base64 data URLs rather than file:// because the server is reached
 // over HTTP and need not share this process's view of the filesystem. Unreadable files come back as `unread`.

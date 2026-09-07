@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { pathExists } from "../path-exists.js";
 import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";
@@ -29,11 +29,6 @@ export interface ReadinessCheck {
     // What was found. Always populated for warn/fail, a status with no stated reason is an opinion.
     readonly detail: string;
 }
-
-const exists = async (path: string): Promise<boolean> =>
-    access(path)
-        .then(() => true)
-        .catch(() => false);
 
 // Everything the manifest promises is on disk, gathered as (what it is → where it says it is) so a failure can
 // name both. A missing one is fatal at a different moment for each: the entry at activation, the bin at the
@@ -96,7 +91,7 @@ export const extensionRuntimeAbsent = async (extension: InstalledExtension): Pro
         return false;
     }
     for (const { path } of promisedPaths(extension.manifest)) {
-        if (!(await exists(join(extension.dir, path)))) {
+        if (!(await pathExists(join(extension.dir, path)))) {
             return true;
         }
     }
@@ -130,7 +125,7 @@ const pathsCheck = async (extension: InstalledExtension): Promise<ReadinessCheck
     const promised = promisedPaths(extension.manifest);
     const missing: string[] = [];
     for (const { what, path } of promised) {
-        if (!(await exists(join(extension.dir, path)))) {
+        if (!(await pathExists(join(extension.dir, path)))) {
             missing.push(`${what} (${path})`);
         }
     }

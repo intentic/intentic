@@ -10,7 +10,8 @@
 // token handed to the platform is the one the BROWSER minted, never the other way round, and that all three
 // ways this can fail land on the old redirect rather than on a dead page.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
 // environment.ts reads window.env and throws without it.
@@ -55,15 +56,7 @@ const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(Login) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.mount(el);
     // The sign-in chain is several awaits deep: a macrotask flushes it where a fixed count of ticks goes stale.
     await new Promise((resolve) => setTimeout(resolve));

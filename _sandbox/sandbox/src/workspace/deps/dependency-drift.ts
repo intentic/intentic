@@ -1,5 +1,6 @@
-import { access, opendir, readFile } from "node:fs/promises";
+import { opendir, readFile } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { readWorkspaceManifests } from "./package-graph.js";
 
 /* DEPENDENCY DRIFT, an installed tree that no longer satisfies the manifests above it.
@@ -56,15 +57,6 @@ export interface UnresolvedPackage {
     readonly names: readonly string[];
 }
 
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 const declaredNames = (manifest: Record<string, unknown>): string[] => {
     const names = new Set<string>();
     for (const block of INSTALLED_BLOCKS) {
@@ -87,7 +79,7 @@ const declaredNames = (manifest: Record<string, unknown>): string[] => {
  * not a dependency this project installed, it is the accident that makes a build work on one machine and fail
  * on the next, and calling it satisfied here is how this surface would learn to lie. */
 const resolves = async (root: string, packageDir: string, name: string): Promise<boolean> =>
-    (await exists(join(root, packageDir, "node_modules", name))) || (packageDir !== "" && (await exists(join(root, "node_modules", name))));
+    (await pathExists(join(root, packageDir, "node_modules", name))) || (packageDir !== "" && (await pathExists(join(root, "node_modules", name))));
 
 const manifestAt = async (dir: string): Promise<Record<string, unknown> | undefined> => {
     const text = await readFile(join(dir, "package.json"), "utf8").catch(() => undefined);
@@ -169,7 +161,7 @@ export const modulesNear = async (file: string): Promise<NearbyModules> => {
     let packageDir: string | undefined;
     let installRoot: string | undefined;
     for (let dir = dirname(resolvePath(file)); installRoot === undefined;) {
-        packageDir ??= (await exists(join(dir, "package.json"))) ? dir : undefined;
+        packageDir ??= (await pathExists(join(dir, "package.json"))) ? dir : undefined;
         if (await installedAt(join(dir, "node_modules"))) {
             installRoot = dir;
             break;
@@ -189,7 +181,7 @@ export const modulesNear = async (file: string): Promise<NearbyModules> => {
     const names = manifest === undefined ? [] : declaredNames(manifest);
     const missing = await Promise.all(
         names.map(async (name) =>
-            (await exists(join(packageDir, "node_modules", name))) || (await exists(join(installRoot, "node_modules", name))) ? undefined : name,
+            (await pathExists(join(packageDir, "node_modules", name))) || (await pathExists(join(installRoot, "node_modules", name))) ? undefined : name,
         ),
     );
     return { kind: "installed", missing: missing.filter((name): name is string => name !== undefined) };

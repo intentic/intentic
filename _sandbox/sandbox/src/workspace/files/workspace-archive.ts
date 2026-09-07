@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { extract, type Headers } from "tar-stream";
+import { drain, extractAll } from "../../tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "./workspace-files-upload.js";
 import { setWorkspaceMtime } from "./workspace-files.js";
@@ -15,14 +16,6 @@ export class PathEscapeError extends Error {
     }
 }
 
-// Fully consume (and discard) an entry's body, so tar-stream will emit the next entry. Used for directory markers
-// and skipped duplicate/alias entries, which carry no bytes we keep.
-const drain = (source: Readable): Promise<void> =>
-    new Promise((resolve, reject) => {
-        source.on("end", resolve);
-        source.on("error", reject);
-        source.resume();
-    });
 
 // True when `path` already exists AND is a directory (false when absent or a file). Detects a file entry that
 // collides with an already-materialized directory, a symlink alias the browser packer can't filter out.
@@ -93,30 +86,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
     };
 
     const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>);
-    await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        // Abort once: tear down both streams WITHOUT re-emitting the error (a destroy(err) would surface a second,
-        // unhandled 'error' on the other end after we've already rejected), then reject with the real cause.
-        const fail = (error: unknown): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            source.destroy();
-            ex.destroy();
-            reject(error instanceof Error ? error : new Error(String(error)));
-        };
-        ex.on("entry", (header, stream, next) => {
-            handleEntry(header, stream).then(() => next(), fail);
-        });
-        ex.on("finish", () => {
-            if (!settled) {
-                settled = true;
-                resolve();
-            }
-        });
-        ex.on("error", fail);
-        source.on("error", fail);
-        source.pipe(ex);
-    });
+    // No re-labelling: a plain workspace upload promises no particular archive format, so a decoder's own error
+    // is the honest answer and stands as thrown.
+    await extractAll(source, ex, handleEntry);
 };

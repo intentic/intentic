@@ -10,9 +10,10 @@
 // it ends.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "./laneDrop";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { IconStub } from "@intentic/ui/testing";
 
 // The card's import chain pulls in app-wide singletons that read browser globals at import time, stood up
 // for the package by vitest.setup.ts, whose matches:false keeps the device DESKTOP, the form factor that
@@ -84,15 +85,7 @@ const mount = (
                 ...handlers,
             }),
     });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.mount(el);

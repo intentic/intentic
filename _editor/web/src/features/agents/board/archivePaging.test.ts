@@ -23,6 +23,7 @@ import { resetAgents, useAgents } from "../fleet/useAgents";
 import { resetArchive, setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted board needs: the same set boardSelection.test.ts installs, and for the
 // same reasons: matchMedia keeps the device desktop, the unreported ResizeObserver leaves the board on three
@@ -41,7 +42,7 @@ const mountBoard = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     app = createApp({ render: () => h(AgentsView) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

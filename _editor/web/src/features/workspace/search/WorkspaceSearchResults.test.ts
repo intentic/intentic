@@ -8,7 +8,8 @@
 // test: it is a property of how many rows the component decides to build.
 import type { WorkspaceSearchGroup } from "@intentic/api-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const tokenized = vi.hoisted(() => {
     const lines: string[] = [];
@@ -74,7 +75,7 @@ const mount = async (props: Partial<Record<string, unknown>> & { groups: readonl
                 ...props,
             }),
     });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(el);
     await nextTick();
     await nextTick();

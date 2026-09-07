@@ -13,6 +13,7 @@ import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { writeStreamCounted } from "../workspace/files/workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace/files/workspace-files.js";
 import { ArrivalFormatError } from "../arrival-error.js";
+import { drain, extractAll } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 
@@ -153,12 +154,6 @@ const walkBundle = async (
     let manifest: BundleManifest | undefined;
     let repos: ReadonlySet<string> = new Set();
 
-    const drain = (stream: Readable): Promise<void> =>
-        new Promise((resolve, reject) => {
-            stream.on("end", resolve);
-            stream.on("error", reject);
-            stream.resume();
-        });
 
     const readEntry = (stream: Readable): Promise<Buffer> =>
         new Promise((resolve, reject) => {
@@ -196,40 +191,18 @@ const walkBundle = async (
         await visit(placed, header, stream, refuse);
     };
 
-    await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const fail = (error: unknown): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            source.destroy();
-            ex.destroy();
-            reject(error instanceof Error ? error : new Error(String(error)));
-        };
-        /* A failure of the DECODERS is the caller's fault, not the daemon's: gunzip answers Z_DATA_ERROR for
-         * anything that is not gzip, and tar-stream throws on a truncated or malformed member. Both mean "that
-         * upload is not a bundle", which is a 400, reported as one rather than escaping as an unhandled throw
-         * the route turns into a 500 and the owner reads as "the sandbox broke".
-         *
-         * Failures of `handleEntry` propagate UNCHANGED, because they are a different class entirely: a full
-         * disk, a permission error, or the size cap (UploadTooLargeError → 413). Converting those to a format
-         * error would blame the bundle for the sandbox's own problem. */
-        const failDecode = (error: unknown): void =>
-            fail(new BundleFormatError(`the archive could not be read: it is not a gzipped intentic environment bundle (${String(error)})`));
-        ex.on("entry", (header, stream, next) => {
-            handleEntry(header, stream).then(() => next(), fail);
-        });
-        ex.on("finish", () => {
-            if (!settled) {
-                settled = true;
-                resolve();
-            }
-        });
-        ex.on("error", failDecode);
-        source.on("error", failDecode);
-        source.pipe(ex);
-    });
+    /* A failure of the DECODERS is the caller's fault, not the daemon's: gunzip answers Z_DATA_ERROR for
+     * anything that is not gzip, and tar-stream throws on a truncated or malformed member. Both mean "that
+     * upload is not a bundle", which is a 400, reported as one rather than escaping as an unhandled throw the
+     * route turns into a 500 and the owner reads as "the sandbox broke". Failures of `handleEntry` propagate
+     * UNCHANGED — a full disk, a permission error or the size cap (UploadTooLargeError → 413) is the sandbox's
+     * own problem, and blaming the bundle for it sends the owner to the wrong file. */
+    await extractAll(
+        source,
+        ex,
+        handleEntry,
+        (error) => new BundleFormatError(`the archive could not be read: it is not a gzipped intentic environment bundle (${String(error)})`),
+    );
 
     if (manifest === undefined) {
         throw new BundleFormatError("the archive carried no bundle manifest");

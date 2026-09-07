@@ -17,6 +17,7 @@ import type { SubagentSession } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
+import { IconStub } from "@intentic/ui/testing";
 
 const child = (over: Partial<SubagentSession>): SubagentSession => ({
     id: `call-1`,
@@ -83,15 +84,7 @@ const mount = async (query: Record<string, string>): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(Subagents) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.mount(el);

@@ -26,6 +26,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { chatFullDock } from "../../../shell/window/dockSlots";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The import-time globals a mounted chat component needs (see chatTabsLanes.test.ts, which mounts this same
 // list): useDevice reads matchMedia at module scope, environment.ts reads window.env, and jsdom implements
@@ -52,7 +53,7 @@ const mountList = async (): Promise<HTMLElement> => {
                 onSelect: (id: string) => useChat().setActive(id),
             }),
     });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

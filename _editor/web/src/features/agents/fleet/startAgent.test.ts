@@ -13,6 +13,7 @@ import { useChat } from "../../chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import AgentsView from "../board/AgentsView.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals the other mounted-component tests stand up (see ChatToolCard.test.ts): ui's
 // useDevice reads window.matchMedia at module scope, environment.ts reads window.env. matches:false keeps the
@@ -31,7 +32,7 @@ const mount = (component: unknown): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
     const app = createApp({ render: () => h(component as never) });
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });

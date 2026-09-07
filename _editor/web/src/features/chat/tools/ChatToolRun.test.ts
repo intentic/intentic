@@ -4,8 +4,9 @@
 // mark, and the same rows the shown mode draws once that mark is opened. Both halves are render decisions:
 // neither throws when it goes wrong, it just draws the wrong thing.
 import { afterEach, describe, expect, it } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
+import { IconStub } from "@intentic/ui/testing";
 
 // Same runtime globals ChatToolCard's suite stands up, and for the same reason: the import chain reads
 // window.matchMedia and window.env at module load, and jsdom provides neither.
@@ -17,15 +18,7 @@ const mount = (tools: readonly TranscriptTool[], live = false): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolRun, { tools, live }) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name, class: this.spin ? `animate-spin` : undefined });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;
@@ -99,9 +92,9 @@ describe(`ChatToolRun`, () => {
 
     it(`spins while the turn is live, and only while it is live`, () => {
         const running = [read(`a.ts`), tool({ category: `execute`, name: `Bash`, status: `in_progress` })];
-        expect(mount(running, true).querySelector(`.animate-spin`)).not.toBeNull();
+        expect(mount(running, true).querySelector(`[data-spin]`)).not.toBeNull();
         // The same frozen run, replayed from history: a mark that kept spinning would claim it is still going.
-        expect(mount(running, false).querySelector(`.animate-spin`)).toBeNull();
+        expect(mount(running, false).querySelector(`[data-spin]`)).toBeNull();
     });
 
     it(`draws nothing at all for a turn that made no calls`, () => {

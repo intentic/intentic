@@ -6,6 +6,7 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const { default: AgentConflictReport } = await import("./AgentConflictReport.vue");
 
@@ -37,7 +38,7 @@ const mount = async (props: ReportProps): Promise<HTMLElement> => {
             }),
     });
     // `Icon` is registered app-wide by the real app; here it is a stand-in, since no assertion is about a glyph.
-    app.component(`Icon`, { render: () => null });
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     await nextTick();

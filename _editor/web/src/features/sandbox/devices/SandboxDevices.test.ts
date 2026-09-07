@@ -10,6 +10,7 @@ import PrimeVue from "primevue/config";
 import { DESTRUCTIVE_VERB, groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice). jsdom plus these two is the whole of it: see daemonRestart.test.ts, which
@@ -139,7 +140,7 @@ const mount = (rows: Device[]): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxDevices) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     // The confirmations (unpair, revoke, the container verbs) are PrimeVue Dialogs underneath, and they read the
     // plugin's config while rendering.

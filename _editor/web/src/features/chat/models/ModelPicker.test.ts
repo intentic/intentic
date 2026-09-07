@@ -15,7 +15,8 @@
  */
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The catalogs are daemon-owned; the picker refreshes them on open. Mocked to no-ops so the mount is about what
 // the panel RENDERS from the module state each test seeds, not about a fetch.
@@ -41,13 +42,7 @@ const mount = (): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ModelPicker, { provider: `claude`, model: `claude-opus-4-6` }) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: { type: String, default: `` }, spin: Boolean },
-            setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;

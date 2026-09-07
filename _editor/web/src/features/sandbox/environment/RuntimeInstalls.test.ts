@@ -11,7 +11,8 @@
 // reachable only as a side effect of rejecting an entire proposal.
 import type { EnvironmentRecurring } from "@intentic/api-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The brand CDN is stubbed to refuse, exactly as an offline sandbox answers: every mark paints its glyph tier
 // and nothing here waits on a round trip.
@@ -57,7 +58,7 @@ const mount = (entries: EnvironmentRecurring[], canOperate = true): HTMLElement 
                 onDecide: (tool: string, decision: string) => decisions.push([tool, decision]),
             }),
     });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

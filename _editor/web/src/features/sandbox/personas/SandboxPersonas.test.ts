@@ -9,7 +9,8 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { Persona } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 vi.hoisted(() => {
     // The folder picker's panel is an <AnchoredOverlay>, which watches its own box to stay put. jsdom ships no
@@ -104,13 +105,7 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(SandboxPersonas) });
     // The stand-in carries the name through as an attribute, so a test can assert WHICH glyph a row wears rather
     // than only that it wears one: the permission rows are read by their icons and the mapping is the point.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

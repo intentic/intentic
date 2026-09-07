@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, useDevice, ui } from "@intentic/ui";
+import { Button, Icon, useDevice, ui, usePointerResize } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
@@ -52,8 +52,6 @@ const { mobile } = useDevice();
 // The panel's own element (the left-edge resize handle measures against it).
 const root = ref<HTMLElement>();
 
-// True while the user is dragging the left-edge handle to resize the panel.
-const resizing = ref(false);
 
 /* --- The panes ---------------------------------------------------------------------------------
  * How narrow a chat may be squeezed (useLayout's MIN_PANE_PX): imported rather than restated, because the
@@ -332,27 +330,12 @@ watch(
 // --- Resize ----------------------------------------------------------------------------------
 // Left-edge resize: pointer capture routes move/up to the handle even past its bounds. The chat is the
 // rightmost column flush to the viewport's right edge, so its width is the distance from the pointer to it.
-const startResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    resizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
-const onResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    layout.setChatWidth(toAppPx(globalThis.innerWidth - event.clientX));
-};
-const endResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    resizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
+const {
+    resizing,
+    start: startResize,
+    move: onResize,
+    end: endResize,
+} = usePointerResize((event) => layout.setChatWidth(toAppPx(globalThis.innerWidth - event.clientX)));
 </script>
 
 <template>

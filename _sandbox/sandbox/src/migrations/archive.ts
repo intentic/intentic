@@ -3,6 +3,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
+import { drain, extractAll } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
 
 /* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD, a gzipped tar of `~/.hermes` (or wherever the source tool
@@ -44,12 +45,6 @@ const normalize = (name: string): string | undefined => {
     return parts.join("/");
 };
 
-const drain = (source: Readable): Promise<void> =>
-    new Promise((resolve, reject) => {
-        source.on("end", resolve);
-        source.on("error", reject);
-        source.resume();
-    });
 
 const readEntry = (source: Readable): Promise<Buffer> =>
     new Promise((resolve, reject) => {
@@ -94,32 +89,12 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
     };
 
     const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>).pipe(createGunzip());
-    await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const fail = (error: unknown): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            source.destroy();
-            ex.destroy();
-            reject(error instanceof Error ? error : new Error(String(error)));
-        };
-        const failDecode = (error: unknown): void =>
-            fail(new MigrationFormatError(`the upload could not be read: it is not a gzipped tar archive (${String(error)})`));
-        ex.on("entry", (header, stream, next) => {
-            handleEntry(header, stream).then(() => next(), fail);
-        });
-        ex.on("finish", () => {
-            if (!settled) {
-                settled = true;
-                resolve();
-            }
-        });
-        ex.on("error", failDecode);
-        source.on("error", failDecode);
-        source.pipe(ex);
-    });
+    await extractAll(
+        source,
+        ex,
+        handleEntry,
+        (error) => new MigrationFormatError(`the upload could not be read: it is not a gzipped tar archive (${String(error)})`),
+    );
 
     return { files, skipped: [...skipped].toSorted((left, right) => left.localeCompare(right)) };
 };

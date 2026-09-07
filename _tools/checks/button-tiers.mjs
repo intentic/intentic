@@ -54,11 +54,7 @@
  * reason — the same shape as tailwind-bypass.mjs, and for the same reason. Not a per-file waiver, and not a
  * pragma comment, because these sit inside an opening tag where no comment is legal. An entry that no longer
  * matches anything is reported as stale, so the list cannot outlive the code it excuses. */
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { repoRoot } from "../constants/src/node.mjs";
-
-const root = repoRoot(import.meta.url);
+import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID, waiverList } from "./lib/templates.mjs";
 
 /* ── WHAT COUNTS AS WHAT ──────────────────────────────────────────────────────────────────────────────────
  * A TEXT SIZE, not `text-left` and not `text-muted`: the scale's own steps. This is the discriminator that
@@ -94,9 +90,6 @@ const DENSE = new Set([`Row`, `RowGroup`, `DisclosureRow`]);
  * slots is what tells the two apart, and without it this rule reports nine of them and is simply wrong. */
 const ROW_CLUSTER = /(?:#|v-slot:)(?:control|actions|meta|lead)\b/u;
 
-/** Elements with no closing tag, so a tag walk must not push them onto the stack. */
-const VOID = new Set([`br`, `hr`, `img`, `input`, `source`]);
-
 /* THE WAIVERS. Keyed by path, then by the exact class string or prop as it appears, with the reason it is not
  * the finding it looks like. Two, and both are geometry that belongs to the SHAPE of a control rather than to
  * its tier — which is the only kind of exception this rule has room for. */
@@ -122,48 +115,12 @@ const ALLOWED = new Map([
     ],
 ]);
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_editor`, `_extensions`], {
-    cwd: root,
-    encoding: `utf8`,
-    maxBuffer: 64 * 1024 * 1024,
-})
-    .split(`\0`)
-    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
-    .filter((path) => existsSync(`${root}/${path}`) && path.endsWith(`.vue`));
-
-/* The template and only the template, BLANKED rather than stripped so a line number computed off the result is
- * the line number in the file. The <script> block goes because this repo's design notes are long comments full
- * of example markup; the <style> block and the template's own <!-- --> notes go for the same reason. */
-const blanked = (m) => m.replace(/[^\n]/gu, ` `);
-const blank = (source) =>
-    source
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, blanked)
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gu, blanked)
-        .replace(/<!--[\s\S]*?-->/gu, blanked);
-
-/* A tag walk, not a parser — attribute values are consumed as units so a `>` inside `:class="{…}"` or a
- * template literal cannot end a tag early. Same expression as row-tiers.mjs, and for the same reason. */
-const TAG = /<(\/?)([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|`[^`]*`|[^>"'`])*?)(\/?)>/gu;
-
+const tracked = templatesUnder(`_editor`, `_extensions`);
 const findings = [];
-const used = new Set();
-const at = (path, source, index) => `${path}:${source.slice(0, index).split(`\n`).length}`;
-/** Both `class="…"` and `:class="…"`, joined: geometry hidden in a bound class is the same geometry. */
-const classesOf = (attrs) => [...attrs.matchAll(/:?class="([^"]*)"/gu)].map((m) => m[1]).join(` `);
-
-/** A waiver hit is recorded so stale entries can be reported; a miss returns false and the finding stands. */
-const waived = (path, key) => {
-    const reason = ALLOWED.get(path)?.get(key);
-    if (reason === undefined) {
-        return false;
-    }
-    used.add(JSON.stringify([path, key]));
-    return true;
-};
+const { waived, stale } = waiverList(ALLOWED, `button-tiers.mjs`);
 
 for (const path of tracked) {
-    const source = readFileSync(`${root}/${path}`, `utf8`);
-    const scan = blank(source);
+    const scan = blank(templateSource(path));
     const stack = [{ name: `#file`, attrs: ``, buttons: [] }];
     const inDense = () => stack.some((frame) => DENSE.has(frame.name)) && stack.some((frame) => frame.cluster);
 
@@ -199,10 +156,7 @@ for (const path of tracked) {
         stack.length = open;
     };
 
-    let match;
-    TAG.lastIndex = 0;
-    while ((match = TAG.exec(scan)) !== null) {
-        const [, closing, name, attrs, selfClosing] = match;
+    for (const { closing, name, attrs, selfClosing, index } of tags(scan)) {
         if (closing !== ``) {
             const open = stack.findLastIndex((frame) => frame.name === name);
             if (open > 0) {
@@ -210,7 +164,7 @@ for (const path of tracked) {
             }
             continue;
         }
-        const where = at(path, scan, match.index);
+        const where = at(path, scan, index);
         const classes = classesOf(attrs);
         const pressable = name === `button` || name === `Button`;
 
@@ -329,22 +283,10 @@ for (const path of tracked) {
     }
 }
 
-/* A waiver whose code is gone stops being an exception and becomes a lie about the codebase. Reported as a
- * finding rather than a warning, because the only way a list like this stays honest is if it fails. */
-for (const [path, entries] of ALLOWED) {
-    for (const key of entries.keys()) {
-        if (!used.has(JSON.stringify([path, key]))) {
-            findings.push({ at: path, why: `stale ALLOWED entry in button-tiers.mjs: nothing in this file matches \`${key}\` any more, so drop it` });
-        }
-    }
-}
+findings.push(...stale());
 
-if (findings.length > 0) {
-    for (const { at: where, why } of findings.toSorted((a, b) => a.at.localeCompare(b.at))) {
-        console.error(`${where}  ${why}`);
-    }
-    console.error(`\n${findings.length} problem(s) with button tiers. The app has one action button: <Button>, in four tiers and two sizes.`);
-    process.exit(1);
-}
-
-console.log(`${tracked.length} templates: every button is <Button>, every tier is a rank, and "not right now" has one answer`);
+finishFindings(
+    findings,
+    `with button tiers. The app has one action button: <Button>, in four tiers and two sizes.`,
+    `${tracked.length} templates: every button is <Button>, every tier is a rank, and "not right now" has one answer`,
+);

@@ -9,7 +9,8 @@
 // those three apart, which is why they are three tests.
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // What this component's import chain reads at module eval: the app's environment (the API client) and a media
 // query (the UI barrel's useDevice), exactly as DesktopSyncCard.test.ts cuts the same edge.
@@ -44,7 +45,7 @@ const mount = (): void => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxAccess) });
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
     app.mount(el);

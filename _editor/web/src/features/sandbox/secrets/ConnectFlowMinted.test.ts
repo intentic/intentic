@@ -15,6 +15,7 @@
 // panel does not recognise off the clipboard, which is the step people abandon on.
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 interface Flow {
     provider: string;
@@ -76,7 +77,7 @@ const mount = async (flow: Flow): Promise<HTMLElement> => {
     document.body.append(host);
     app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind: `native`, provider: flow.provider }) }));
     // `Icon` is registered globally by the app shell; the panel uses it and nothing here is about it.
-    app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.mount(host);
     return host;
 };

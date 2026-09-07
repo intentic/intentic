@@ -5,7 +5,8 @@
 // a separate form with a Save row.
 import { vAction } from "@intentic/ui";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 const user = ref<{ name: string; image: string | null } | undefined>({ name: `Artur Kurowski`, image: null });
 const updateProfile = vi.fn<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
@@ -29,15 +30,7 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SettingsProfile) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     // The real directive, not a stub: v-action REPLACES @click, so a stub leaves every control inert.
     app.directive(`action`, vAction);

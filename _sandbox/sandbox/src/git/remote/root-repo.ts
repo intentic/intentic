@@ -1,5 +1,6 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { pathExists } from "../../path-exists.js";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitCommitAll, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";
@@ -14,15 +15,6 @@ import { AGENT_GIT_AUTHOR } from "../git.js";
 // /history (agent-tamper-proof, the nested repos' --separate-git-dir pattern); the in-worktree /work/.git is
 // a pointer file this ensure (and history's healGitPointer) rewrites if the agent deletes it. Idempotent and
 // boot-cheap: init happens once, the pointer + exclude list re-converge on every boot.
-
-const exists = async (path: string): Promise<boolean> => {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
-};
 
 // Protected git-dir metadata, rather than a commit-message heuristic: only the daemon writes these keys and
 // the container profile keeps the git dir outside /work. `fresh` is the narrow unborn window in which the boot
@@ -191,10 +183,10 @@ export const ensureRootRepo = async (
     definitionSeedEligible = true,
 ): Promise<boolean> => {
     const gitDir = repoGitDir(historyRoot, "root");
-    const fresh = !(await exists(gitDir));
+    const fresh = !(await pathExists(gitDir));
     if (fresh) {
         await gitInit(workspace.root, gitDir, git);
-    } else if (!(await exists(join(workspace.root, ".git")))) {
+    } else if (!(await pathExists(join(workspace.root, ".git")))) {
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
     // The same list as the shadow history's root scope, in $GIT_DIR/info/exclude, outside /work, so the
@@ -251,7 +243,7 @@ export const ensureLocalRootRepo = async (
     git: GitRunner = defaultGit,
     definitionSeedEligible = true,
 ): Promise<boolean> => {
-    if (await exists(join(workspace.root, ".git"))) {
+    if (await pathExists(join(workspace.root, ".git"))) {
         await ensureLocalStateExcluded(workspace.root, git);
         return false;
     }

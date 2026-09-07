@@ -10,7 +10,8 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import type { RowAction } from "./rowActions";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // The component's import chain pulls in app-wide singletons that read browser globals at import time, and
 // jsdom implements no scrolling at all, which is the reveal's other half, so it is a spy rather than a stub.
@@ -106,15 +107,7 @@ const mount = async (props: {
     document.body.append(el);
     app = createApp({ render: () => h(WorkspaceTree, props) });
     // Registered app-wide by installUi in the real page.
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String, spin: Boolean },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, recordTooltip);
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
@@ -174,7 +167,7 @@ describe(`the explorer after a reload`, () => {
         const el = document.createElement(`div`);
         document.body.append(el);
         app = createApp({ render: () => h(WorkspaceTree, { tree: tree.value, selectedPath: `src/api/routes.ts` }) });
-        app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+        app.component(`Icon`, IconStub);
         app.directive(`tooltip`, recordTooltip);
         app.use(VueQueryPlugin, { queryClient });
         app.mount(el);

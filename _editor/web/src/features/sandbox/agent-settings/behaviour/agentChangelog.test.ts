@@ -11,7 +11,8 @@ import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, computed, createApp, defineComponent, h, ref } from "vue";
+import { type App, computed, createApp, h, ref } from "vue";
+import { IconStub } from "@intentic/ui/testing";
 
 // Same app-wide singletons the sibling test stands in for: read at import time, before any test runs.
 
@@ -44,7 +45,7 @@ const mount = (component: unknown): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(component as never) });
     app.use(PrimeVue);
-    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;

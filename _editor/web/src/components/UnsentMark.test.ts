@@ -6,9 +6,10 @@
 // has to drop out cleanly rather than render as a hole. Mounted with plain Vue, as MatchLine.test does, with the
 // glyph and the tooltip directive stubbed the way the page tests stub them (Subagents.test).
 import { describe, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, h } from "vue";
 
 import UnsentMark from "./UnsentMark.vue";
+import { IconStub } from "@intentic/ui/testing";
 
 let app: App | undefined;
 // Which way the hover opens, off the directive's own binding: the stub is where the modifier is observable at
@@ -20,15 +21,7 @@ const render = (props: { preview?: string; at?: number; now?: number }): HTMLEle
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp({ render: () => h(UnsentMark, props) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: String },
-            render() {
-                return h(`i`, { "data-icon": this.name });
-            },
-        }),
-    );
+    app.component(`Icon`, IconStub);
     opens = {};
     app.directive(`tooltip`, {
         mounted: (_el, binding) => {

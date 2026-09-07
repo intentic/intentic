@@ -18,37 +18,25 @@
      whatever surface hosts it. -->
 <script setup lang="ts">
 import { ref } from "vue";
+import { usePointerResize } from "@intentic/ui";
 import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
 import { toAppPx, uiLength } from "../shell/window/uiScale";
 
 const frame = ref<HTMLElement | null>(null);
-const resizing = ref(false);
 
-const startResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    resizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
 /* The width is the distance from the rail's own left edge to the pointer: measured off the ELEMENT, not off
  * the window. In a floating window the two are the same thing (the rail is flush with that window's left
  * edge), but in the /chat area and on /subagents the shell's icon rail stands to its left, and a width read as
- * the pointer's x would be that column's width too wide on every drag. */
-const onResize = (event: PointerEvent): void => {
-    if (resizing.value) {
-        const left = frame.value?.getBoundingClientRect().left ?? 0;
-        setRailWidth(toAppPx(event.clientX - left));
-    }
-};
-const endResize = (event: PointerEvent): void => {
-    if (!resizing.value) {
-        return;
-    }
-    resizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
+ * the pointer's x would be that column's width too wide on every drag.
+ *
+ * Read per MOVE rather than once at the start: this rail's own left edge is what the shell's layout puts it
+ * at, and the drag can widen a neighbour out from under it. */
+const {
+    resizing,
+    start: startResize,
+    move: onResize,
+    end: endResize,
+} = usePointerResize((event) => setRailWidth(toAppPx(event.clientX - (frame.value?.getBoundingClientRect().left ?? 0))));
 </script>
 
 <template>

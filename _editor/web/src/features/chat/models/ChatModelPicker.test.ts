@@ -19,6 +19,7 @@ import { type AgentHarness, type AgentProvider, capabilitiesOf, limitationsOf } 
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
+import { IconStub } from "@intentic/ui/testing";
 
 // The model list is ModelPicker's own component and its own test (ModelPicker.test.ts): stubbed to its footer
 // slot, so what mounts here is the footer and nothing else.
@@ -76,13 +77,7 @@ const mount = (pair: { provider: AgentProvider; harness: AgentHarness } = ROUTED
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatModelPicker, { conversation: conversation(pair) }) });
-    app.component(
-        `Icon`,
-        defineComponent({
-            props: { name: { type: String, default: `` }, spin: Boolean },
-            setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;
