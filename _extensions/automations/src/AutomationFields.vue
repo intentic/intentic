@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ModelPin } from "@intentic/sandbox-contract";
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import {
     ui,
@@ -84,6 +85,7 @@ const {
     nameError,
     promptError,
     originsError,
+    modelsError,
 } = props.state;
 
 /* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Runs as" picker below. Read here rather than passed in because
@@ -243,62 +245,123 @@ const WORKSPACE_EVENTS = [
     { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
 ] as const;
 
-/* WHAT THE WAKE RUNS ON: provider, account, harness and model, as one chip opening the app's own picker.
+/* WHAT THE WAKE RUNS ON: AN ORDERED LADDER, each rung a whole pick — provider, model, reasoning tier and
+ * harness — through the app's own picker.
  *
- * IT WAS FOUR ROWS OF CHIPS, one per axis, and every one of them was worse than the list the shell already
- * holds. The provider row was the five built-ins hardcoded, so a sandbox with a model endpoint or an installed
- * ACP agent could not point an automation at either, and a provider with no credential connected looked exactly
- * like one that had: on the surface where nobody is watching when it fails. The model row was this extension's
- * own fetch of `/{provider}/models`, eleven chips wrapping onto two lines and one longer with every release. The
- * account row was a second fetch, naming accounts with no idea how much headroom any of them had left, which is
- * the entire question being asked. What replaced all four is `api.models`: searchable across every provider at
- * once, connected first, locked ones marked with what they would cost, each account's plan drawn as a ring and
- * a broken credential marked as broken.
+ * IT WAS ONE CHIP, and before that four rows of chips. The chip was right about WHERE the choice is made (the
+ * shell's picker: searchable across every provider at once, connected first, each account's plan drawn as a
+ * ring) and wrong about how many answers an automation gets. One model meant one point of failure on the
+ * surface least able to survive one: a chat refuses in front of somebody who can retry it, a wake at 3am
+ * against a spent allowance simply does not happen, and nobody finds out until the morning.
  *
- * A BLANK IS A DEFAULT, not a gap: no model means the provider resolves its own at wake time (which is what
- * keeps a year-old automation running after a model is retired), and no account means whichever comes first.
- * The picker has no rows for those: every row in it is a live, concrete thing, so "back to defaults" is the
- * button beside the chip rather than an entry inside it. */
-const runsOn = computed(() =>
-    host().models.describe({
-        provider: form.agent,
-        model: form.model,
-        ...(form.account !== `` ? { account: form.account } : {}),
-        harness: form.harness,
+ * AND A BLANK IS NO LONGER A DEFAULT. It used to be — no model meant the provider resolved its own at wake
+ * time, and behind that sat a sandbox-wide tier — which made the commonest way to configure an automation's
+ * spend "say nothing and inherit whatever the chat was set to". The list is now required (`modelsError`), so
+ * the picker is the one step of making an automation that cannot be skipped.
+ *
+ * ORDER IS THE MEANING: the daemon walks it at fire time and takes the first rung this sandbox can actually
+ * start, so row 1 is the one you want and the rest are what catches it. */
+const rungs = computed(() =>
+    form.models.map((pin) => {
+        const described = host().models.describe({
+            provider: pin.provider,
+            model: pin.model,
+            // The account is shown against a rung only while it is unambiguous, see `accountPinnable`.
+            ...(accountPinnable.value && form.account !== `` ? { account: form.account } : {}),
+            ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
+            ...(pin.effort !== undefined ? { effort: pin.effort } : {}),
+        });
+        return [described.label, described.accountLabel].filter((part) => part !== undefined && part !== ``).join(` · `);
     }),
 );
-// ONE LINE, the way the workflow step's chip reads: model · account. The account used to sit outside the
-// control as "on <name>", which put a second sentence beside a control that was already saying the thing.
-const runsOnLabel = computed(() => [runsOn.value.label, runsOn.value.accountLabel].filter((part) => part !== undefined && part !== ``).join(` · `));
-const pinned = computed(() => form.model !== `` || form.account !== ``);
 
-// The element the shell hangs its picker off: a popover on desktop, a sheet on mobile; the host decides.
-const chip = ref<HTMLElement>();
-const choose = async (): Promise<void> => {
-    if (chip.value === undefined) {
+/* WHETHER AN ACCOUNT MAY BE PINNED AT ALL, which a ladder can take away. An account id is one provider's store
+ * key — it is only meaningful beside that provider, the same way a model id is — so it can only be pinned while
+ * every rung agrees about which provider that is. Cross providers and the pin would name an account the winning
+ * rung's provider has never heard of, so the field is cleared and the daemon falls back to the connected account
+ * with the most headroom, which is the better answer for unwatched work in any case. The scheduler applies the
+ * identical rule, so what is stored and what is spent cannot disagree. */
+const accountPinnable = computed(() => new Set(form.models.map((pin) => pin.provider)).size <= 1);
+
+// The picker hangs off the row that opened it: a popover on desktop, a sheet on mobile, the host decides. A
+// function ref rather than one shared element, because each rung is edited over its own row.
+const rungEls = new Map<number, HTMLElement>();
+const bindRung = (index: number, el: unknown): void => {
+    if (el instanceof HTMLElement) {
+        rungEls.set(index, el);
+    } else {
+        rungEls.delete(index);
+    }
+};
+
+/* WHERE THE PICKER OPENS FROM: the rung being edited, or an empty selection for the slot past the end.
+ * `chooseEffort` is on because a rung STORES the tier now (ModelPin carries it) — the flag exists to stop a form
+ * showing a control whose answer it would drop, and this form no longer drops it. */
+const pickerOptions = (anchor: HTMLElement, current: ModelPin | undefined) => {
+    // Blank provider and model are what "nothing chosen yet" looks like to the picker, which is the state the
+    // add button opens in; an existing rung opens on itself.
+    const { provider = ``, model = ``, harness, effort } = current ?? {};
+    return {
+        anchor,
+        provider,
+        model,
+        ...(accountPinnable.value && form.account !== `` ? { account: form.account } : {}),
+        ...(harness !== undefined ? { harness } : {}),
+        ...(effort !== undefined ? { effort } : {}),
+        chooseEffort: true,
+    };
+};
+
+// A pick as a stored rung. Absent stays absent, never an invented default: a tier the owner did not choose is
+// one the model answers for itself, which is the contract every other reader of a pin keeps.
+const pinOf = (picked: { provider: string; model: string; effort?: string | undefined; harness?: string | undefined }): ModelPin => ({
+    provider: picked.provider,
+    model: picked.model,
+    ...(picked.effort !== undefined && picked.effort !== `` ? { effort: picked.effort } : {}),
+    ...(picked.harness !== undefined && picked.harness !== `` ? { harness: picked.harness as ModelPin["harness"] } : {}),
+});
+
+// Open the picker over one rung and write back whatever it settles on.
+const editRung = async (index: number): Promise<void> => {
+    const anchor = rungEls.get(index);
+    if (anchor === undefined) {
         return;
     }
-    const next = await host().models.pick({
-        anchor: chip.value,
-        provider: form.agent,
-        model: form.model,
-        ...(form.account !== `` ? { account: form.account } : {}),
-        harness: form.harness,
-    });
+    const next = await host().models.pick(pickerOptions(anchor, form.models[index]));
     if (next === undefined) {
         return;
     }
-    form.agent = next.provider as typeof form.agent;
-    form.model = next.model;
-    form.account = next.account ?? ``;
-    form.harness = (next.harness as typeof form.harness) ?? `native`;
+    const pin = pinOf(next);
+    form.models = index < form.models.length ? form.models.map((old, at) => (at === index ? pin : old)) : [...form.models, pin];
+    // The picker also settles the account, and it is the automation's rather than the rung's — but only while
+    // one provider owns the whole ladder (see `accountPinnable`), so it is dropped the moment that stops.
+    form.account = accountPinnable.value ? (next.account ?? ``) : ``;
 };
 
-// Back to what the daemon would have picked anyway. The provider stays: it has no "default" state to return to
-// (an automation saved without one MEANS claude), so clearing it would be a silent switch rather than a reset.
-const useDefaults = (): void => {
-    form.model = ``;
-    form.account = ``;
+// A new rung is added by opening the picker on the slot past the end: there is no such thing as a half-chosen
+// entry, so nothing is appended until the picker actually settles on a model.
+const addRung = (): Promise<void> => editRung(form.models.length);
+
+const removeRung = (index: number): void => {
+    form.models = form.models.filter((_, at) => at !== index);
+    // Taking the last one out is the moment the requirement becomes relevant, so the message appears then
+    // rather than only when a save is refused.
+    markTouched(`models`);
+    if (!accountPinnable.value) {
+        form.account = ``;
+    }
+};
+
+// Order is what the daemon walks, so it is edited directly rather than by drag: one step per press, which is
+// also the only interaction that works the same on a phone.
+const moveRung = (index: number, by: number): void => {
+    const to = index + by;
+    const moving = form.models[index];
+    const displaced = form.models[to];
+    if (moving === undefined || displaced === undefined) {
+        return;
+    }
+    form.models = form.models.map((pin, at) => (at === index ? displaced : at === to ? moving : pin));
 };
 
 const toggleDay = (day: number): void => {
@@ -725,33 +788,61 @@ const setProvider = (provider: string): void => {
                      which subscription pays for the wake, "Runs as" is who it is when it reaches outside, and a
                      stacked pair invited exactly the mix-up the persona layer exists to prevent. -->
                 <div class="grid gap-3 @xl:grid-cols-2">
+                    <!-- THE LADDER, IN THE ORDER THE DAEMON WALKS IT. Row 1 is the one you want; the rest are
+                         what catches it when that account has nothing left, which on a surface nobody is
+                         watching is the difference between a quiet morning and a wake that never happened. -->
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">Runs on</span>
-                        <div class="flex min-w-0 items-center gap-1.5">
-                            <button
-                                ref="chip"
-                                type="button"
-                                class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-left text-sm text-content transition-colors hover:border-line-strong"
-                                :aria-label="`Provider, account and model for this automation: ${runsOnLabel}`"
-                                v-action="choose"
-                            >
-                                <Icon name="sparkles" class="shrink-0 text-subtle" />
-                                <span class="min-w-0 flex-1 truncate">{{ runsOnLabel }}</span>
-                                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-                            </button>
-                            <!-- Only once there is a pin to clear: a blank model and a blank account ARE the
-                                 default, and a reset button beside a default is a control with nothing to do. -->
-                            <button
-                                v-if="pinned"
-                                type="button"
-                                v-tooltip.top="`Back to the default model and account`"
-                                :class="ui.iconButton()"
-                                aria-label="Back to the default model and account"
-                                @click="useDefaults"
-                            >
-                                <Icon name="times" />
+                        <div class="flex min-w-0 flex-col gap-1.5">
+                            <div v-for="(label, index) in rungs" :key="index" class="flex min-w-0 items-center gap-1.5">
+                                <!-- The position, said as a number: it is the whole meaning of the row's place
+                                     in the list, and a list whose order matters has to show that it does. -->
+                                <span class="w-3 shrink-0 text-right text-2xs text-subtle tabular-nums">{{ index + 1 }}</span>
+                                <button
+                                    :ref="(el) => bindRung(index, el)"
+                                    type="button"
+                                    class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-left text-sm text-content transition-colors hover:border-line-strong"
+                                    :aria-label="`Model ${index + 1} for this automation: ${label}. Change it`"
+                                    @click="editRung(index)"
+                                >
+                                    <Icon name="sparkles" class="shrink-0 text-subtle" />
+                                    <span class="min-w-0 flex-1 truncate">{{ label }}</span>
+                                    <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+                                </button>
+                                <!-- The first row has nothing above it, so its button is INVISIBLE rather than
+                                     absent: dropping the element shortens that row's chip by the button's
+                                     width, and a vertical list whose first row ends further right than the
+                                     rest reads as a mistake rather than as "this one cannot move up". -->
+                                <button
+                                    type="button"
+                                    v-tooltip.top="`Try this one earlier`"
+                                    :class="ui.iconButton(index === 0 ? `invisible` : ``)"
+                                    :disabled="index === 0"
+                                    :aria-hidden="index === 0"
+                                    :tabindex="index === 0 ? -1 : undefined"
+                                    :aria-label="`Move model ${index + 1} up`"
+                                    @click="moveRung(index, -1)"
+                                >
+                                    <Icon name="chevron-up" />
+                                </button>
+                                <button
+                                    type="button"
+                                    v-tooltip.top="`Remove this model`"
+                                    :class="ui.iconButton()"
+                                    :aria-label="`Remove model ${index + 1}`"
+                                    @click="removeRung(index)"
+                                >
+                                    <Icon name="times" />
+                                </button>
+                            </div>
+                            <button type="button" :class="ui.addTile(`self-start px-3 py-2`)" @click="addRung">
+                                <Icon name="plus" />
+                                {{ form.models.length === 0 ? `Pick a model` : `Add a fallback` }}
                             </button>
                         </div>
+                        <!-- The one field whose error is about spending rather than syntax, so it is said where
+                             it is answered rather than only on the disabled save button. -->
+                        <p v-if="modelsError !== undefined && touched.has(`models`)" class="text-2xs text-danger">{{ modelsError }}</p>
                     </div>
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">Persona</span>

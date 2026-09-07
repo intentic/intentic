@@ -1,6 +1,7 @@
 import type { AgentTurn, Rule } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { afterEach, expect, test, vi } from "vitest";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { SETTLES } from "@intentic/testing/vitest";
 import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "./agent-viewing.js";
@@ -25,6 +26,10 @@ const proved = (path: string): FrameLedger => {
     ledger.note({ kind: "tool_call_update", id: "2", status: "completed", content: [{ type: "text", text: "ok\n--- [exit 0, 1s]" }] });
     return ledger;
 };
+
+// Built from the constant rather than spelled, which is the rule for anything new here: the literals above are
+// older than it and held by the path-literals baseline, and adding to that baseline is what it exists to stop.
+const PARSER = `${WORKSPACE_ROOT}/src/parser.ts`;
 
 const logger = { info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
 
@@ -59,6 +64,54 @@ test("a turn that changed code and proved nothing is sent a follow-up, as its ow
      * fresh session, is asking a different agent about somebody else's edits. */
     expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7" });
     expect(started[0]?.prompt).toBe(message);
+});
+
+/* IT FOLLOWS THE TURN IT NUDGES IN EVERY FIELD, not in most of them. This copy used to carry provider,
+ * harness, account, model and effort, and silently drop `thinking`, `fast` and `actsAs` — so a nudge on a
+ * reasoning-off turn came back reasoning (a different behaviour at a different price, on work the agent was
+ * told to continue), and a nudge on a persona's turn came back as NOBODY, losing that card's toolbox and
+ * signed-in accounts in a follow-up whose whole job is to go and run something.
+ *
+ * `runRole` rides along as the nudged turn's own, and there is no `verify-nudge` role under it: the role could
+ * only ever have bound for a turn that was unattended AND named no model AND no provider, which is the exact
+ * opposite of the turn this is continuing. */
+test("the follow-up carries the whole identity of the turn it nudges, and invents no role of its own", async () => {
+    const { started } = runtimeWith();
+    const persona: AgentTurn = {
+        ...seed,
+        thinking: false,
+        fast: true,
+        actsAs: "reviewer",
+        unattended: true,
+        harness: "claude-code",
+        account: "work",
+        runRole: "maintenance-chore",
+    };
+    await nudgeUnverifiedWork({ conversationId: "c1", seed: persona, rules: [rule], ledger: edited(PARSER) });
+
+    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]).toMatchObject({
+        agent: "codex",
+        model: "gpt-5.1-codex",
+        effort: "high",
+        harness: "claude-code",
+        account: "work",
+        thinking: false,
+        fast: true,
+        actsAs: "reviewer",
+        unattended: true,
+        runRole: "maintenance-chore",
+    });
+});
+
+// A turn that named no job leaves the follow-up naming none either: absent stays absent, rather than becoming
+// a role that would send this turn somewhere its predecessor never went.
+test("a nudged turn with no job gives the follow-up no job", async () => {
+    const { started } = runtimeWith();
+    await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited(PARSER) });
+
+    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]?.runRole).toBeUndefined();
 });
 
 test("a turn whose check passed after its last edit is left alone", async () => {

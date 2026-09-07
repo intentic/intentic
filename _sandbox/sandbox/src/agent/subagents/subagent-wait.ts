@@ -64,23 +64,43 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 ? []
                 : [
                       sdk().tool(
+                          "providers",
+                          "What a child agent could be started on right now: every provider this sandbox has connected, its models, " +
+                              "and how much allowance each still has. Call it before spawn when you do not already know which model " +
+                              "you want — spawn requires a provider and a model, and models whose every connected account is at its " +
+                              "cap are left out of this list, so what it shows is what can actually run.",
+                          {},
+                          async () => {
+                              const children = deps.children;
+                              if (children === undefined) {
+                                  return answer({ ok: false, message: "This turn cannot spawn agents." });
+                              }
+                              return answer({ ok: true, providers: await children.providers() });
+                          },
+                      ),
+                      sdk().tool(
                           "spawn",
                           "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. Cursor's " +
                               "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
                               "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
                               "any agent's does. Returns the child's id immediately: supervise it with the wait tool (target: that id), " +
                               "which returns when it is blocked on input or finished, with its report. Give it a self-contained prompt " +
-                              "with every path, requirement, and constraint — it sees none of this conversation. A provider nobody has " +
-                              "connected fails with the words to say so.",
+                              "with every path, requirement, and constraint — it sees none of this conversation. You must name the " +
+                              "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
+                              "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
+                              "words to say so.",
                           {
                               prompt: z.string().min(1).describe("The child's whole task, self-contained."),
                               description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
-                              provider: AgentProviderSchema.optional().describe("Which provider serves it. Leave it out for Claude."),
-                              harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
+                              provider: AgentProviderSchema.describe("Which provider serves it. Required: see the providers tool for what is connected."),
                               model: z
                                   .string()
-                                  .optional()
-                                  .describe("Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default."),
+                                  .min(1)
+                                  .describe(
+                                      "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: " +
+                                          "a model name only means anything to the provider that vends it.",
+                                  ),
+                              harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
                               effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
                               on: z
                                   .string()
@@ -97,10 +117,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               }
                               const result = await children.spawn({
                                   prompt: args.prompt,
+                                  provider: args.provider,
+                                  model: args.model,
                                   ...(args.description !== undefined ? { description: args.description } : {}),
-                                  ...(args.provider !== undefined ? { provider: args.provider } : {}),
                                   ...(args.harness !== undefined ? { harness: args.harness } : {}),
-                                  ...(args.model !== undefined ? { model: args.model } : {}),
                                   ...(args.effort !== undefined ? { effort: args.effort } : {}),
                                   ...(args.on !== undefined ? { on: args.on } : {}),
                               });

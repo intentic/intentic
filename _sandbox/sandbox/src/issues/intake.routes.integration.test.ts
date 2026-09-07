@@ -64,6 +64,7 @@ const intake = (id: string, extra: Partial<Automation> = {}): Automation => ({
     id,
     trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN] },
     prompt: `fix:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });
@@ -257,7 +258,7 @@ test("a disabled intake and an unknown one answer differently, because they are 
     expect((await post(app, "bugs", {})).status).toBe(409);
     expect((await post(app, "nope", {})).status).toBe(404);
     // A Front Desk id is not an intake id: the two public surfaces do not answer for each other.
-    await services.automations.upsert({ id: "chat", trigger: { kind: "listener", provider: "webchat" }, prompt: "hi", enabled: true });
+    await services.automations.upsert({ id: "chat", trigger: { kind: "listener", provider: "webchat" }, prompt: "hi", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
     expect((await post(app, "chat", {})).status).toBe(404);
 });
 

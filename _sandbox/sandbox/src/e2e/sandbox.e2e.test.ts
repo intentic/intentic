@@ -209,7 +209,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 120_000);
 
     it("automation approval hold: a webhook fire on a requireApproval automation lands in the queue, reject drops it", async () => {
-        await client.automations.upsert({ id: "e2e-approval", trigger: { kind: "event" }, prompt: "noop", requireApproval: true, enabled: true });
+        await client.automations.upsert({ id: "e2e-approval", trigger: { kind: "event" }, prompt: "noop", requireApproval: true, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
         // The webhook's token is not on the record: the daemon attaches it to the listed summary for the
         // owner (webhookToken), which is what an operator copies off the row.
         const { automations } = await client.automations.list();
@@ -237,7 +237,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 60_000);
 
     it("automation guard: a failing guard records the run as skipped and never wakes the agent", async () => {
-        await client.automations.upsert({ id: "e2e-guard", trigger: { kind: "event" }, guard: "exit 1", prompt: "noop", enabled: true });
+        await client.automations.upsert({ id: "e2e-guard", trigger: { kind: "event" }, guard: "exit 1", prompt: "noop", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
         const { automations } = await client.automations.list();
         const fireToken = automations.find((automation) => automation.id === "e2e-guard")?.webhookToken;
 
@@ -255,6 +255,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             trigger: { kind: "event" },
             guard: "exit 1",
             prompt: "noop",
+            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
             enabled: false,
         });
         expect((await fetch(`${base}/automations/e2e-guard/fire?token=${fireToken}`, { method: "POST" })).status).toBe(409);
@@ -269,6 +270,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             trigger: { kind: "schedule", cron: "0 3 * * *" },
             guard: "exit 1",
             prompt: "noop",
+            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
             enabled: true,
         });
         expect(await client.automations.run({ id: "e2e-run-now" })).toEqual({ ok: true });
@@ -287,6 +289,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             id: "e2e-run-now-listener",
             trigger: { kind: "listener", provider: "discord" },
             prompt: "noop",
+            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
             enabled: true,
         });
         // Refused rather than run: firing this by hand could only wake an agent told to handle events and given

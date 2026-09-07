@@ -56,6 +56,12 @@ const REVIEW: AutomationTemplate = {
     chore: true,
 };
 
+/* EVERY STORED AUTOMATION CARRIES A LADDER, because the schema requires one: an automation spends a real
+ * allowance with nobody watching, so it names the models it may spend rather than inheriting a default. The
+ * fixtures below therefore all have one, and the round-trip cases are asserting that it survives an edit
+ * untouched like any other field the form owns. */
+const LADDER = [{ provider: `claude`, model: `claude-sonnet-4-6` }, { provider: `codex`, model: `gpt-5.3-codex` }] satisfies Automation["models"];
+
 const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
 const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW]);
 const formState = () => useAutomationForm(SOURCES, TEMPLATES);
@@ -129,7 +135,7 @@ describe(`a template's own text`, () => {
 describe(`editing a stored automation`, () => {
     it(`keeps the owner's prompt when its source is changed`, async () => {
         const { form, load } = formState();
-        load({ id: `inbox`, trigger: { kind: `listener`, provider: `discord` }, prompt: `Mine, hand-written.`, enabled: true });
+        load({ id: `inbox`, trigger: { kind: `listener`, provider: `discord` }, prompt: `Mine, hand-written.`, models: LADDER, enabled: true });
         await nextTick();
         form.provider = `ci`;
         await nextTick();
@@ -144,6 +150,7 @@ describe(`editing a stored automation`, () => {
             id: `on-failed-ci`,
             trigger: { kind: `listener`, provider: `ci`, eventType: `pipeline_failed` },
             prompt: DISCORD.starterPrompt ?? ``,
+            models: LADDER,
             enabled: true,
         });
         expect(staleStarter.value?.label).toBe(DISCORD.label);
@@ -159,6 +166,7 @@ describe(`editing preserves fields outside the changed control`, () => {
             id: `dream`,
             trigger: { kind: `schedule`, cron: `0 5 * * *`, afterSessions: 30 },
             prompt: `Dream.`,
+            models: LADDER,
             enabled: true,
         };
         const { form, load, build } = formState();
@@ -177,6 +185,7 @@ describe(`editing preserves fields outside the changed control`, () => {
             id: `deploy-hook`,
             trigger: { kind: `event`, dailyMax: 40 },
             prompt: `Handle the deploy.`,
+            models: LADDER,
             enabled: false,
         };
         const { form, load, build } = formState();
@@ -190,6 +199,12 @@ describe(`editing preserves fields outside the changed control`, () => {
             id: `support`,
             trigger: { kind: `listener`, provider: `webchat`, eventType: `message`, allowedOrigins: [`https://example.com`] },
             prompt: `Answer support questions.`,
+            // One provider throughout, which is what lets the account pin below survive a round trip: an account
+            // id is that provider's store key, so the form drops it the moment the ladder crosses providers.
+            models: [
+                { provider: `claude`, model: `claude-opus-4-6` },
+                { provider: `claude`, model: `claude-sonnet-4-6` },
+            ],
             webchat: {
                 access: `google`,
                 requireName: true,
@@ -241,5 +256,63 @@ describe(`editing preserves fields outside the changed control`, () => {
         form.origins = `https://example.com`;
         form.actsAs = `support-desk`;
         expect(build().actsAs).toBe(`support-desk`);
+    });
+});
+
+/* WHAT THE WAKE SPENDS, WHICH IS THE ONE THING THE FORM WILL NOT ANSWER FOR THE OWNER.
+ *
+ * An automation fires against a real allowance with nobody in the room, on a schedule set once and rarely
+ * re-read. There is no sandbox-wide tier behind it any more and no composer pick to inherit, so a saveable form
+ * with no models would be the product choosing whose money to spend. */
+describe(`the model ladder`, () => {
+    const filled = () => {
+        const state = formState();
+        state.form.id = `nightly`;
+        state.form.prompt = `Sweep the dependencies.`;
+        return state;
+    };
+
+    it(`refuses to save until a model is named`, () => {
+        const { form, modelsError, valid } = filled();
+        expect(modelsError.value).toMatch(/at least one model/i);
+        expect(valid.value).toBe(false);
+        form.models = [...LADDER];
+        expect(modelsError.value).toBeUndefined();
+        expect(valid.value).toBe(true);
+    });
+
+    // A gallery template is written before this sandbox exists, so it cannot know which providers its owner has
+    // connected: naming one would be a guess that either fails at fire time or spends the wrong account.
+    it(`is not filled in by a template`, () => {
+        const { form, loadTemplate } = formState();
+        loadTemplate(REVIEW);
+        expect(form.models).toEqual([]);
+    });
+
+    it(`round-trips in the owner's order, since order is what the daemon walks`, () => {
+        const { form, load, build } = formState();
+        const automation: Automation = {
+            id: `nightly`,
+            trigger: { kind: `schedule`, cron: `0 5 * * *` },
+            prompt: `Sweep.`,
+            models: LADDER,
+            enabled: true,
+        };
+        load(automation);
+        expect(form.models).toEqual(LADDER);
+        expect(build()).toEqual(automation);
+    });
+
+    /* THE LADDER CAN TAKE THE ACCOUNT PIN AWAY, and has to. An account id is one provider's store key, so it is
+     * only meaningful beside that provider — pinning one under a ladder that crosses providers would name an
+     * account the winning rung's provider has never heard of. The scheduler drops it on the same rule, so what
+     * is stored and what is spent cannot disagree. */
+    it(`clears a pinned account once the ladder crosses providers`, () => {
+        const { form, build } = filled();
+        form.models = [{ provider: `claude`, model: `claude-sonnet-4-6` }];
+        form.account = `reliable-account`;
+        expect(build().account).toBe(`reliable-account`);
+        form.models = [...LADDER];
+        expect(build().account).toBeUndefined();
     });
 });

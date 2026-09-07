@@ -204,15 +204,21 @@ const frontDesk = computed(() => {
 /* WHAT THE WAKE RUNS ON AND AS, as labelled facts rather than as one run-on sentence. They were
  * "wakes claude · claude-sonnet-5 on the native harness holds for approval", which is four settings printed
  * as prose in a place a reader is scanning for one of them. */
+/* THE LADDER AS ONE LINE: the model it wants, then what catches it, in the order the daemon walks them.
+ *
+ * The head is named in full and the rest are counted rather than listed, because the row is being SCANNED: what
+ * a reader wants from it is "which model is this on", and a row that spells out four fallbacks answers a
+ * question nobody asked here while burying the one they did. The whole ladder is one click away in the editor. */
 const runsOn = computed<string>(() => {
-    // A blank model is the DEFAULT, not a gap: the provider resolves its own at wake time, which is what keeps
-    // a year-old automation running after a model is retired. So the row names the provider and stops.
-    const provider = props.automation.agent ?? `claude`;
-    return props.automation.model === undefined ? provider : `${provider} · ${props.automation.model}`;
+    const [head, ...rest] = props.automation.models;
+    if (head === undefined) {
+        return `no model`;
+    }
+    const named = `${head.provider} · ${head.model}`;
+    return rest.length === 0 ? named : `${named} +${rest.length}`;
 });
 const settings = computed<readonly { label: string; value: string }[]>(() => [
     { label: `Runs on`, value: runsOn.value },
-    ...(props.automation.harness !== undefined ? [{ label: `Harness`, value: props.automation.harness }] : []),
     ...(props.automation.actsAs !== undefined ? [{ label: `Runs as`, value: props.automation.actsAs }] : []),
     ...(props.automation.requireApproval === true ? [{ label: `Approval`, value: `held for you` }] : []),
     ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0

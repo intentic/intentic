@@ -58,6 +58,7 @@ const automation = (id: string, extra: Partial<Automation> = {}): Automation => 
     id,
     trigger: { kind: "schedule", cron: "* * * * *" },
     prompt: `wake:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });
@@ -230,19 +231,34 @@ test("event automations never tick; fireAutomation hands the payload to the guar
     expect(prompts).toHaveLength(2);
 });
 
-test("an automation's agent/harness/model ride the wake; unset fields leave the turn bare", async () => {
+/* THE LADDER'S RESOLVED RUNG RIDES THE WAKE, WHOLE. Not just which model: how hard it thinks, on which loop,
+ * at whose speed. The three fields this replaced (`agent`, `harness`, a bare `model` string) could not say the
+ * tier at all, so pinning a reasoning model to a nightly review bought its price and its default behaviour.
+ *
+ * `runRole` is asserted ABSENT on purpose. There used to be an `automation-wake` model role behind every
+ * automation in the manifest, and behind that the owner's own composer pick — two defaults under the one job in
+ * this product that spends an allowance with nobody in the room. The ladder is the automation's own and is
+ * required, so there is no silence here left for a role to fill. */
+test("the automation's own ladder resolves onto the wake, tier and all, with no run role behind it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("pinned", { agent: "codex", harness: "claude-code", model: "gpt-5-codex" }));
-    await services.automations.upsert(automation("plain"));
+    await services.automations.upsert(
+        automation("pinned", { models: [{ provider: "codex", model: "gpt-5-codex", harness: "claude-code", effort: "high", thinking: true }] }),
+    );
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
         inputs.push(input);
         yield { kind: "done" };
     };
     await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, capture);
-    await fireAutomation(services, (await services.automations.get("plain")) as AutomationRecord, capture);
-    expect(inputs[0]).toMatchObject({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
-    expect(inputs[1]).toMatchObject({ prompt: "wake:plain" });
+    expect(inputs[0]).toMatchObject({
+        prompt: "wake:pinned",
+        agent: "codex",
+        model: "gpt-5-codex",
+        harness: "claude-code",
+        effort: "high",
+        thinking: true,
+    });
+    expect(inputs[0]?.runRole).toBeUndefined();
     expect(inputs.every((turn) => turn.conversationId !== undefined)).toBe(true);
     /* A WAKE IS UNATTENDED, whatever else rides it: nobody is at a composer for a schedule that fires at 3am.
      * The tool set, the guard's refusals, the model default and whether the turn is worth retrieving workspace
@@ -345,7 +361,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
-    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }), enabled: false });
+    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }), models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false });
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
     // The stale hold is dropped rather than left to fire the day the automation is re-enabled.

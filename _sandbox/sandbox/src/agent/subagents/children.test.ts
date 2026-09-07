@@ -141,7 +141,7 @@ describe("the child's life on the roster", () => {
             { kind: "text_end" },
             { kind: "done" },
         ];
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([], events));
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([], events));
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -174,7 +174,7 @@ describe("the child's life on the roster", () => {
             yield { kind: "resolved", requestId: "q1" };
             yield { kind: "done" };
         };
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, holdAt);
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdAt);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -187,7 +187,7 @@ describe("the child's life on the roster", () => {
 
     it("settles a turn that errored as failed, keeping the error", async () => {
         const events: AgentEvent[] = [{ kind: "error", message: "no Cursor subscription connected" }, { kind: "done" }];
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([], events));
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([], events));
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -202,17 +202,17 @@ describe("the child's life on the roster", () => {
  * beyond every gate (rulebook "none") marks the parent's own turn bit on its way out. */
 describe("the spawn rulebook and the floors", () => {
     it("a deny rule refuses every door's spawn, a per-provider hold names the owner", async () => {
-        const denied = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "deny" } }), parent, { prompt: "go" }, fakeTurn([]));
+        const denied = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "deny" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(denied).toMatchObject({ ok: false, message: expect.stringContaining("refused") });
         const held = await spawnChild(
             fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }),
             parent,
-            { prompt: "go", provider: "cursor" },
+            { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor" },
             fakeTurn([]),
         );
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
         // The blanket rule does not reach a provider the owner singled out as allowed.
-        const other = await spawnChild(fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+        const other = await spawnChild(fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(other.ok).toBe(true);
         if (other.ok) {
             await settled(other.id);
@@ -224,9 +224,9 @@ describe("the spawn rulebook and the floors", () => {
         taint.mark("webchat");
         publishTurnTaint(parent.conversationId, taint);
         try {
-            const held = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([]));
+            const held = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
             expect(held).toMatchObject({ ok: false, message: expect.stringContaining("webchat") });
-            const allowed = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "allow" } }), parent, { prompt: "go" }, fakeTurn([]));
+            const allowed = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "allow" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
             expect(allowed.ok).toBe(true);
             if (allowed.ok) {
                 await settled(allowed.id);
@@ -242,7 +242,7 @@ describe("the spawn rulebook and the floors", () => {
         publishTurnTaint(parent.conversationId, createTurnTaint());
         try {
             expect(conversationTaintSource(parent.conversationId)).toBeUndefined();
-            const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "pi" }, fakeTurn([]));
+            const result = await spawnChild(fakeServices(), parent, { prompt: "go", model: "claude-sonnet-4-6", provider: "pi" }, fakeTurn([]));
             expect(result.ok).toBe(true);
             expect(conversationTaintSource(parent.conversationId)).toBe("agent:pi");
             if (result.ok) {
@@ -293,7 +293,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go" }, askThenFinish);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, askThenFinish);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -322,7 +322,7 @@ describe("the escalation ladder", () => {
             await gate.promise;
             yield { kind: "done" };
         };
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, holdOnPermission);
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdOnPermission);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -337,7 +337,7 @@ describe("the escalation ladder", () => {
     });
 
     it("refuses a child waiting on nothing", async () => {
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([]));
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -367,7 +367,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go" }, askThenFinish);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, askThenFinish);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -434,7 +434,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go" }, holdOpen);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -454,6 +454,7 @@ describe("the shell door's arming", () => {
             onSpawn(spec.prompt);
             return { ok: true, id: "sub-x" };
         },
+        providers: async () => [],
         send: async () => ({ ok: true }),
         answer: async () => ({ ok: true }),
         pendingQuestion: () => undefined,
@@ -463,7 +464,7 @@ describe("the shell door's arming", () => {
         const calls: string[] = [];
         armSupervisor("conv-armed", supervisor((prompt) => calls.push(prompt)));
         const armed = supervisorFor("conv-armed");
-        await armed?.spawn({ prompt: "go" });
+        await armed?.spawn({ prompt: "go", provider: "claude", model: "claude-sonnet-4-6", });
         expect(calls).toEqual(["go"]);
     });
 
@@ -488,27 +489,27 @@ describe("the budgets, enforced in the daemon", () => {
             yield { kind: "done" };
         };
         const services = fakeServices({ subagentsAtOnce: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one" }, holdOpen);
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
         expect(first.ok).toBe(true);
-        const second = await spawnChild(services, parent, { prompt: "two" }, holdOpen);
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("already running") });
         gate.resolve();
         if (first.ok) {
             await settled(first.id);
         }
-        const third = await spawnChild(services, parent, { prompt: "three" }, holdOpen);
+        const third = await spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
         expect(third.ok).toBe(true);
         gate.resolve();
     });
 
     it("refuses past the lifetime budget", async () => {
         const services = fakeServices({ subagentsPerTurn: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one" }, fakeTurn([]));
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(first.ok).toBe(true);
         if (first.ok) {
             await settled(first.id);
         }
-        const second = await spawnChild(services, parent, { prompt: "two" }, fakeTurn([]));
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
@@ -528,9 +529,9 @@ describe("the budgets, enforced in the daemon", () => {
         const services = fakeServices({ subagentsAtOnce: 1 });
 
         const results = await Promise.all([
-            spawnChild(services, parent, { prompt: "one" }, holdOpen),
-            spawnChild(services, parent, { prompt: "two" }, holdOpen),
-            spawnChild(services, parent, { prompt: "three" }, holdOpen),
+            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
+            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
+            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
         ]);
 
         expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -549,8 +550,13 @@ describe("the budgets, enforced in the daemon", () => {
      * forever over children that do not exist. A throwing spec is the cheapest way to reach that path. */
     it("gives the seat back when the spawn throws before the turn starts", async () => {
         const services = fakeServices({ subagentsAtOnce: 1 });
+        /* Routed properly, and only the PROMPT explodes: the provider and the model are read before the seat is
+         * claimed (they gate admission), so a spec missing those would be refused at the door and never reach
+         * the path this test is about. */
         const exploding = {
             description: "a spec that cannot be read",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
             get prompt(): string {
                 throw new Error("boom");
             },
@@ -559,7 +565,7 @@ describe("the budgets, enforced in the daemon", () => {
         await expect(spawnChild(services, parent, exploding, fakeTurn([]))).rejects.toThrow("boom");
 
         // The proof is that the next spawn fits: under a ceiling of one, a stranded seat would refuse it.
-        const after = await spawnChild(services, parent, { prompt: "ok" }, fakeTurn([]));
+        const after = await spawnChild(services, parent, { prompt: "ok", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(after.ok).toBe(true);
     });
 
@@ -570,17 +576,17 @@ describe("the budgets, enforced in the daemon", () => {
         const services = fakeServices({ subagentsAtOnce: 5, subagentsPerTurn: 2 });
 
         const results = await Promise.all([
-            spawnChild(services, parent, { prompt: "one" }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "two" }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "three" }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "four" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "four", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
         ]);
 
         expect(results.filter((result) => result.ok)).toHaveLength(2);
         await Promise.all(results.map(async (result) => (result.ok ? settled(result.id) : undefined)));
         // The lifetime budget is spent, so a later sequential spawn is refused too: the concurrent pair really
         // was recorded, rather than merely being let through and forgotten.
-        const later = await spawnChild(services, parent, { prompt: "five" }, fakeTurn([]));
+        const later = await spawnChild(services, parent, { prompt: "five", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(later).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
@@ -588,11 +594,11 @@ describe("the budgets, enforced in the daemon", () => {
      * cannot read its way around has to live here, keyed by the CHILD's conversation id. */
     it("refuses a chain deeper than the owner's setting", async () => {
         const services = fakeServices({ subagentDepth: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one" }, fakeTurn([]));
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         if (!first.ok) {
             throw new Error(first.message);
         }
-        const fromChild = await spawnChild(services, { conversationId: first.id, cwd: "/work" }, { prompt: "two" }, fakeTurn([]));
+        const fromChild = await spawnChild(services, { conversationId: first.id, cwd: "/work" }, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(fromChild).toMatchObject({ ok: false, message: expect.stringContaining("depth") });
         await settled(first.id);
     });
@@ -615,16 +621,16 @@ describe("placing a child on the fleet", () => {
     /* THE POINT OF THE WHOLE FEATURE, in one assertion: a turn that fans out spreads onto the machines the
      * owner connected without anybody choosing per agent, which is the only way thirty of them get placed. */
     it("sends a child to a ready runner with no one asking", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go" })).toEqual({ kind: "runner", id: "rig" });
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "rig" });
     });
 
     it("keeps the work here when there is no fleet", async () => {
-        expect(await placementOf(fakeServices(), { prompt: "go" })).toBeUndefined();
+        expect(await placementOf(fakeServices(), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
     });
 
     // Six slots on eight cores, all taken: the sandbox that was free all along beats waiting for one.
     it("keeps the work here when every machine is full", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), { prompt: "go" })).toBeUndefined();
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
     });
 
     it("honours a machine the caller named over the one with more room", async () => {
@@ -632,9 +638,9 @@ describe("placing a child on the fleet", () => {
             { id: "rig", online: true },
             { id: "other", online: true, cpus: 32 },
         ];
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", on: "rig" })).toEqual({ kind: "runner", id: "rig" });
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "rig" })).toEqual({ kind: "runner", id: "rig" });
         // Nobody asking gets the roomier machine, which is what makes the line above a real preference.
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go" })).toEqual({ kind: "runner", id: "other" });
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "other" });
     });
 
     /* CROSS-PROVIDER CHILDREN ARE THE POINT OF THE SPAWN ENGINE, and half of them cannot travel: only the
@@ -643,23 +649,23 @@ describe("placing a child on the fleet", () => {
      * reads as a broken fleet rather than as a login that was never there. */
     it("keeps a child here when its runtime authenticates from the machine it runs on", async () => {
         const fleet = [{ id: "rig", online: true }];
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "cursor" })).toBeUndefined();
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "codex" })).toBeUndefined();
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor" })).toBeUndefined();
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex" })).toBeUndefined();
         // The same provider UNDER the Claude Code harness is routed through the translator the parent
         // re-serves, so that one travels.
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "codex", harness: "claude-code" })).toEqual({
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex", harness: "claude-code" })).toEqual({
             kind: "runner",
             id: "rig",
         });
     });
 
     it("still honours a machine named for a runtime that authenticates locally: the person knows their fleet", async () => {
-        const placed = await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "cursor", on: "rig" });
+        const placed = await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor", on: "rig" });
         expect(placed).toEqual({ kind: "runner", id: "rig" });
     });
 
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", on: "here" })).toBeUndefined();
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "here" })).toBeUndefined();
     });
 });
 
@@ -701,7 +707,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("raises a card on the parent's turn and runs the spawn once it is allowed", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
             const requestId = await cardOn();
             // The card names the move and the provider, so answering it is not a guess about what it would do.
             const card = turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
@@ -725,7 +731,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("a denial refuses the spawn and tells the model not to retry", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
             const requestId = await cardOn();
             resolveRequest({ kind: "permission", requestId, decision: "deny" });
             const result = await spawning;
@@ -740,7 +746,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
      * backgrounded `agents` shell, a turn that has already ended) has nowhere to draw a card, so it still
      * refuses — and now says which of the two situations it is in. */
     it("with no live turn there is nowhere to ask, and it says so", async () => {
-        const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+        const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("outside a live turn") });
         expect(held.ok === false && held.message).toContain("agents.spawn");
     });

@@ -42,6 +42,7 @@ const listenerAutomation = (id: string, extra: Partial<Automation> = {}): Automa
     id,
     trigger: { kind: "listener", provider: "discord" },
     prompt: `wake:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });
@@ -73,7 +74,7 @@ test("state returns the provider's enabled listener automations and its connecto
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
     await services.automations.upsert(listenerAutomation("st-live"));
     await services.automations.upsert(listenerAutomation("st-off", { enabled: false }));
-    await services.automations.upsert({ id: "st-cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", enabled: true });
+    await services.automations.upsert({ id: "st-cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
     await services.capabilities.upsert({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } });
     const res = await appFor(services, fakeWake([])).request("/listeners/discord/state");
     expect(res.status).toBe(200);

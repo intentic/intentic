@@ -39,6 +39,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         id: automationId,
         trigger: { kind: "listener", provider: "ci", ...narrow },
         prompt: "handle ci",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         enabled: true,
     });
     const services = unstubbed<Services>("services", {
@@ -186,6 +187,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         id: "wh-gitlab",
         trigger: { kind: "listener", provider: "ci", eventType: "pipeline_succeeded" },
         prompt: "p",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         enabled: true,
     });
     const services = unstubbed<Services>("services", {

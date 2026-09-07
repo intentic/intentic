@@ -1,8 +1,9 @@
 import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
-import type { Automation, Capability, SkillDraft } from "@intentic/sandbox-contract";
+import type { Capability, SkillDraft } from "@intentic/sandbox-contract";
 import { pack } from "tar-stream";
 import { expect, test } from "vitest";
+import type { MigratedAutomation } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
@@ -35,7 +36,7 @@ const HOME: Record<string, string> = {
 interface Recorded {
     readonly files: Map<string, string>;
     readonly skills: SkillDraft[];
-    readonly automations: Automation[];
+    readonly automations: MigratedAutomation[];
     readonly capabilities: Capability[];
     readonly secrets: Map<string, string>;
     readonly deps: MigrationDeps;
@@ -44,7 +45,7 @@ interface Recorded {
 const recordingDeps = (): Recorded => {
     const files = new Map<string, string>();
     const skills: SkillDraft[] = [];
-    const automations: Automation[] = [];
+    const automations: MigratedAutomation[] = [];
     const capabilities: Capability[] = [];
     const secrets = new Map<string, string>();
     return {

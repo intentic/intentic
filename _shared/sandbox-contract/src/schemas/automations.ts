@@ -1,6 +1,6 @@
 // automations: scheduled agent wake-ups (.intentic/config/automations.json)
 import { z } from "zod";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema } from "./agent.js";
+import { AgentOriginSchema, ModelPinSchema } from "./agent.js";
 import { AgentSummarySchema } from "./agents.js";
 import { entryId } from "./internal.js";
 import { IssuesConfigSchema } from "./issues.js";
@@ -315,8 +315,32 @@ export const AutomationSchema = z.object({
         .describe(
             "Narrow the woken turn to these tools. For one driven by an outside message this list is the real boundary, because prompt wording is only advice and an empty toolbox is not.",
         ),
-    // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
-    agent: AgentProviderSchema.optional().describe("Which provider serves the wake."),
+    /* WHAT THIS ONE WAKE RUNS ON, ITS OWN ORDERED LADDER, AND THERE IS NO ANSWER IF IT IS EMPTY.
+     *
+     * This replaced three optional fields (`agent`, `harness`, `model`) whose shared answer for "not set" was a
+     * sandbox-wide tier: a single `automation-wake` model role standing behind every automation in the manifest,
+     * and behind that the model the owner happened to have chosen in their composer. Both are DEFAULTS, and a
+     * default is the wrong shape for this job specifically. An automation is the one thing here that spends an
+     * allowance with nobody in the room, on a schedule the owner set once and does not re-read: a nightly sweep
+     * silently inheriting whatever the chat was set to last Tuesday is a bill arriving from a decision nobody
+     * made. So the ladder is REQUIRED, at least one rung, and an automation that names none cannot be saved.
+     *
+     * A LADDER RATHER THAN ONE PIN, for the reason every other model list in this product is one (see
+     * models/model-roles.ts): the interesting failure is not a wrong model, it is a connected model that will not
+     * answer TODAY because the morning's chat spent its allowance. Unwatched work is where that costs most — a
+     * chat refuses in front of somebody who can retry it, a 3am wake just does not happen. Walked in order at
+     * fire time, stopping at the first rung this sandbox can actually start.
+     *
+     * EACH RUNG IS A WHOLE PIN, which is what folded the three old fields in: provider, model, effort, thinking,
+     * speed and harness travel together, because a model id means nothing without the provider that vends it and
+     * a reasoning tier means nothing without the model it is a tier OF. */
+    models: z
+        .array(ModelPinSchema)
+        .min(1)
+        .max(10)
+        .describe(
+            "Which models this automation may run on, best first. Required, and nothing is chosen for you: work that fires while nobody is watching spends a real allowance, so it names the models it spends rather than inheriting one. Tried in order, so a spent account does not silently stop the job.",
+        ),
     /* Which connected account of that provider serves the wake; absent ⇒ the provider's first account, exactly
      * as for a chat turn (AgentTurnSchema.account).
      *
@@ -336,10 +360,6 @@ export const AutomationSchema = z.object({
      * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
      * can see. */
     actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
-    // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.
-    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it."),
-    // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.
-    model: z.string().optional().describe("Which model runs it."),
     // When true, a fire doesn't wake the agent, it's held in the approvals queue until the owner approves.
     requireApproval: z.boolean().optional().describe("Hold every fire for a person instead of running it. Only a person can release one of those."),
     /* The middle ground between firing instantly and requiring a click: the fire is held in the same approvals

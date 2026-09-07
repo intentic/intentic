@@ -54,8 +54,20 @@ const readinessSources = async (services: Services): Promise<ModelSource[]> => {
  *
  * The empty-list shortcut is not just a fast path. It is what keeps a sandbox that has pinned nothing for this
  * role from paying for a readiness sweep on every single unattended turn it starts. */
-export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> => {
-    const pinned = (await services.sandboxSettings.get()).modelRoles[role] ?? [];
+export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> =>
+    pinnedRunModel(services, (await services.sandboxSettings.get()).modelRoles[role] ?? []);
+
+/* THE WALK ITSELF, over ANY ordered ladder, whoever wrote it down. The three callers differ only in where the
+ * list comes from — a role's settings row, a persona card, an automation's own manifest entry — and that is the
+ * whole of the difference: readiness and the recorded quota are facts about this sandbox, not about who is
+ * asking. It was inlined in the role lookup while the role WAS the only list; an automation carrying its own
+ * ladder (contract schemas/automations.ts `models`) is the second real list, and a second copy of this walk is
+ * how two surfaces come to disagree about which rung they would spend.
+ *
+ * An empty ladder answers undefined, and what that MEANS is the caller's to decide: a run role falls to the
+ * owner's composer pick, while an automation refuses to fire at all, because a job nobody is watching has no
+ * composer behind it to fall to. */
+export const pinnedRunModel = async (services: Services, pinned: readonly ModelPin[]): Promise<ModelPin | undefined> => {
     if (pinned.length === 0) {
         return undefined;
     }
@@ -74,11 +86,7 @@ export const personaRunModel = async (services: Services, actsAs: string | undef
     if (actsAs === undefined) {
         return undefined;
     }
-    const pinned = (await services.personas.get(actsAs))?.models ?? [];
-    if (pinned.length === 0) {
-        return undefined;
-    }
-    return headOf(services, readyChain(await readinessSources(services), pinned));
+    return pinnedRunModel(services, (await services.personas.get(actsAs))?.models ?? []);
 };
 
 // The first rung of a chain the recorded quota does not already call spent, or, when every rung is, the head:

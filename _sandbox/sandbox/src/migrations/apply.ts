@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type ArrivalReport, type Automation, type Capability, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
-import type { PlannedItem, SourcePlan } from "./adapter-shared.js";
+import { type ArrivalReport, type Capability, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
+import type { MigratedAutomation, PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
 
 /* THE APPLY LOOP, the ticked items of a re-derived plan, landed one by one through the same write paths the
@@ -33,7 +33,11 @@ export interface MigrationDeps {
     readonly writeWorkspaceFile: (relPath: string, content: string) => Promise<void>;
     // Write + enable + reconcile in one call, the same trio the skills route refuses to let a caller sequence.
     readonly saveSkill: (skill: SkillDraft) => Promise<void>;
-    readonly upsertAutomation: (automation: Automation) => Promise<void>;
+    /* Takes the job MINUS its model ladder and completes it. The archive knows the schedule, the prompt and
+     * whether the job was on; it cannot know which providers this sandbox has connected, and an automation may
+     * not exist without naming what it spends. So the implementation (assistants.ts) asks what is actually
+     * connected and lands the ladder with the job — the first point in this chain that can. */
+    readonly upsertAutomation: (automation: MigratedAutomation) => Promise<void>;
     // Runs the kind's handler apply and records the manifest entry. Must refuse an id that already exists,
     // a migration lands beside nothing, never over something.
     readonly addCapability: (capability: Capability) => Promise<void>;

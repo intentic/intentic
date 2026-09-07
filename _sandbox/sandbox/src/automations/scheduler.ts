@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval, ModelPin } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
@@ -14,6 +14,7 @@ import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
+import { pinnedRunModel } from "../agent/models/run-role-model.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
@@ -324,6 +325,87 @@ export const automationIdle = async (id: string): Promise<void> => {
     await inFlight.get(id);
 };
 
+/* THE RESOLVED RUNG AS TURN FIELDS, WHOLE. Not just which model: how hard it thinks, whether it reasons at all,
+ * whether this wake pays for speed, and which agentic loop runs it. Those four used to be unsayable per
+ * automation — the manifest carried a bare `model` string beside a `harness`, and the tier came from whatever
+ * the provider defaulted to — so an owner who pinned a reasoning model to a nightly review paid its price and
+ * got its default behaviour.
+ *
+ * ABSENT STAYS ABSENT, never an invented default: a knob the owner did not pin is a knob the provider answers
+ * for itself, which is the same contract every other reader of a pin keeps (turn-resume.ts `pinnedKnobs`).
+ *
+ * A function rather than four conditional spreads at the call site, because the call site is a turn literal
+ * inside an already very long function and each `?:` is one more branch in it.
+ *
+ * The return type names its six fields rather than widening to `Partial<AgentTurn>`: spread into a turn literal,
+ * a partial of the whole turn tells the compiler this call might also be re-answering `conversationId` with
+ * undefined, which is exactly the field the literal above it is not allowed to lose. */
+const pinFields = (
+    pin: ModelPin,
+): Pick<Required<AgentTurn>, "agent" | "model"> & Partial<Pick<AgentTurn, "effort" | "thinking" | "fast" | "harness">> => ({
+    agent: pin.provider,
+    model: pin.model,
+    ...(pin.effort !== undefined ? { effort: pin.effort } : {}),
+    ...(pin.thinking !== undefined ? { thinking: pin.thinking } : {}),
+    ...(pin.fast !== undefined ? { fast: pin.fast } : {}),
+    ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
+});
+
+/* WHAT THIS WAKE RUNS ON, WALKED BEFORE ANYTHING IS SPENT OR WRITTEN DOWN. Undefined ⇒ it does not run, and the
+ * refusal is already recorded and already said to whoever was waiting on the sink.
+ *
+ * The automation's own ladder (contract schemas/automations.ts `models`), through the same walk every other
+ * pinned list in this daemon goes through (agent/models/run-role-model.ts): readiness and the recorded quota, in
+ * the owner's order, stopping at the first rung this sandbox can actually start.
+ *
+ * NO LADDER MEANS NO WAKE, and this is the one place that is said. There is no sandbox-wide tier under an
+ * automation any more, and deliberately none: there used to be an `automation-wake` model role standing behind
+ * every automation in the manifest, and the composer's own model standing behind that. Both are defaults, and a
+ * default is the wrong shape for this job specifically — an automation is the one thing here that spends an
+ * allowance with nobody in the room, on a schedule its owner set once and does not re-read. A nightly sweep
+ * quietly inheriting whatever the chat was set to last Tuesday is a bill arriving from a decision nobody made.
+ *
+ * The schema already requires a rung, so what actually reaches the refusal is a ladder whose every provider has
+ * been DISCONNECTED since it was written: a configuration fact the owner has to see rather than a silence to
+ * paper over, which is why it is an `error` run carrying the reason and not a quiet `skipped`. It therefore
+ * counts towards the failure streak (`automationFailureLimit`), which is the intended reading — an automation
+ * that cannot run should go visibly quiet rather than erroring into the log every minute forever.
+ *
+ * ASKED HERE rather than left to the detached turn's own fill step (turn-resume.ts withRoleModel), because that
+ * step answers for a turn that named NOTHING and this turn has named a whole ladder. It also puts the refusal in
+ * front of the journal: a wake that cannot run should not first be written down as in flight and then mint a
+ * conversation to die in. */
+const wakeModel = async (services: Services, automation: AutomationRecord, stream: TurnStream | undefined): Promise<ModelPin | undefined> => {
+    /* ONE RUNG IS NOT A LADDER, and the walk has nothing to do on it. The walk exists to CHOOSE between
+     * entries — to step over a provider that is disconnected or an allowance the recorded quota already calls
+     * spent, and take the next one. With a single entry there is no next one, so the only two answers it can
+     * give are that entry and nothing, and NOTHING here means refusing a fire the owner explicitly configured
+     * on the strength of a local probe rather than of the provider's own reply. Fire it: a provider that has
+     * since been disconnected fails the run in its own words on the card, which is both actionable and exactly
+     * what happened before ladders existed.
+     *
+     * The shortcut lives here rather than inside `pinnedRunModel` because it is an argument about AUTOMATIONS,
+     * not about ladders. A run role that resolves to nothing has a floor to fall to — the owner's own composer
+     * pick — so paying for the sweep to reach it is worth it there. An automation has no floor by design, so
+     * the same answer would be a refusal, and refusing is the expensive mistake.
+     *
+     * It also keeps the coupling proportional: the sweep reaches into every provider module's readiness rung
+     * and the capability store, and the common automation names one model. Only an owner who asked for a
+     * fallback pays for the reading that finds it. */
+    const [only, ...rest] = automation.models;
+    if (only !== undefined && rest.length === 0) {
+        return only;
+    }
+    const pin = await pinnedRunModel(services, automation.models);
+    if (pin !== undefined) {
+        return pin;
+    }
+    const reason = `This automation's models are all on providers this sandbox cannot reach right now: connect one of them, or pin a model it can run.`;
+    await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "error", detail: reason });
+    stream?.failed(reason);
+    return undefined;
+};
+
 // Guard (payload visible) → wake the agent (payload appended to the prompt) → record the run. Reached only
 // through fireAutomation, which guarantees no two runs of one automation are ever inside this at once.
 const runFire = async (
@@ -430,6 +512,11 @@ const runFire = async (
                 return {};
             }
         }
+        // What this wake runs on, walked before anything is spent or written down (see `wakeModel`).
+        const pin = await wakeModel(services, automation, stream);
+        if (pin === undefined) {
+            return {};
+        }
         /* This fire is now in flight, written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
          * the resolved turn: a re-fire goes back through this same function (see turn-resume's boot pass), which
          * is what keeps the overlap guard, the run record and the activity append, and re-reads a prompt the
@@ -488,7 +575,6 @@ const runFire = async (
              * otherwise. Its prompt is the automation's standing brief, whose first 400 characters are a brief
              * about being a brief. */
             unattended: true,
-            runRole: `automation-wake`,
             /* SOMEBODY ELSE'S WORDS STARTED THIS TURN, set for a listener wake only, and named by the provider
              * that carried it. It is the same fact the envelope above states to the model, said once more to
              * the guard layer, which does not depend on the model believing it (guard/turn-taint.ts). A
@@ -505,10 +591,32 @@ const runFire = async (
                       title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
                   }
                 : {}),
-            ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
-            // The pinned account, when the owner chose one. Absent leaves the resolution where it was, the
-            // provider's first account, so an automation nobody configured keeps behaving as it always has.
-            ...(automation.account !== undefined ? { account: automation.account } : {}),
+            /* THE RUNG THE LADDER RESOLVED TO, WHOLE. Not just which model: how hard it thinks, whether it
+             * reasons at all, whether this wake pays for speed, and which agentic loop runs it. Those four used
+             * to be unsayable per automation — the manifest carried a bare `model` string beside a `harness`,
+             * and the tier came from whatever the provider defaulted to — so an owner who pinned a reasoning
+             * model to a nightly review paid its price and got its default behaviour.
+             *
+             * Spread verbatim rather than through turn-resume's fill step, which deliberately only answers a
+             * turn that named NOTHING (`withRoleModel`): this turn has named its whole ladder and already
+             * walked it, so there is nothing left for that step to decide. */
+            ...pinFields(pin),
+            /* THE PINNED ACCOUNT, WHEN IT BELONGS TO THE PROVIDER THAT ACTUALLY WON.
+             *
+             * An account id is one provider's store key, so it is only meaningful beside that provider — the
+             * same reason a model id is (ModelPinSchema). While an automation named ONE provider that was never
+             * in question; a ladder can span them, and sending a Claude account id along with a Codex rung
+             * would pin the wake to an account that provider has never heard of, failing at 3am on a credential
+             * error rather than on anything the owner did.
+             *
+             * So it rides only while every rung agrees about the provider, which is exactly when the pin is
+             * unambiguous, and is dropped the moment the ladder crosses providers — leaving the resolution
+             * where it was for an automation that names no account at all: the connected account with the most
+             * headroom (harness-credentials.ts), which is the better answer for unwatched work anyway. The form
+             * clears the field on the same rule, so what is stored and what is spent cannot disagree. */
+            ...(automation.account !== undefined && automation.models.every((rung) => rung.provider === pin.provider)
+                ? { account: automation.account }
+                : {}),
             /* The persona this wake shows the outside world, and, unlike `account` on the line above, absence here
              * is a DECISION rather than a deferral. `unattended: true` is already set, which means the resolver
              * (personas/personas.ts) reads a missing persona as "no logged-in account at all" rather than
@@ -518,8 +626,6 @@ const runFire = async (
              * Spread the same way as the rest for consistency, though the absent case is what carries the
              * meaning: what makes the default strict is the resolver, not this line. */
             ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
-            ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
-            ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
         // The wake's transcript, folded as it streams exactly as a composer's turn is inside its run
         // (turn-runs.ts): a wake has no run, its frames are consumed here, so the fold runs here too. It opens

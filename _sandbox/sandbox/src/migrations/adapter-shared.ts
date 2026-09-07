@@ -9,13 +9,26 @@ import { parseSkillFile } from "../settings/skill-file.js";
  * its source; everything here is the part that must NOT vary between them, because two adapters disagreeing on
  * what a valid id or a credential-shaped key is would make the same archive import differently by source. */
 
+/* A MIGRATED AUTOMATION MINUS THE ONE THING AN ARCHIVE CANNOT KNOW: which models this sandbox may spend.
+ *
+ * Every other field of a cron job is IN the archive — its schedule, its prompt, whether it was on — and the
+ * adapters are pure over that archive by design, so the same function answers the preview and the apply. The
+ * ladder is not in the archive and never could be: it names providers THIS sandbox has connected, and the
+ * machine being migrated from knew nothing about them. An adapter that invented one would be guessing whose
+ * allowance to spend, which is the whole thing `Automation.models` being required exists to stop.
+ *
+ * So the adapters carry the job without it and the APPLY completes it (apply.ts), which is the first point in
+ * the chain that has services and can ask what is actually connected. The owner still approves the row, and
+ * the automation still lands held for approval on top of that. */
+export type MigratedAutomation = Omit<Automation, "models">;
+
 // What one planned item DOES at apply, held beside the wire item, never serialized to the browser. Secret
 // values ride here (they are already in the held archive's memory); `secretFields` names the config keys to
 // strip when the owner withheld secrets, so a capability still lands, keyless, rather than not at all.
 export type ItemApply =
     | { readonly target: "memory"; readonly fence: string; readonly body: string }
     | { readonly target: "skill"; readonly skill: SkillDraft }
-    | { readonly target: "automation"; readonly automation: Automation }
+    | { readonly target: "automation"; readonly automation: MigratedAutomation }
     | { readonly target: "capability"; readonly capability: Capability; readonly secretFields: readonly string[] }
     | { readonly target: "secret"; readonly key: string; readonly value: string }
     // One ticked row may land several files (a folder of daily notes), the checklist stays readable while the
@@ -222,7 +235,9 @@ export const automationPlanner = (
             return;
         }
         const id = nextId(entryId(`${sourcePrefix}-${name}`));
-        const automation = AutomationSchema.safeParse({
+        // Every field the archive can answer for, validated here; the ladder is filled at apply, where the
+        // sandbox's own connected models are knowable (see MigratedAutomation).
+        const automation = AutomationSchema.omit({ models: true }).safeParse({
             id,
             trigger: { kind: "schedule", cron },
             prompt,

@@ -8,6 +8,7 @@ import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../anchors/agent-steering.js";
 import { startConversationTurn } from "../run/turn-resume.js";
+import { seedFields, type TurnSeed } from "../run/turn-seed.js";
 import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 
@@ -71,29 +72,14 @@ export const MAX_PER_CONVERSATION = 8;
 const DELIVER_RETRY_MS = 15_000;
 const DELIVER_ATTEMPTS = 240;
 
-/* The turn identity a wake must reproduce, snapshotted at arm time. `sessionId` is looked up at FIRE time
- * instead (the conversation may advance while the watch runs), but provider/account/model/isolation are the
- * arming turn's own: a session only resumes on the provider that minted it, and an isolated conversation's work
- * sits in a worktree the wake must re-enter. `unattended` carries the posture, a watch armed by an automation
- * must not wake into a turn that can park on a question nobody will answer. */
-export interface WatcherTurnSeed {
-    readonly agent?: AgentTurn["agent"];
-    readonly harness?: AgentTurn["harness"];
-    readonly account?: string;
-    readonly model?: string;
-    readonly effort?: string;
-    readonly isolated?: boolean;
-    readonly unattended?: boolean;
-    // Which of the owner's model lists paid for the turn that armed this watch, so the wake can spend the same
-    // one (see wakeRole).
-    readonly runRole?: AgentTurn["runRole"];
-}
-
-/* WHAT A WAKE RUNS ON when nobody named a model for it. It FOLLOWS THE TURN THAT ARMED THE WATCH wherever that
- * turn said what it was — a wake continuing somebody's pipeline fix belongs on the list that fix runs on, not on
- * a tier chosen for watches in general — and answers with the watch's own role only for a turn that named
- * neither a model nor a job. */
-const wakeRole = (seed: WatcherTurnSeed): NonNullable<AgentTurn["runRole"]> => seed.runRole ?? "watch-wake";
+/* The turn identity a wake must reproduce, snapshotted at arm time, and shared with the proof follow-up because
+ * the two continue a turn for the same reason (agent/run/turn-seed.ts has the argument, and the list).
+ * `sessionId` is deliberately not in it: that is looked up at FIRE time, since the conversation may advance
+ * while the watch runs. Everything else is the arming turn's own — a session only resumes on the provider that
+ * minted it, an isolated conversation's work sits in a worktree the wake must re-enter, and `unattended` carries
+ * the posture, since a watch armed by an automation must not wake into a turn that can park on a question nobody
+ * will answer. */
+export type WatcherTurnSeed = TurnSeed;
 
 export interface WatcherSpec {
     readonly conversationId: string;
@@ -346,21 +332,15 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: Wat
             live.logger.info({ watch: record.id, conversationId, outcome }, "watch: report steered into the live turn");
             return;
         }
-        const seed = record.spec.turn;
         const sessionId = live.sessionIdOf(conversationId);
         try {
             const started = await live.start({
                 prompt: message,
                 conversationId,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                ...(seed.agent !== undefined ? { agent: seed.agent } : {}),
-                ...(seed.harness !== undefined ? { harness: seed.harness } : {}),
-                ...(seed.account !== undefined ? { account: seed.account } : {}),
-                ...(seed.model !== undefined ? { model: seed.model } : {}),
-                ...(seed.effort !== undefined ? { effort: seed.effort } : {}),
-                ...(seed.isolated === true ? { isolated: true } : {}),
-                ...(seed.unattended === true ? { unattended: true } : {}),
-                runRole: wakeRole(seed),
+                // The arming turn, whole (turn-seed.ts): same provider, same model, same knobs, same persona,
+                // same job. A wake is that turn carrying on, not a new one asking about its work.
+                ...seedFields(record.spec.turn),
             });
             if (started) {
                 live.logger.info({ watch: record.id, conversationId, outcome }, "watch: wake turn started");
@@ -532,18 +512,10 @@ export const restoreWatchers = async (): Promise<void> => {
 /* The journalled seed as the wake wants it. Zod gives every optional field an explicit `| undefined`, which
  * under exactOptionalPropertyTypes is a different thing from the field being absent, and the difference is
  * load-bearing downstream: `deliver` spreads this into an AgentTurn, where `account: undefined` would be a
- * request to run on an account of that name rather than on the provider's first. So the fields are put back
- * one conditional spread at a time, exactly as watch-server.ts assembled them. */
-const seedOf = (turn: JournalledWatch["turn"]): WatcherTurnSeed => ({
-    ...(turn.agent !== undefined ? { agent: turn.agent } : {}),
-    ...(turn.harness !== undefined ? { harness: turn.harness } : {}),
-    ...(turn.account !== undefined ? { account: turn.account } : {}),
-    ...(turn.model !== undefined ? { model: turn.model } : {}),
-    ...(turn.effort !== undefined ? { effort: turn.effort } : {}),
-    ...(turn.isolated === true ? { isolated: true } : {}),
-    ...(turn.unattended === true ? { unattended: true } : {}),
-    ...(turn.runRole !== undefined ? { runRole: turn.runRole } : {}),
-});
+ * request to run on an account of that name rather than on the provider's first. `seedFields` is exactly that
+ * absent-means-absent rebuild, and it is the same one delivery uses, so a watch restored after a restart cannot
+ * come back as a slightly different turn than one that never lost its daemon. */
+const seedOf = (turn: JournalledWatch["turn"]): WatcherTurnSeed => seedFields(turn);
 
 const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Record<string, string>): Promise<void> => {
     const context = { watch: entry.id, conversationId: entry.conversationId, note: entry.note };

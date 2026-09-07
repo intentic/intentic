@@ -16,12 +16,20 @@ export const SPAWN_NOTE_HEADER = "## Spawning child agents";
 // The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
 export const SPAWN_NOTE_TITLE = "Spawning child agents";
 
+/* THE MODELS ARE NOT NAMED HERE, and that is deliberate rather than an omission. This note is composed once, on
+ * the conversation's opening turn, and the provider session carries it for every turn after — so a listing baked
+ * into it would be a set of allowance figures going stale from the moment it was written, read by an agent
+ * deciding what to spend an hour later. `agents providers` is the same answer, taken when the question is
+ * actually asked. */
 export const spawnNote = (): string =>
     `${SPAWN_NOTE_HEADER}\n\n` +
     "This sandbox can start full agents on any connected provider from your shell:\n" +
-    '  `agents spawn [--provider <id>] [--model <id>] [--effort <tier>] [--description "one line"] \'<task>\'`\n' +
-    "prints the child's id and returns immediately. The child runs as its own conversation in an isolated copy " +
-    "of the repos, on the named provider's account (claude, codex, grok, kimi, gemini, cursor — e.g. " +
+    '  `agents spawn --provider <id> --model <id> [--effort <tier>] [--description "one line"] \'<task>\'`\n' +
+    "prints the child's id and returns immediately. Both `--provider` and `--model` are required: a child spends " +
+    "a real allowance and nothing is chosen for you. Run `agents providers` first for what is connected, which " +
+    "models it serves and how much allowance each has left — it leaves out the models whose every account is at " +
+    "its cap, so what it lists is what can actually run. The child runs as its own conversation in an isolated " +
+    "copy of the repos, on the named provider's account (claude, codex, grok, kimi, gemini, cursor — e.g. " +
     "`--provider cursor --model composer-2.5`), and its finished work lands the workspace's ordinary way. " +
     "It sees nothing of this conversation: give it a self-contained task with every path, requirement and " +
     "constraint. Supervise it with `agents wait <id>` (blocks until it needs input or finishes; a blocked " +

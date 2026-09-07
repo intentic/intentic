@@ -25,6 +25,7 @@ const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     spawn: async () => ({ ok: true, id: "sub-x" }),
     send: async () => ({ ok: true }),
     answer: async () => ({ ok: true }),
+    providers: async () => [],
     pendingQuestion: () => undefined,
     ...over,
 });
@@ -38,10 +39,19 @@ describe("which tools mount", () => {
         expect(Object.keys(cursorCustomTools(request({ unattended: true }), push()))).toEqual([]);
     });
 
+    /* `providers` rides with `spawn` and is never separated from it: the spawn door requires a provider and a
+     * model, so a turn that can spawn but cannot see what is connected has been handed a requirement with no
+     * way to satisfy it. */
     it("the engine brings the supervision set, and unattended keeps it: a child deadlocks nothing", () => {
         const children = supervisor();
-        expect(Object.keys(cursorCustomTools(request({ children }), push()))).toEqual(["ask", "spawn", "wait", "send", "answer"]);
-        expect(Object.keys(cursorCustomTools(request({ children, unattended: true }), push()))).toEqual(["spawn", "wait", "send", "answer"]);
+        expect(Object.keys(cursorCustomTools(request({ children }), push()))).toEqual(["ask", "spawn", "providers", "wait", "send", "answer"]);
+        expect(Object.keys(cursorCustomTools(request({ children, unattended: true }), push()))).toEqual([
+            "spawn",
+            "providers",
+            "wait",
+            "send",
+            "answer",
+        ]);
     });
 });
 

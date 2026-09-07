@@ -59,6 +59,7 @@ const chore = (id: string, extra: Partial<Automation> = {}): Automation => ({
     id,
     trigger: { kind: "workspace", event: "turn.settled" },
     prompt: `review:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });

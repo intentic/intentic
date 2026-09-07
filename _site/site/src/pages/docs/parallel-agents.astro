@@ -20,6 +20,8 @@ const mount = `/work                     THIS conversation's worktree, mounted o
 /mnt/intentic-main        the shared tree, still reachable on purpose`;
 
 const childCli = [
+    "agents providers                        # what is connected, and what allowance is left",
+    "",
     "agents spawn --provider cursor --model composer-2.5 --description \"Port the parser\" \\",
     "  'Port packages/parser, update its tests, and report the files you changed'",
     "",
@@ -123,6 +125,12 @@ const lanes = [
         A child sees none of the parent's chat, so its task must carry the paths, requirements and constraints it needs. Spawn returns as soon
         as the child is running. Wait sleeps until a child needs input or finishes instead of making the parent poll; Send steers a live child
         or starts a follow-up turn on a settled one, continuing that child's session.
+    </p>
+    <p>
+        <strong>A spawn names its provider and its model.</strong> Neither is optional and nothing is chosen for you: a child is a whole agent
+        session against a real allowance, started by a model rather than by you, and one parent can start twenty of them in a turn. Providers
+        answers what that spawn may name — every connected provider, its models, and how much allowance each still has, with the ones whose
+        every account is at its cap left out, so what it lists is what can actually run.
     </p>
 
     <h3>Supervision stays above the tree</h3>

@@ -66,6 +66,7 @@ const listenerAutomation = (id: string): AutomationRecord => ({
     id,
     trigger: { kind: "listener", provider: "discord" },
     prompt: "p",
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     runs: [],
 });

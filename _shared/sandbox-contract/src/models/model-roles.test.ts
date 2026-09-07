@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelRoleSpec } from "./model-roles.js";
 
 /* THE CATALOG DRAWS THE SETTINGS PAGE, so the properties the page relies on have to be true of the TABLE rather
- * than remembered by whoever last added a row. Eighteen jobs in one unbroken list is what the blocks exist to
+ * than remembered by whoever last added a row. Fourteen jobs in one unbroken list is what the blocks exist to
  * break up, and the failure they replace is a silent one: a role that belongs to no block is simply missing
  * from Sandbox ▸ Agent ▸ Models, with no error anywhere and a page that looks completely normal. */
 

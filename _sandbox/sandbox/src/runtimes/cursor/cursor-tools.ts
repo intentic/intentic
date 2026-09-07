@@ -99,36 +99,70 @@ const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTo
         "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
         "after your turn ends; its finished work lands the way any agent's does. Returns the child's id " +
         "immediately: supervise it with the wait tool (target: that id). Give it a self-contained prompt with " +
-        "every path, requirement, and constraint — it sees none of this conversation.",
+        "every path, requirement, and constraint — it sees none of this conversation. You must name the provider " +
+        "AND the model: this spends a real allowance and nothing is chosen for you. Call the providers tool for " +
+        "what is connected and what still has room.",
     inputSchema: {
         type: "object",
         properties: {
             prompt: { type: "string", description: "The child's whole task, self-contained." },
             description: { type: "string", description: "One line naming the task, for the board and the roster." },
-            provider: { type: "string", description: "Which provider serves it. Leave it out for Claude." },
-            model: { type: "string", description: "Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default." },
+            provider: { type: "string", description: "Which provider serves it. Required: see the providers tool for what is connected." },
+            model: {
+                type: "string",
+                description:
+                    "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: a model name " +
+                    "only means anything to the provider that vends it.",
+            },
             effort: { type: "string", description: "How hard it should think, where the provider offers a choice." },
         },
-        required: ["prompt"],
+        required: ["prompt", "provider", "model"],
     },
     execute: async (args) => {
-        const prompt = typeof args["prompt"] === "string" ? args["prompt"] : "";
-        if (prompt === "") {
+        const text = (key: string): string | undefined => (typeof args[key] === "string" && args[key] !== "" ? (args[key] as string) : undefined);
+        const [prompt, description, provider, model, effort] = [
+            text("prompt"),
+            text("description"),
+            text("provider"),
+            text("model"),
+            text("effort"),
+        ];
+        if (prompt === undefined) {
             return JSON.stringify({ ok: false, message: "A child needs a task: pass `prompt`." });
         }
-        const text = (key: string): string | undefined => (typeof args[key] === "string" && args[key] !== "" ? (args[key] as string) : undefined);
-        const [description, provider, model, effort] = [text("description"), text("provider"), text("model"), text("effort")];
+        /* The refusal carries the CATALOGUE rather than only the rule, the same answer every other spawn door
+         * gives (children.routes.ts): a model told "provider and model are required" still does not know which
+         * ones this sandbox can reach or which still have allowance, and the cheapest way for it to find out
+         * must not be a guess. */
+        if (provider === undefined || model === undefined) {
+            return JSON.stringify({
+                ok: false,
+                message: "A spawn needs a provider and a model: this spends a real allowance and nothing is chosen for you.",
+                providers: await children.providers(),
+            });
+        }
         const result = await children.spawn({
             prompt,
+            provider,
+            model,
             ...(description !== undefined ? { description } : {}),
-            ...(provider !== undefined ? { provider } : {}),
-            ...(model !== undefined ? { model } : {}),
             ...(effort !== undefined ? { effort } : {}),
         });
         return JSON.stringify(
             result.ok ? { ok: true, child: result.id, note: `Running. Supervise it with wait(target: "${result.id}").` } : result,
         );
     },
+});
+
+/* The catalogue as its own tool, beside spawn, for the reason the Claude loop has one: `provider` and `model`
+ * are required there, and a requirement is only fair if its answer is one call away. */
+const providersTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+    description:
+        "What a child agent could be started on right now: every provider this sandbox has connected, its " +
+        "models, and how much allowance each still has. Models whose every connected account is at its cap are " +
+        "left out, so what this shows is what can actually run.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    execute: async () => JSON.stringify({ ok: true, providers: await children.providers() }),
 });
 
 // One wait's ceiling and default, the harness tool's numbers (subagent-wait.ts): long enough for a real child,
@@ -241,7 +275,13 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
 export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
     ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
     ...(request.children !== undefined
-        ? { spawn: spawnTool(request.children), wait: waitTool(request), send: sendTool(request.children), answer: answerTool(request.children) }
+        ? {
+              spawn: spawnTool(request.children),
+              providers: providersTool(request.children),
+              wait: waitTool(request),
+              send: sendTool(request.children),
+              answer: answerTool(request.children),
+          }
         : {}),
 });
 

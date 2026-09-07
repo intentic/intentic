@@ -37,6 +37,7 @@ const listenerAutomation = (id: string, extra: Partial<Automation> = {}): Automa
     id,
     trigger: { kind: "listener", provider: "discord" },
     prompt: `wake:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });
@@ -291,7 +292,7 @@ test("dispatch honors mentioned: a mention-only listener skips plain messages an
 test("a fatal source failure lands as an error run on the provider's listener automations only", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("live"));
-    await services.automations.upsert({ id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", enabled: true });
+    await services.automations.upsert({ id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
     await reportListenerFailure(services, "discord", "Discord rejected the bot token");
     expect((await services.automations.get("live"))?.runs[0]).toMatchObject({ outcome: "error" });
     expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("Discord");

@@ -194,35 +194,15 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
     }
 };
 
-// Turning a chore on for the first time: create it from its recipe, enabled. From here it is an ordinary row:
-// the pill is gone because the thing it offered now exists.
-const enableChore = async (recipe: AutomationTemplate): Promise<void> => {
-    const trigger = recipe.trigger;
-    // The two shapes a chore has: it reacts to a change in this workspace, or it sweeps it on a clock. A webhook
-    // or a live provider connection is by definition the outside world, so it is not a chore.
-    if (trigger.kind !== `workspace` && trigger.kind !== `schedule`) {
-        return;
-    }
-    actionError.value = undefined;
-    enabling.value = recipe.id;
-    try {
-        await save.mutateAsync({
-            id: recipe.id,
-            trigger:
-                trigger.kind === `workspace`
-                    ? { kind: `workspace`, event: trigger.event }
-                    : { kind: `schedule`, cron: trigger.cron, ...(trigger.afterSessions !== undefined ? { afterSessions: trigger.afterSessions } : {}) },
-            ...(recipe.guard !== undefined ? { guard: recipe.guard } : {}),
-            prompt: recipe.prompt,
-            chore: true,
-            enabled: true,
-        });
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not turn that chore on.`;
-    } finally {
-        enabling.value = undefined;
-    }
-};
+/* A CHORE IS NO LONGER CREATED BY THE PRESS THAT OFFERS IT, and the function that did it is gone rather than
+ * kept for a caller that no longer exists.
+ *
+ * It used to write the recipe straight to disk, enabled, on one click — the whole appeal of the shelf. An
+ * automation now names the models it may spend (contract schemas/automations.ts `models`, required), and a
+ * recipe written before this sandbox existed cannot know which providers its owner has connected. The two
+ * honest options were to guess one, or to create a row that can never fire; both are worse than the third,
+ * which is to open the composer prefilled and leave exactly one choice to make. That is `openFromSuggestion`
+ * above, which the Front Desk suggestions already used for the same class of reason. */
 
 const removeAutomation = async (): Promise<void> => {
     const id = confirmRemoveId.value;
@@ -387,22 +367,22 @@ const toggleDetail = (id: string): void => {
                                 :key="recipe.id"
                                 type="button"
                                 :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
-                                :disabled="enabling !== undefined"
                                 v-tooltip.top="recipe.description"
-                                v-action="() => enableChore(recipe)"
+                                @click="openFromSuggestion(recipe)"
                             >
-                                <!-- The wait rides the tile's own glyph rather than a second icon beside it: the
-                                     press creates this row, so the thing that is busy IS the offer. -->
-                                <Icon
-                                    :name="enabling === recipe.id ? `spinner` : (glyph(recipe.icon) ?? `bolt`)"
-                                    :spin="enabling === recipe.id"
-                                    class="mt-0.5 shrink-0 text-2xs"
-                                />
+                                <Icon :name="glyph(recipe.icon) ?? `bolt`" class="mt-0.5 shrink-0 text-2xs" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block truncate font-medium">{{ recipe.title }}</span>
                                     <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
                                 </span>
-                                <Icon name="plus" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                                <!-- A CHEVRON, NOT A PLUS, and it changed with the model ladder. This press used
+                                     to CREATE the chore outright, which it can no longer do honestly: an
+                                     automation names the models it may spend, a recipe written before this
+                                     sandbox existed cannot know which providers its owner has connected, and a
+                                     one-click create would either guess or make a row that cannot fire. So it
+                                     opens the composer prefilled — the same thing the suggestions below do —
+                                     leaving exactly one choice for the person to make. -->
+                                <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
                         </div>
                     </div>

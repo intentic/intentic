@@ -56,9 +56,16 @@ LOOK UP — reach for these instead of searching /history by hand
                                        which conversations said this, with the line that proves it
 
 SPAWN AND SUPERVISE
-  agents spawn [--provider <id>] [--model <id>] [--effort <tier>] [--on <runner|here>]
+  agents providers                     what a child could run on right now: every connected provider, its
+                                       models, and how much allowance each has left. Models whose every
+                                       connected account is at its cap are left out, so what it lists is
+                                       what can actually run
+  agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
                                        start a child agent; prints its id and returns immediately.
+                                       --provider and --model are REQUIRED: a child spends a real
+                                       allowance and nothing is chosen for you. \`agents providers\`
+                                       lists what you can name.
                                        --on names the machine: a runner, or "here" for this sandbox.
                                        Left out, the fleet decides, which is what spreads a fan-out
                                        across every machine you have connected
@@ -379,18 +386,38 @@ const show = async (argv) => {
     }
 };
 
+// What a child could be started on right now, and what still has allowance. The daemon renders the lines
+// (agent/subagents/spawn-catalog.ts) so the CLI, the MCP tool and the spawn refusal cannot drift apart; the
+// rows ride along on stdout as JSON for anything reading this in a pipe.
+const providers = async () => {
+    const { status, text } = await call("GET", "/children/providers");
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const answer = JSON.parse(text);
+    process.stdout.write(`${answer.text}\n`);
+};
+
 const spawn = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on"]);
     const prompt = positional.join(" ").trim();
     if (prompt === "") {
         return die(`agents: spawn needs a task\n\n${USAGE}`);
     }
+    /* BOTH HALVES, REFUSED HERE RATHER THAN AT THE DAEMON, so the message can name what is spendable: a child
+     * spends a real allowance and nothing is chosen for it, and a bare "required" would leave the caller to
+     * guess a provider id or make a second trip. The daemon refuses the same way if this is bypassed. */
+    if (flags.provider === undefined || flags.model === undefined) {
+        const { status, text } = await call("GET", "/children/providers");
+        const listing = status === 200 ? `\n\nConnected right now:\n${JSON.parse(text).text}` : ``;
+        return die(`agents: spawn needs --provider and --model — a child spends a real allowance and nothing is chosen for you.${listing}`);
+    }
     const body = JSON.stringify({
         prompt,
+        provider: flags.provider,
+        model: flags.model,
         ...(flags.description !== undefined ? { description: flags.description } : {}),
-        ...(flags.provider !== undefined ? { provider: flags.provider } : {}),
         ...(flags.harness !== undefined ? { harness: flags.harness } : {}),
-        ...(flags.model !== undefined ? { model: flags.model } : {}),
         ...(flags.effort !== undefined ? { effort: flags.effort } : {}),
         ...(flags.on !== undefined ? { on: flags.on } : {}),
     });
@@ -490,6 +517,7 @@ const main = async () => {
     if (command === "show") return show(rest);
     if (command === "ls") return ls(rest);
     if (command === "find") return find(rest);
+    if (command === "providers") return providers();
     if (command === "spawn") return spawn(rest);
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);

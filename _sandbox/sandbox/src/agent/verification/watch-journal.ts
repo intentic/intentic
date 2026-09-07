@@ -62,16 +62,26 @@ const JournalledWatchSchema = z.object({
     envKeys: z.array(z.string()),
     // The turn identity the wake must reproduce (watchers.ts WatcherTurnSeed). `sessionId` is absent on
     // purpose, it is looked up at fire time, since the conversation may advance while the watch runs.
+    /* Every field of it, which is the property that matters and the one this list did not use to have: it held
+     * the provider, the model and the effort but not `thinking`, `fast` or `actsAs`, so a watch that survived a
+     * restart came back with the model's own default reasoning and no persona, whatever the arming turn ran
+     * with. A field missing HERE is a field silently changed by a container recreate, which is the ordinary
+     * event in this sandbox rather than the rare one. */
     turn: z.object({
         agent: AgentProviderSchema.optional(),
         harness: AgentHarnessSchema.optional(),
         account: z.string().optional(),
         model: z.string().optional(),
         effort: z.string().optional(),
+        thinking: z.boolean().optional(),
+        fast: z.boolean().optional(),
+        // Which persona the arming turn wore, so the wake reaches the same toolbox and the same signed-in
+        // accounts. Absent is a real answer and the strict one: no card means no logged-in account at all.
+        actsAs: z.string().optional(),
         isolated: z.boolean().optional(),
         unattended: z.boolean().optional(),
-        // Which of the owner's model lists paid for the arming turn: the wake spends the same one unless the
-        // arming turn named a model outright (watchers.ts wakeRole).
+        // What JOB the arming turn was, carried so the wake stays that same job. Not a model fallback: the wake
+        // already runs on the arming turn's own model (see agent/run/turn-seed.ts).
         runRole: ModelRoleSchema.optional(),
     }),
 });

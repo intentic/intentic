@@ -188,6 +188,7 @@ test("the catalogue is served, and upsert refuses a provider it does not carry",
         id: "rooms-watch",
         trigger: { kind: "listener", provider: "rooms" },
         prompt: "Answer the room.",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         enabled: true,
     });
     expect(refused.status).toBe(400);

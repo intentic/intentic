@@ -114,6 +114,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             id: "e2e-discord",
             trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
             prompt: "noop",
+            models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
             requireApproval: true,
             enabled: true,
         });
@@ -189,8 +190,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                 id: "e2e-agent",
                 trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
                 prompt: "This is an automated end-to-end check. Do not use any tools. Reply with the single word: done.",
-                model: "haiku",
-                enabled: true,
+                models: [{ provider: "claude", model: "claude-sonnet-4-6" }],                enabled: true,
             });
             const nonce = `intentic-e2e-agent-${randomBytes(6).toString("hex")}`;
             let lastSent = 0;

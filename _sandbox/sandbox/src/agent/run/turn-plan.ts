@@ -73,6 +73,7 @@ import { contextShortfall } from "../prompt/context-budget.js";
 import { subagentWaitServer } from "../subagents/subagent-wait.js";
 import { watchServer } from "../verification/watch-server.js";
 import type { WatcherTurnSeed } from "../verification/watchers.js";
+import { seedFields } from "./turn-seed.js";
 import { resolveHarnessCredentials } from "../providers/harness-credentials.js";
 import { turnPromptPlacement } from "../prompt/system-prompt.js";
 import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../prompt/turn-preamble.js";
@@ -207,24 +208,14 @@ export interface TurnContext {
  * is the only thing standing. What keeps it cheap is that the gate only calls it when triage fires, and memoises
  * per program within the turn; whether it is called AT ALL is the owner's (settings.commandJudge, carried beside
  * this as `judging`), and at `off` the gate never reaches this closure. */
-/* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE (watchers.ts WatcherTurnSeed): where the arming turn ran,
- * on whose account, at what tier, in what posture, and WHAT JOB IT WAS.
+/* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE: where the arming turn ran, on whose account, at what tier,
+ * with what reasoning, as which persona, in what posture, and what job it was.
  *
- * `runRole` is the last of those and the reason the seed is worth naming as a function rather than spelling out
- * inline: a wake that fires four hours later has nobody to ask, so a watch armed inside somebody's pipeline fix
- * has to be able to spend the pipeline-fix list rather than a tier chosen for watches in general. Everything is
- * a conditional spread, and absent means absent throughout: a seed that filled a blank with a default would be
- * a request to run on an account of that name rather than on the provider's first. */
-const watchSeed = (input: AgentTurn): WatcherTurnSeed => ({
-    ...(input.agent !== undefined ? { agent: input.agent } : {}),
-    ...(input.harness !== undefined ? { harness: input.harness } : {}),
-    ...(input.account !== undefined ? { account: input.account } : {}),
-    ...(input.model !== undefined ? { model: input.model } : {}),
-    ...(input.effort !== undefined ? { effort: input.effort } : {}),
-    ...(input.isolated === true ? { isolated: true } : {}),
-    ...(input.unattended === true ? { unattended: true } : {}),
-    ...(input.runRole !== undefined ? { runRole: input.runRole } : {}),
-});
+ * The list belongs to agent/run/turn-seed.ts rather than here, because the proof follow-up needs exactly the
+ * same one and the two used to keep separate, differently incomplete copies of it. A wake that fires four hours
+ * later has nobody to ask what it should have been; every answer it gets has to have been written down at arm
+ * time, and a field this forgets is a field the wake silently changes. */
+const watchSeed = (input: AgentTurn): WatcherTurnSeed => seedFields(input);
 
 const judgeFor =
     (services: Services, policy: string, pins: readonly ModelPin[] | undefined): CommandGateOptions["judge"] =>

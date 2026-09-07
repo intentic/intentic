@@ -1,12 +1,4 @@
-import type {
-    AgentHarness,
-    AgentProvider,
-    Automation,
-    AutomationSummary,
-    AutomationTemplate,
-    WebchatConfig,
-    WorkspaceEventKind,
-} from "@intentic/sandbox-contract";
+import type { Automation, AutomationSummary, AutomationTemplate, ModelPin, WebchatConfig, WorkspaceEventKind } from "@intentic/sandbox-contract";
 import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
@@ -60,7 +52,17 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
          * reach `build` with its own guard intact rather than saved as a nightly sweep that wakes regardless. */
         guard: ``,
         prompt: ``,
-        agent: `claude` as AgentProvider,
+        /* WHAT THIS AUTOMATION RUNS ON, best first, AND IT MAY NOT BE EMPTY. This replaced three fields — a
+         * provider, a harness and a bare model string — whose shared answer for "not set" was a default: a
+         * sandbox-wide model role, and behind that whatever the owner's chat happened to be set to. An
+         * automation is the one thing here that spends an allowance with nobody in the room, on a schedule set
+         * once and rarely re-read, so a default is the wrong shape for it and `canSave` refuses an empty list.
+         *
+         * A LADDER because unwatched work is exactly where a spent account costs most: a chat refuses in front
+         * of somebody who can retry, a 3am wake simply does not happen. Each rung carries its own provider,
+         * model, effort, thinking, speed and harness (ModelPin), which is what folded the three old fields into
+         * one and made the tier sayable per automation at all. */
+        models: [] as ModelPin[],
         // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
         // which is what every automation made before this field existed keeps doing.
         account: ``,
@@ -73,8 +75,6 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
          * case. Held as the typed string rather than an array because it is an <input>: splitting on save is one
          * place, where splitting on every keystroke would fight the person typing a comma. */
         allowedTools: ``,
-        harness: `native` as AgentHarness,
-        model: ``,
         requireApproval: false,
         // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
         holdForSeconds: 0,
@@ -229,6 +229,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         touched.add(`name`);
         touched.add(`prompt`);
         touched.add(`origins`);
+        // The ladder belongs on this list like any other required field: without it a save refused for an
+        // empty one is a disabled button with the reason nowhere on screen.
+        touched.add(`models`);
     };
 
     const nameError = computed<string | undefined>(() => {
@@ -255,11 +258,21 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return bad === undefined ? undefined : `"${bad}" isn't an origin, use scheme + host only, e.g. https://example.com`;
     });
 
+    /* THE ONE FIELD WHOSE ERROR IS ABOUT SPENDING RATHER THAN SYNTAX. An automation runs against a real
+     * allowance with nobody in the room, so it names the models it may spend or it does not exist: there is no
+     * sandbox-wide tier behind it and no composer pick to inherit. Enforced here as well as in the schema
+     * because a refusal at save time is a sentence the person can act on, where a schema rejection at load time
+     * is an automation that quietly stopped existing. */
+    const modelsError = computed<string | undefined>(() =>
+        form.models.length === 0 ? `Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.` : undefined,
+    );
+
     const valid = computed(
         () =>
             nameError.value === undefined &&
             promptError.value === undefined &&
             originsError.value === undefined &&
+            modelsError.value === undefined &&
             (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)),
     );
 
@@ -272,12 +285,14 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             id: ``,
             guard: ``,
             prompt: ``,
-            agent: `claude`,
+            /* EMPTY, AND A TEMPLATE DOES NOT FILL IT. A gallery template is written before this sandbox exists
+             * and cannot know which providers its owner has connected, so any model it named would be a guess
+             * that either fails at fire time or spends an account the owner meant for something else. The
+             * picker is the one required step of making an automation, which is the point of the field. */
+            models: [],
             account: ``,
             actsAs: ``,
             allowedTools: ``,
-            harness: `native`,
-            model: ``,
             requireApproval: false,
             holdForSeconds: 0,
             afterSessions: 0,
@@ -340,12 +355,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.id = automation.id;
         form.guard = automation.guard ?? ``;
         form.prompt = automation.prompt;
-        form.agent = automation.agent ?? `claude`;
+        // Copied, never aliased: the ladder is edited in place by the picker, and sharing the array with the
+        // stored record would let a cancelled edit still change what round-trips out of `build`.
+        form.models = automation.models.map((pin) => ({ ...pin }));
         form.account = automation.account ?? ``;
         form.actsAs = automation.actsAs ?? ``;
         form.allowedTools = (automation.allowedTools ?? []).join(`, `);
-        form.harness = automation.harness ?? `native`;
-        form.model = automation.model ?? ``;
         form.requireApproval = automation.requireApproval === true;
         form.holdForSeconds = automation.holdForSeconds ?? 0;
         form.chore = automation.chore === true;
@@ -449,6 +464,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             id: form.id.trim(),
             trigger,
             prompt: form.prompt,
+            // The ladder, copied out the way it was copied in rather than aliased, so a later edit of the form
+            // cannot reach back into a record already handed to the caller. Required by the schema and refused
+            // empty by `canSave`, so unlike its neighbours below there is no absent case to write.
+            models: form.models.map((pin) => ({ ...pin })),
             enabled: original?.enabled ?? true,
         };
         if (form.guard.trim() === ``) {
@@ -456,19 +475,16 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } else {
             automation.guard = form.guard.trim();
         }
-        if (form.agent === `claude`) {
-            delete automation.agent;
-            delete automation.harness;
-        } else {
-            automation.agent = form.agent;
-            if (form.harness === `native`) {
-                delete automation.harness;
-            } else {
-                automation.harness = form.harness;
-            }
-        }
-        // Blank ⇒ absent ⇒ the provider's first account, independent of which provider is selected.
-        if (form.account === ``) {
+        /* THE ACCOUNT PIN, AND THE LADDER CAN TAKE IT AWAY.
+         *
+         * Blank ⇒ absent ⇒ the connected account with the most headroom, which is the right answer for
+         * unwatched work anyway. What is new is the second way to reach absent: an account id is one provider's
+         * store key, only meaningful beside that provider (the same reason a model id is), so it can only be
+         * pinned while every rung of the ladder agrees about which provider that is. Cross providers and the pin
+         * would name an account the winning rung's provider has never heard of, failing at 3am on a credential
+         * error. The scheduler drops it on the identical rule, so what is stored and what is spent agree. */
+        const oneProvider = new Set(form.models.map((pin) => pin.provider)).size <= 1;
+        if (form.account === `` || !oneProvider) {
             delete automation.account;
         } else {
             automation.account = form.account;
@@ -490,11 +506,6 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             automation.allowedTools = narrowed;
         } else {
             delete automation.allowedTools;
-        }
-        if (form.model === ``) {
-            delete automation.model;
-        } else {
-            automation.model = form.model;
         }
         if (form.requireApproval) {
             automation.requireApproval = true;
@@ -557,6 +568,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         nameError,
         promptError,
         originsError,
+        modelsError,
         valid,
         // directions
         reset,

@@ -825,7 +825,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     const services = await journalServices(root, false);
 
     await services.turnJournal.recordTurn(journalled("rs-off"));
-    await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: true });
+    await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
     await services.turnJournal.recordFire({
         kind: "automation",
         automationId: "nightly",
@@ -913,6 +913,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
         trigger: { kind: "event" },
         guard: `test "$AUTOMATION_PAYLOAD" = "ping"`,
         prompt: "handle it",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         enabled: true,
     });
     const origin = { automationId: "hook", provider: "webhook" };
@@ -945,6 +946,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
         id: "gated",
         trigger: { kind: "schedule", cron: "* * * * *" },
         prompt: "sweep",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         requireApproval: true,
         enabled: true,
     });
@@ -959,7 +961,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
 
 test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
-    await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: false });
+    await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false });
     await services.turnJournal.recordFire({ kind: "automation", automationId: "off", conversationId: "a-off-1", startedAt: 10_000, attempts: 0 });
     await services.turnJournal.recordFire({
         kind: "automation",

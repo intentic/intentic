@@ -25,8 +25,7 @@ const seed = (now: number): AutomationSummary[] => [
         guard: `pnpm audit --json | jq -e '.metadata.vulnerabilities.high > 0'`,
         prompt: `Audit the workspace's dependencies. Patch what can be patched without a major bump, run the tests, and open one conversation summarising what you left alone and why.`,
         chore: true,
-        agent: `claude`,
-        model: `claude-sonnet-5`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         enabled: true,
         nextRun: now + hours(9),
         runs: [
@@ -40,6 +39,7 @@ const seed = (now: number): AutomationSummary[] => [
         id: `aut_discord_oncall`,
         trigger: { kind: `listener`, provider: `discord`, channelId: `1180-eng-alerts`, eventType: `message`, mentioned: true },
         prompt: `You were mentioned in #eng-alerts. Read the thread, check the sandbox for what it refers to, and reply in the channel. If it is a code question, answer with the file and line.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         allowedTools: [`Read`, `Grep`, `Bash(git log:*)`],
         enabled: true,
         runs: [
@@ -51,6 +51,7 @@ const seed = (now: number): AutomationSummary[] => [
         id: `aut_front_desk`,
         trigger: { kind: `listener`, provider: `webchat`, allowedOrigins: [`https://acme.example`] },
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         webchat: {
             title: `Ask acme`,
             greeting: `Ask anything about the product, a real agent answers.`,
@@ -67,6 +68,7 @@ const seed = (now: number): AutomationSummary[] => [
         id: `aut_docs_after_land`,
         trigger: { kind: `workspace`, event: `agent.landed`, repo: `api` },
         prompt: `Something landed in api. Check whether the docs still describe it, the route table, the schema notes and the README, and fix what drifted.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         chore: true,
         enabled: true,
         runs: [
@@ -79,8 +81,7 @@ const seed = (now: number): AutomationSummary[] => [
         trigger: { kind: `event` },
         webhookToken: `demo-ci-webhook-token`,
         prompt: `A pipeline went red. Read the failed job's log, reproduce the failure in the sandbox, and either fix it or explain in one paragraph why it is not a code problem.`,
-        agent: `codex`,
-        harness: `native`,
+        models: [{ provider: `codex`, model: `gpt-5.3-codex`, harness: `native` }],
         enabled: false,
         runs: [{ at: now - hours(26), outcome: `error`, detail: `the turn ended without reaching a verdict` }],
     },

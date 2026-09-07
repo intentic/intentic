@@ -3,7 +3,9 @@ import { z } from "zod";
 import { listSubagentSessions, waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
 import { soleLiveConversation } from "../run/turn-runs.js";
 import type { AppEnv } from "../../app-env.js";
+import type { Services } from "../../composition.js";
 import { pendingQuestionOf, supervisorFor } from "./children.js";
+import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 
 /* The `agents` CLI's routes (bin/agents), the SHELL door onto the child-agent service — what makes the whole
  * supervision surface (spawn, wait, send, answer, list) work from every runtime that has a shell and no tool
@@ -29,9 +31,11 @@ const conversationOf = (c: Context<AppEnv>): string | undefined => {
 const SpawnBodySchema = z.object({
     prompt: z.string().min(1),
     description: z.string().max(200).optional(),
-    provider: z.string().min(1).optional(),
+    // Both required, and the refusal below names what is spendable rather than merely saying "required": see
+    // ChildSpawnSpec for why a child may not be pointed nowhere, and spawn-catalog.ts for the answer.
+    provider: z.string().min(1),
+    model: z.string().min(1),
     harness: z.enum(["native", "claude-code"]).optional(),
-    model: z.string().min(1).optional(),
     effort: z.string().min(1).optional(),
     // Which machine runs it: a runner's name, or "here" for this sandbox. Absent ⇒ the fleet scheduler picks.
     on: z.string().min(1).optional(),
@@ -62,7 +66,7 @@ const WaitBodySchema = z.object({
     timeoutSeconds: z.number().min(5).max(WAIT_MAX_S).optional(),
 });
 
-export const createChildrenRoutes = () => ({
+export const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is running. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(c);
@@ -78,19 +82,36 @@ export const createChildrenRoutes = () => ({
         }
         const parsed = SpawnBodySchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
-            return c.json({ ok: false, message: 'A spawn needs at least a prompt: pass JSON like {"prompt": "..."}.' }, 400);
+            /* The refusal carries the CATALOGUE, not just the rule. A model that has just been told "provider
+             * and model are required" still does not know which ones this sandbox can reach or which still have
+             * allowance left, so a bare validation error costs it another round trip to find out — or, worse,
+             * invites a guess. This is the same listing `agents providers` prints (spawn-catalog.ts). */
+            const catalog = spawnCatalogText(await spawnableProviders(services));
+            return c.json(
+                {
+                    ok: false,
+                    message: `A spawn needs a prompt, a provider and a model: pass JSON like {"prompt": "...", "provider": "...", "model": "..."}.\n\nConnected right now:\n${catalog}`,
+                },
+                400,
+            );
         }
         const { prompt, description, provider, harness, model, effort, on } = parsed.data;
         const result = await supervisor.spawn({
             prompt,
+            provider,
+            model,
             ...(description !== undefined ? { description } : {}),
-            ...(provider !== undefined ? { provider } : {}),
             ...(harness !== undefined ? { harness } : {}),
-            ...(model !== undefined ? { model } : {}),
             ...(effort !== undefined ? { effort } : {}),
             ...(on !== undefined ? { on } : {}),
         });
         return c.json(result, result.ok ? 200 : 409);
+    },
+    /** GET /children/providers — what a child could be started on right now, and what still has allowance. */
+    providers: async (c: Context<AppEnv>): Promise<Response> => {
+        const providers = await spawnableProviders(services);
+        // Both shapes: the CLI and the MCP tool print the text, anything reading this as data gets the rows.
+        return c.json({ providers, text: spawnCatalogText(providers) });
     },
     /** POST /children/wait — park until a child of this conversation needs input or finishes. Long-poll: the
      *  connection is held for up to the asked timeout, settled early by the request's own abort. */

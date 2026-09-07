@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ArrivalHost, ArrivalReport, AssistantSource, Capability } from "@intentic/sandbox-contract";
+import type { ArrivalHost, ArrivalReport, AssistantSource, Capability, ModelPin } from "@intentic/sandbox-contract";
+import { spawnableProviders } from "../agent/subagents/spawn-catalog.js";
 import { ENV_FILE } from "@intentic/scaffold";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { registry } from "../capabilities/registry.js";
@@ -62,6 +63,31 @@ const ADAPTERS = [
 
 // What a reader declined to hold, worded for the plan's refused list.
 export const skippedLines = (skipped: readonly string[]): string[] => skipped.map((entry) => `${entry} (not read)`);
+
+/* WHAT A MIGRATED CRON JOB RUNS ON, decided here because here is the first place it CAN be. The adapters are
+ * pure over the archive and the archive was written by another product on another machine: it knows the
+ * schedule and the prompt, and nothing whatever about which providers this sandbox has connected.
+ *
+ * The answer is this sandbox's own spendable catalogue (agent/subagents/spawn-catalog.ts), one rung per
+ * connected provider, best-first, capped at the schema's ceiling. That is a real reading rather than a guess —
+ * every rung is a model this sandbox can actually start right now, and the models whose accounts are at their
+ * cap are already left out of it. It is also a LADDER, which is what an imported job most needs: nobody is
+ * watching the 6am sweep that came over from someone else's laptop.
+ *
+ * IT IS A PROPOSAL, NOT A DEFAULT, and that is what makes it consistent with `Automation.models` being
+ * required. The owner ticks the row to import it, the automation lands `requireApproval: true` on top of that,
+ * and the ladder is on its card to edit. What the requirement forbids is a model chosen silently at FIRE time,
+ * which is exactly what this is not.
+ *
+ * An empty answer (nothing connected) is left empty: the upsert then refuses on the schema, and the migration
+ * reports that row as failed with the reason, which beats importing a job that could never fire. */
+const migratedLadder = async (services: Services): Promise<ModelPin[]> => {
+    const providers = await spawnableProviders(services).catch(() => []);
+    return providers.flatMap((provider) => {
+        const head = provider.models[0];
+        return head === undefined ? [] : [{ provider: provider.id, model: head.id }];
+    });
+};
 
 // Which adapter answers for a map: rebase on each anchor in turn, first recognizing one wins.
 const recognize = (raw: Files): { source: AssistantSource; files: Files } | undefined => {
@@ -153,7 +179,7 @@ const migrationDeps = (services: Services): MigrationDeps => {
             await services.sandboxSettings.set({ ...settings, skills });
             await reconcileSkills(services, skills);
         },
-        upsertAutomation: (automation) => services.automations.upsert(automation),
+        upsertAutomation: async (automation) => services.automations.upsert({ ...automation, models: await migratedLadder(services) }),
         // The capability route's core sequence (handler apply, then the manifest entry), minus its streaming
         // frames. Existing ids are refused, a foreign setup lands beside nothing, never over something.
         addCapability: async (capability) => {

@@ -110,6 +110,16 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
   is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
   already told what it proved), and a nudge never answers a nudge.
+- **A nudge, and a watch wake, run as the turn they continue — every field of it**
+  (`src/agent/run/turn-seed.ts`). Both start a turn that picks an earlier one's thread back up, so both copy
+  that turn's whole identity: provider, harness, account, model, effort, reasoning, speed, persona and job.
+  They each used to spell that list out for themselves and each spelled a different, shorter one — provider,
+  model and effort travelled while `thinking`, `fast` and `actsAs` did not — so a follow-up on a
+  reasoning-off turn came back reasoning, and a follow-up on a persona's turn came back as nobody, losing that
+  card's toolbox and signed-in accounts in a turn whose entire job is to go and run something. One list, one
+  place. There is no `watch-wake` or `verify-nudge` model role behind either any more: both could only ever
+  have bound for a turn that was unattended AND named no model AND no provider AND no role, which nothing here
+  starts, so they were settings rows advertising exactly the model switch these two must never make.
 - **Claude Code turns are told about automatic Stop commands before they run**
   (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not
   to duplicate them. Built-ins add no prompt text. Native runtimes are omitted because their fallback does not

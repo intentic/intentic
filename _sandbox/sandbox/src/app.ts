@@ -615,8 +615,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * spawn door — the tool half mounts in-process per runtime — and the gate is the ARMING, recorded at plan
      * time where the persona was in hand (children/children.ts), because the agent token names the sandbox,
      * never a persona. Scoped to that token in auth/grants.ts like `services` and `capabilities`. */
-    const childrenRoutes = createChildrenRoutes();
+    const childrenRoutes = createChildrenRoutes(services);
     app.post("/children/spawn", childrenRoutes.spawn);
+    // What a child could be started on right now, with each model's remaining allowance: the discovery half of
+    // requiring a provider and a model on every spawn (agent/subagents/spawn-catalog.ts).
+    app.get("/children/providers", childrenRoutes.providers);
     app.post("/children/wait", childrenRoutes.wait);
     app.post("/children/send", childrenRoutes.send);
     app.post("/children/answer", childrenRoutes.answer);

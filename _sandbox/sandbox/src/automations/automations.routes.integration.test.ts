@@ -20,7 +20,7 @@ const fakeServices = (root: string): Services =>
 
 const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/automations" };
 
-const automation = (id: string, trigger: Automation["trigger"]): Automation => ({ id, trigger, prompt: `wake:${id}`, enabled: true });
+const automation = (id: string, trigger: Automation["trigger"]): Automation => ({ id, trigger, prompt: `wake:${id}`, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
 
 test("run now refuses a chat listener: by hand there is no message, which is the whole thing it handles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "routes-")));

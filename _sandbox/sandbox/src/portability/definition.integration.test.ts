@@ -104,7 +104,20 @@ const publishedWorkspace = async (mutate?: (work: string) => Promise<void>): Pro
     await writeFile(join(work, ".intentic/config/skills/mine/SKILL.md"), "# mine\n");
     await writeFile(
         join(work, ".intentic/config/automations.json"),
-        JSON.stringify([{ id: "nightly", trigger: { kind: "schedule", cron: "0 9 * * *" }, prompt: "sweep the inbox", enabled: true }], null, 2),
+        JSON.stringify(
+            [
+                {
+                    id: "nightly",
+                    trigger: { kind: "schedule", cron: "0 9 * * *" },
+                    prompt: "sweep the inbox",
+                    // Required: an automation names the models it may spend, so a stored one always carries a ladder.
+                    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+                    enabled: true,
+                },
+            ],
+            null,
+            2,
+        ),
     );
     await writeFile(join(work, ".intentic/config/settings.json"), JSON.stringify({ workspaceMap: true }, null, 2));
     await writeFile(

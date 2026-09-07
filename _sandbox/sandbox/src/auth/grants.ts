@@ -63,6 +63,27 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
 // owner's credit allowance, may ask the owner to connect a capability, and may ask a NAMED APPROVER to
 // release a gated credential; it may never read a VALUE, out of /secrets or the /capabilities REST surface
 // itself, which would hand it the credentials behind them.
+/* THE CHILD-AGENT SURFACE the `agents` CLI drives: start a full agent on any connected provider, see what one
+ * could be started ON, park until one needs input, steer or follow-up one, answer a child's QUESTION (never its
+ * consent cards: children.ts refuses those by kind), and list this conversation's children.
+ *
+ * The routes refuse a conversation planTurn never armed (children/children.routes.ts), so the persona decision
+ * stays where the persona was in hand, and nothing here reads a credential: a child spends the same connected
+ * accounts a composer turn would, and `providers` returns ids and percentages rather than any value behind them.
+ *
+ * A SET rather than six more clauses on the chain below, and the reason is the chain: it is an allowlist whose
+ * every entry costs two branches, so it sits several times over the complexity ceiling by construction. Folding
+ * one coherent group of routes into a lookup is what keeps ADDING to it from making that worse — `providers`
+ * had to go somewhere, and the spawn door's new requirement (name a provider and a model) is unfair without it. */
+const CHILD_ROUTES = new Set([
+    "POST /children/spawn",
+    "POST /children/wait",
+    "POST /children/send",
+    "POST /children/answer",
+    "GET /children",
+    "GET /children/providers",
+]);
+
 const agentReach = (method: string, path: string): boolean =>
     path === "/vpn" ||
     path.startsWith("/vpn/") ||
@@ -87,17 +108,7 @@ const agentReach = (method: string, path: string): boolean =>
     (method === "GET" && path === "/wallet/status") ||
     (method === "POST" && path === "/wallet/fetch") ||
     (method === "GET" && path === "/wallet/history") ||
-    // The child-agent surface the `agents` CLI drives: start a full agent on any connected provider, park
-    // until one needs input, steer or follow-up one, answer a child's QUESTION (never its consent cards:
-    // children.ts refuses those by kind), list this conversation's children. The routes refuse a conversation
-    // planTurn never armed (children/children.routes.ts), so the persona decision stays where the persona was
-    // in hand, and nothing here reads a credential: a child spends the same connected accounts a composer
-    // turn would.
-    (method === "POST" && path === "/children/spawn") ||
-    (method === "POST" && path === "/children/wait") ||
-    (method === "POST" && path === "/children/send") ||
-    (method === "POST" && path === "/children/answer") ||
-    (method === "GET" && path === "/children") ||
+    CHILD_ROUTES.has(`${method} ${path}`) ||
     /* THE FLEET READ SURFACE the same CLI drives (agents/fleet.routes.ts): which conversations this workspace
      * has run, what one of them is, and which ones said a phrase.
      *

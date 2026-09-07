@@ -12,11 +12,34 @@ import { z } from "zod";
  * to say.
  *
  * SO THE UNIT IS THE ROLE. Each entry here is one place a model gets chosen, and each gets its own ordered list
- * in settings.modelRoles. Seventeen rows is more than four, and that is the point rather than a cost being
+ * in settings.modelRoles. Fourteen rows is more than four, and that is the point rather than a cost being
  * absorbed: the configuration and the UI both already existed per use-case, and collapsing them was the only
  * thing standing between the owner and a choice the machinery could already honour. A simpler face over this
  * (presets: "cheap everywhere", "frontier everywhere") is a thing that can be built ON TOP of a true model, and
  * cannot be unpicked from a lossy one.
+ *
+ * A ROLE IS ONLY A ROW HERE IF SOMETHING WOULD REALLY READ IT, and four rows that could not have been are gone.
+ * Each was a settings row promising a model switch its own caller never performed:
+ *
+ *   automation-wake — an automation now carries its OWN ordered ladder (schemas/automations.ts `models`,
+ *                     required), because a job that fires at 3am against somebody's allowance is exactly the one
+ *                     nobody should be able to configure by accident. A tier shared by every automation in the
+ *                     sandbox was a default wearing a settings row, and the wake resolves that ladder before the
+ *                     turn is built, so there is no silence here left to fill.
+ *
+ *   watch-wake and verify-nudge — both FOLLOW THE TURN THEY CONTINUE, and always did: the wake copies the
+ *                     arming turn's provider, model and knobs and resumes its session, the nudge copies the turn
+ *                     it is nudging. That is not a fallback, it is the point — a follow-up on a different model
+ *                     is a different agent asked about somebody else's edits, and it throws away a warm cache to
+ *                     do it. The rows could only ever have bound for a turn that was unattended AND named no
+ *                     model AND no provider AND no role, which nothing in this repo starts.
+ *
+ *   child-agent     — a spawn now NAMES its provider and its model or it is refused (agent/subagents/children.ts),
+ *                     with the spendable catalogue one call away (spawn-catalog.ts). A parent that delegates
+ *                     without saying where the work runs was picking an owner's model by omission.
+ *
+ * The shape of that argument is the rule: a row belongs here when a real caller has a real silence to fill. A
+ * caller that already knows the answer does not get a row for the answer it already has.
  *
  * EVERY LIST IS AN ORDERED LADDER, whatever the role, and for one reason: the interesting failure of a pinned
  * model is not that it is wrong, it is that it is CONNECTED AND WILL NOT ANSWER TODAY. The account's allowance
@@ -201,14 +224,6 @@ export const MODEL_ROLES = [
         icon: "check-circle",
     },
     {
-        id: "automation-wake",
-        label: "Automation wakes",
-        blurb: "A turn an automation fires: a schedule, a webhook, a message from outside.",
-        kind: "run",
-        trigger: "unprompted",
-        icon: "clock",
-    },
-    {
         id: "extension-review",
         label: "Extension update reviews",
         blurb: "The agent that reads an extension update before it is applied.",
@@ -223,33 +238,6 @@ export const MODEL_ROLES = [
         kind: "run",
         trigger: "unprompted",
         icon: "repeat",
-    },
-    {
-        id: "watch-wake",
-        label: "Watch wakes",
-        blurb: "The turn a watch starts when the thing it was watching happens.",
-        kind: "run",
-        trigger: "unprompted",
-        icon: "eye",
-    },
-    {
-        id: "verify-nudge",
-        label: "Verify nudges",
-        blurb: "The follow-up turn sent when work was left unverified.",
-        kind: "run",
-        trigger: "unprompted",
-        icon: "search",
-    },
-    {
-        /* THE ONE ROLE THAT ANSWERS A CHOICE RATHER THAN FILLING A SILENCE. A spawning agent may name its
-         * child's provider, and when it does that wins, exactly as a caret pick wins on every other run role.
-         * This is what answers when it names none, which used to be a hardcoded "claude". */
-        id: "child-agent",
-        label: "Child agents",
-        blurb: "What an agent's own subagents run on when it names no model for them.",
-        kind: "run",
-        trigger: "unprompted",
-        icon: "users",
     },
 ] as const satisfies readonly ModelRoleRow[];
 
@@ -266,9 +254,9 @@ export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole
 
 /* ═══ THE BLOCKS THE SETTINGS PAGE READS IN ═══
  *
- * EIGHTEEN JOBS IN ONE LIST IS A TABLE, NOT A PAGE. The unit being the role is right and is not in question —
+ * FOURTEEN JOBS IN ONE LIST IS A TABLE, NOT A PAGE. The unit being the role is right and is not in question —
  * it is what lets an owner pin Opus to commit subjects without pinning it to every session title — but the cost
- * lands on whoever opens the page: one unbroken run of eighteen rows, each with a name, a sentence, a control
+ * lands on whoever opens the page: one unbroken run of fourteen rows, each with a name, a sentence, a control
  * and a list under it, with no landmark to say where you are in it or which rows are like the one you came for.
  *
  * SO THE BLOCKS ARE DECLARED, AND THEY ARE THE DISTINCTIONS THE TABLE ALREADY MAKES. Nothing here is a fresh

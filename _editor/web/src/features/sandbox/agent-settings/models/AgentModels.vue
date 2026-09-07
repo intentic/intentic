@@ -35,7 +35,7 @@ import ModelRoleRow from "./ModelRoleRow.vue";
  * documentation sweep and a red production pipeline alike. A row per job is more to read than four; it is also
  * the first version of this page where the thing somebody wants to say can be said.
  *
- * FOUR GROUPS, AND THE CATALOG DECIDES WHICH IS WHICH. Eighteen jobs on one surface is a table, not a page:
+ * FOUR GROUPS, AND THE CATALOG DECIDES WHICH IS WHICH. Fourteen jobs on one surface is a table, not a page:
  * one unbroken run of rows with no landmark to say where you are in it or which rows are like the one you came
  * for. The blocks are declared upstairs (MODEL_ROLE_BLOCKS) rather than assembled here, so they are the
  * distinctions the table ALREADY makes — a one-shot against a whole session, and a session your click starts

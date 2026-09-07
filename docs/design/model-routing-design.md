@@ -35,6 +35,16 @@ The two KINDS of role differ in what the **caller** does with that empty answer:
 all, and a `run` defers to the user's own chat pick, because *"nothing here can judge whether a job is worth
 the frontier tier."*
 
+*(A role exists only where a caller has a real silence to fill, and four have since gone for failing that test.
+`automation-wake` went because an automation now carries its **own** required ladder — the same shape, read
+from its manifest entry rather than from a shared settings row — since a job that fires at 3am against
+somebody's allowance is the last thing that should inherit a tier by saying nothing. `child-agent` went because
+a spawn now names its provider and model or is refused. `watch-wake` and `verify-nudge` went because both
+callers already copy the turn they continue, whole, and a follow-up on a different model is a different agent
+asked about somebody else's work; the rows could only have bound for a turn that was unattended and named
+neither model, provider nor role, which nothing here starts. Every one of them was a settings row advertising a
+choice its own caller never made.)*
+
 That last sentence is the thing this design changes. A router **is** the something that judges it.
 
 **Both sides must agree on the answer before it is spent.** The resolvers live in the contract, not in the

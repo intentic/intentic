@@ -14,6 +14,7 @@ const listenerAutomation = (id: string, extra: Partial<AutomationRecord> = {}): 
     id,
     trigger: { kind: "listener", provider: "discord" },
     prompt: `wake:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     runs: [],
     ...extra,
@@ -26,7 +27,7 @@ test("listenerState returns the provider's enabled listener automations and its 
                 listenerAutomation("live"),
                 listenerAutomation("off", { enabled: false }),
                 listenerAutomation("other", { trigger: { kind: "listener", provider: "slack" } }),
-                { id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", enabled: true, runs: [] },
+                { id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true, runs: [] },
             ],
             [
                 { id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } },

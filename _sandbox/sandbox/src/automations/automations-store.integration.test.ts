@@ -19,6 +19,7 @@ const automation = (id: string, cron = "* * * * *"): Automation => ({
     id,
     trigger: { kind: "schedule", cron },
     prompt: "check the inbox",
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
 });
 
@@ -44,6 +45,7 @@ test("setEnabled changes only the switch on the current record", async () => {
         id: "support",
         trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] },
         prompt: "answer support questions",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         webchat: { antiBot: "turnstile", turnstileSecret: "secret" },
         allowedTools: ["Read"],
         enabled: true,
@@ -118,7 +120,7 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
     expect(await store.list()).toEqual([]);
-    await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", enabled: true }]));
+    await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true }]));
     expect(await store.list()).toEqual([]);
 });
 

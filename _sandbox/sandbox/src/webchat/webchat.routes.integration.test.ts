@@ -56,6 +56,7 @@ const webchat = (id: string, extra: Partial<Automation> = {}): Automation => ({
     id,
     trigger: { kind: "listener", provider: "webchat", allowedOrigins: [ORIGIN] },
     prompt: `support:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
     enabled: true,
     ...extra,
 });

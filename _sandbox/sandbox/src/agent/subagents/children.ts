@@ -4,11 +4,11 @@ import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-
 import type { Services } from "../../composition.js";
 import { createRequest, resolveRequest } from "../tools/agent-requests.js";
 import { steerTurn } from "../anchors/agent-steering.js";
-import { runRoleModel } from "../models/run-role-model.js";
 import { childSpawn } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../../guard/turn-taint.js";
 import { noteChildWork } from "./child-verification.js";
+import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "./subagents.js";
 import { startTurnRun, turnRunOf } from "../run/turn-runs.js";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../sessions/turn-transcript.js";
@@ -62,9 +62,22 @@ export interface ChildSpawnSpec {
     readonly prompt: string;
     // One line for the roster row and the child conversation's title. Falls back to the prompt's head.
     readonly description?: string;
-    readonly provider?: AgentProvider;
+    /* WHERE THE WORK RUNS, AND BOTH HALVES ARE REQUIRED. A child is a whole agent session against somebody's
+     * real allowance, started by a model rather than by a person at a composer, and a parent can start twenty of
+     * them in one turn. That combination is why neither half may be left blank: an unnamed provider used to fall
+     * to a `child-agent` model list and then to a hardcoded "claude", so the commonest way to spend an owner's
+     * Claude allowance twenty times over was to say nothing at all.
+     *
+     * BOTH, because a model id is only meaningful to the provider that vends it — half a pick would send a Codex
+     * id to Claude, which is the same reason every model pin in this product carries the pair (ModelPinSchema).
+     *
+     * Taken verbatim, never checked against a catalog. `spawn-catalog.ts` exists so the agent can SEE what is
+     * connected and what still has allowance, but it is advice: an installed ACP agent and a configured endpoint
+     * are legitimate providers that publish no catalog here, and refusing them would turn a discovery aid into a
+     * gate. What is enforced is that the parent says where the work goes, not that it picks from a list. */
+    readonly provider: AgentProvider;
+    readonly model: string;
     readonly harness?: AgentHarness;
-    readonly model?: string;
     readonly effort?: string;
     readonly account?: string;
     /* WHICH MACHINE THIS ONE RUNS ON, when the caller has an opinion: a runner's id, or "here" to pin it to
@@ -460,34 +473,23 @@ const admitChildTurn = async (
     };
 };
 
-/* WHAT A CHILD NOBODY POINTED ANYWHERE RUNS ON: the owner's `child-agent` list, and the old hardcoded "claude"
- * only when they have written nothing there either.
+/* WHAT A CHILD RUNS ON: WHAT ITS PARENT SAID, AND THERE IS NO SECOND ANSWER.
  *
- * THE SPAWNING AGENT'S OWN PICK WINS OUTRIGHT. It named a provider for a reason — usually because the parent is
- * running one and wants its children on the same one — so this answers a SILENCE rather than overriding a
- * choice, which is the rule every run role follows.
+ * This used to fill a silence. A spawn with no `provider` fell to the owner's `child-agent` model list, and with
+ * nothing written there, to a hardcoded "claude". Both were the sandbox choosing whose allowance a delegated
+ * workstream spends while the agent doing the delegating never said — and a fan-out is exactly where that costs:
+ * one parent can start twenty children in a turn, so a default nobody chose is twenty turns on a model nobody
+ * picked, discovered on the bill. The pair is required at every door now (children.routes.ts, subagent-wait.ts's
+ * spawn tool, `agents spawn`), so by the time a spec reaches here it has said where the work runs.
  *
- * RESOLVED HERE rather than at turn-resume's boundary like every other run role, and it has to be: a child turn
- * always carries `agent`, because a fan-out has to know which provider it is spending before it can place the
- * work (credentialsTravel), and that boundary deliberately leaves a turn that named a provider alone. Resolving
- * early is also what puts the pin in front of the admission check, so a child on a provider the owner has gated
- * is refused for the model it would really run rather than for the one it would have defaulted to. */
-const childRouting = async (
-    services: Services,
-    spec: ChildSpawnSpec,
-): Promise<{ readonly provider: string; readonly harness: AgentHarness; readonly model: string | undefined }> => {
-    if (spec.provider !== undefined) {
-        return { provider: spec.provider, harness: spec.harness ?? "native", model: spec.model };
-    }
-    const pinned = await runRoleModel(services, `child-agent`);
-    return {
-        provider: pinned?.provider ?? "claude",
-        harness: spec.harness ?? pinned?.harness ?? "native",
-        // The pin's model only travels with the pin's provider: a model id means nothing to a provider that does
-        // not vend it, which is why the two are one entry (ModelPinSchema).
-        model: spec.model ?? pinned?.model,
-    };
-};
+ * THE HARNESS IS STILL A DEFAULT, and stays one: "native" means the provider's own agentic loop, which is what
+ * the provider does if nobody says otherwise. It names no model, spends no allowance and picks no account —
+ * there is nothing here for an owner to be surprised by. */
+const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider; readonly harness: AgentHarness; readonly model: string } => ({
+    provider: spec.provider,
+    harness: spec.harness ?? "native",
+    model: spec.model,
+});
 
 /** Start a child agent and return the moment it is running. Refusals are ordinary states (a budget met, a
  *  depth exhausted), worded for the model that asked; a provider refusal (nothing connected) arrives later,
@@ -498,7 +500,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     if (depth > settings.subagentDepth) {
         return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
     }
-    const { provider, harness, model } = await childRouting(services, spec);
+    const { provider, harness, model } = childRouting(spec);
     const allowed = await admitSupervision(services, parent.conversationId, provider, "spawn");
     if (!allowed.ok) {
         return allowed;
@@ -546,21 +548,25 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             // Nobody is at a composer. This is what the flag means, and it also sets the safe persona floor: an
             // unattended turn with no named persona speaks for no outside account.
             unattended: true,
-            /* Named, though this turn already carries its provider and so never reaches the role fill in
-             * turn-resume: it is what the journal and any resume of this child read back to say which of the
-             * owner's lists paid for it. */
-            runRole: `child-agent`,
+            /* NO `runRole`. There used to be a `child-agent` one here, named "for the record" though this turn
+             * already carries its own provider and model and so never reaches the role fill in turn-resume. A
+             * role that resolves nothing is not a record, it is a settings row telling an owner they can choose
+             * what children run on — while the parent's own pick, one line below, is what actually decides. The
+             * pick is the record. */
             agent: provider,
             harness,
-            ...(model !== undefined ? { model } : {}),
+            model,
             ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
             ...(spec.account !== undefined ? { account: spec.account } : {}),
         };
         kids.set(id, {
-            // The RESOLVED routing, not the spec's: a follow-up steer has to reach the same child on the same
-            // model, and re-resolving would let a settings edit move a live child mid-conversation.
+            /* The RESOLVED routing, not the spec's, so a follow-up steer reaches the same child on the same
+             * model. Only `harness` actually differs from what the caller sent now that the provider and the
+             * model are required (nothing is resolved for those any more, they are named or the spawn is
+             * refused) — but it is still written back whole rather than trusted to be identical, because the
+             * cost of the two drifting apart is a live child moved onto another model between its own turns. */
             parent: parent.conversationId,
-            spec: { ...spec, provider, harness, ...(model !== undefined ? { model } : {}) },
+            spec: { ...spec, provider, harness, model },
             depth,
             cwd: parent.cwd,
             sessionId: undefined,
@@ -610,11 +616,11 @@ export const sendToChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude", "send");
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider, "send");
     if (!allowed.ok) {
         return allowed;
     }
-    composeRuntimeFloor(parent.conversationId, kid.spec.provider ?? "claude", kid.spec.harness ?? "native");
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
     if (kid.running) {
         /* Mid-turn, the only door is the runtime's own steering seam, the same one /agent/steer uses. A
          * runtime without it cannot take words mid-turn, and pretending otherwise (queueing them somewhere
@@ -637,13 +643,12 @@ export const sendToChild = async (
             conversationId: childId,
             isolated: true,
             unattended: true,
-            // The spec below already holds the routing this child was STARTED on (spawnChild stores the resolved
-            // pair, not the requested one), so this names the role for the record rather than to resolve one:
-            // re-resolving here would move a live child onto a different model between two of its own turns.
-            runRole: `child-agent`,
-            ...(spec.provider !== undefined ? { agent: spec.provider } : {}),
+            // The spec holds the routing this child was STARTED on, and a follow-up turn re-uses it verbatim:
+            // re-resolving anything here would move a live child onto a different model between two of its own
+            // turns, which is the one thing a continuation must never do.
+            agent: spec.provider,
+            model: spec.model,
             ...(spec.harness !== undefined ? { harness: spec.harness } : {}),
-            ...(spec.model !== undefined ? { model: spec.model } : {}),
             ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
             ...(spec.account !== undefined ? { account: spec.account } : {}),
             // The session its last turn reported, so the follow-up continues the child's own context. Absent (a
@@ -656,8 +661,8 @@ export const sendToChild = async (
         openSpawnedChild(handle, {
             id: childId,
             description: message.replaceAll(/\s+/gu, " ").trim().slice(0, 200),
-            agentType: labelOf(spec.provider ?? "claude"),
-            provider: spec.provider ?? "claude",
+            agentType: labelOf(spec.provider),
+            provider: spec.provider,
             harness: spec.harness ?? "native",
             spawnDepth: kid.depth,
             ...(spec.model !== undefined ? { model: spec.model } : {}),
@@ -692,7 +697,7 @@ export const answerChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude", "answer");
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider, "answer");
     if (!allowed.ok) {
         return allowed;
     }
@@ -722,6 +727,15 @@ export const answerChild = async (
  * owns the turn generator (agent.routes.ts), the only module that can hand streamAgent down without a cycle. */
 export interface ChildSupervisor {
     readonly spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
+    /* WHAT A SPAWN COULD NAME, read at call time (spawn-catalog.ts). It belongs on the supervisor rather than
+     * beside it because it is the other half of the spawn door: `provider` and `model` are required there, and a
+     * requirement whose answer lives somewhere the caller cannot reach is a trap. Every door that can spawn
+     * therefore has this by construction — the Claude loop's MCP tools, Cursor's custom tools and the `agents`
+     * CLI's routes all hold a supervisor, and none of them has to plumb a second dependency to ask.
+     *
+     * At CALL time, never snapshotted: an allowance moves while a turn runs, so a listing captured when the
+     * tools were mounted would describe pools that emptied since. */
+    readonly providers: () => Promise<readonly SpawnableProvider[]>;
     readonly send: (childId: string, message: string) => Promise<ChildActionResult>;
     readonly answer: (childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
@@ -729,6 +743,7 @@ export interface ChildSupervisor {
 
 export const childSupervisor = (services: Services, parent: ChildParent, turnFn: TurnFn): ChildSupervisor => ({
     spawn: (spec) => spawnChild(services, parent, spec, turnFn),
+    providers: () => spawnableProviders(services),
     send: (childId, message) => sendToChild(services, parent, childId, message, turnFn),
     answer: (childId, answers) => answerChild(services, parent, childId, answers),
     pendingQuestion: (childId) => (kids.get(childId)?.parent === parent.conversationId ? pendingQuestionOf(childId) : undefined),
