@@ -8,26 +8,94 @@ import { identity } from "../git.js";
  * Each takes the injectable GitRunner (defaultGit shells out) so its command sequence is unit-testable without
  * a real repo. */
 
-// Stage exactly `paths`, adds, edits AND deletions (`-A` covers a removed file, which a bare `add` skips).
-export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
-    if (paths.length === 0) {
-        return;
+/* HOW MUCH OF ONE COMMAND LINE THE PATHS MAY FILL, and why any of this is here.
+ *
+ * An argv is bounded by the operating system (ARG_MAX; 2MB on Linux, and the environment is counted against
+ * the same ceiling), so "name every path" stops working at a size a repository reaches for perfectly ordinary
+ * reasons: a directory overhaul, a mass delete, a dropped project of thirty thousand untracked files. Past it
+ * the spawn fails with E2BIG, which surfaces as a git verb that simply refuses, with an error about argument
+ * lists that says nothing about the review the user was doing.
+ *
+ * The ceiling used to be dodged rather than handled, by a `.max(500)` on every path array in the wire contract
+ * — which is how the panel ended up able to stage only the rows it had drawn, and the user ended up committing
+ * a large change set five hundred files at a time. Splitting the call is the honest fix, and it is nearly free:
+ * git's work is per path either way, so an extra process per ~96KB of names is noise beside the tree walk it
+ * was always going to do. With that here, list length is no longer anybody else's problem.
+ *
+ * Well under the real ceiling on purpose: this counts the paths only, while the kernel counts the whole
+ * environment with them, and a slice this size still puts a thousand-odd typical paths in each call. */
+const ARGV_BUDGET_BYTES = 96 * 1024;
+
+// Split a path list into runs that each fit the budget. A single path longer than the budget still gets its own
+// call rather than being dropped: the OS limit on one argument is separate and far higher, so it works, and
+// silently skipping a file would be the one outcome worse than a failed spawn.
+export const chunkPaths = (paths: readonly string[]): readonly (readonly string[])[] => {
+    const chunks: string[][] = [];
+    let current: string[] = [];
+    let used = 0;
+    for (const path of paths) {
+        const cost = Buffer.byteLength(path, "utf8") + 1;
+        if (current.length > 0 && used + cost > ARGV_BUDGET_BYTES) {
+            chunks.push(current);
+            current = [];
+            used = 0;
+        }
+        current.push(path);
+        used += cost;
     }
-    await git(dir, ["add", "-A", "--", ...paths]);
+    if (current.length > 0) {
+        chunks.push(current);
+    }
+    return chunks;
 };
 
-// Unstage exactly `paths`, leaving the worktree untouched. On an unborn HEAD there is nothing to reset TO, so
-// the index entry is dropped instead (`rm --cached`), the file returns to untracked rather than erroring.
+// Run one git command per chunk. Sequential, not concurrent: every caller here writes the index, and two git
+// processes writing one index race for `index.lock` and one of them loses.
+const overPaths = async (dir: string, paths: readonly string[], argsFor: (chunk: readonly string[]) => string[], git: GitRunner): Promise<void> => {
+    for (const chunk of chunkPaths(paths)) {
+        await git(dir, argsFor(chunk));
+    }
+};
+
+// Stage exactly `paths`, adds, edits AND deletions (`-A` covers a removed file, which a bare `add` skips).
+export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
+    await overPaths(dir, paths, (chunk) => ["add", "-A", "--", ...chunk], git);
+};
+
+/* Stage the whole repository, the one scope git can express without naming anything: one spawn, no list to
+ * build, and no ceiling to chunk under however many files are pending. This is what "stage everything and
+ * commit" resolves to, and it is why that shape has always reached files the review never shipped a row for.
+ *
+ * The two flags are the ones the daemon's own whole-repo stage has always carried (scaffold's gitCommitAll,
+ * which is what the Changes panel's "Commit all" used to route to). Kept identical on purpose: moving that
+ * button onto this changes how the commit is RECORDED (it runs the repo's hooks now, where gitCommitAll's
+ * `--no-verify` did not) and deliberately nothing about which files get collected:
+ *   --ignore-errors             , one unreadable file does not abandon the other four thousand. In a workspace
+ *                                 where an agent may be writing while you stage, that is a real case and the
+ *                                 whole-or-nothing alternative is the worse one.
+ *   advice.addEmbeddedRepo=false, a nested repo is a scanned repo of its own here, not a gitlink to warn about. */
+export const stageAll = async (dir: string, git: GitRunner = defaultGit): Promise<void> => {
+    await git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
+};
+
+/* Unstage exactly `paths`, leaving the worktree untouched. On an unborn HEAD there is nothing to reset TO, so
+ * the index entry is dropped instead (`rm --cached`), the file returns to untracked rather than erroring.
+ *
+ * PATH-LIMITED EVEN WHEN THE TARGET IS THE WHOLE INDEX, which is the one place chunking is doing more than
+ * dodging a ceiling. A bare `git reset` resets the index in a single spawn, but it also clears MERGE_HEAD: mid
+ * merge or rebase, "unstage everything" would silently abandon the operation and every conflict resolved so
+ * far. `git reset -- <paths>` never touches that state, so the loop is the safe spelling at every size. */
 export const unstagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
     if (paths.length === 0) {
         return;
     }
     const head = await headSha(dir, git);
-    if (head !== undefined) {
-        await git(dir, ["reset", "-q", "--", ...paths]);
-    } else {
-        await git(dir, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...paths]);
-    }
+    await overPaths(
+        dir,
+        paths,
+        head !== undefined ? (chunk) => ["reset", "-q", "--", ...chunk] : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
+        git,
+    );
 };
 
 // Commit whatever is currently staged, touching neither the worktree nor any unstaged change, plain `git
@@ -84,21 +152,19 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
         return;
     }
     // Unstage the targets so the re-scan below sees plain worktree-vs-HEAD states (renames decompose into a
-    // tracked deletion + an untracked file).
-    if (head !== undefined) {
-        await git(dir, ["reset", "-q", "--", ...list]);
-    } else {
-        await git(dir, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...list]);
-    }
+    // tracked deletion + an untracked file). Chunked like every other list here: this one is built from the
+    // repo's own status rather than from the request, so it was never bounded by what a caller could send.
+    await overPaths(
+        dir,
+        list,
+        head !== undefined ? (chunk) => ["reset", "-q", "--", ...chunk] : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
+        git,
+    );
     // Everything the targets still hold is now on the unstaged side (they were just unstaged), so that is the
     // only list to consult: "added" there means untracked (delete it), anything else is tracked (restore it).
     const after = (await changedFiles(dir, git)).unstaged.filter((change) => targets.has(change.path));
     const tracked = after.filter((change) => change.status !== "added").map((change) => change.path);
     const untracked = after.filter((change) => change.status === "added").map((change) => change.path);
-    if (tracked.length > 0) {
-        await git(dir, ["checkout", "-q", "-f", "HEAD", "--", ...tracked]);
-    }
-    if (untracked.length > 0) {
-        await git(dir, ["clean", "-q", "-f", "-f", "-d", "--", ...untracked]);
-    }
+    await overPaths(dir, tracked, (chunk) => ["checkout", "-q", "-f", "HEAD", "--", ...chunk], git);
+    await overPaths(dir, untracked, (chunk) => ["clean", "-q", "-f", "-f", "-d", "--", ...chunk], git);
 };

@@ -140,7 +140,7 @@ import {
     revertCommit,
 } from "./git/changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes/changes-diff.js";
-import { commitIndex, discardPaths, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
+import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
 import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/ops/commit-message.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/ops/branches.js";
 import { abortOperation, type GitOperation, operationInProgress } from "./git/ops/operation.js";
@@ -622,6 +622,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
             blobs: Map<string, { head?: string; index?: string }>;
         }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
+        // The whole repository in one spawn, no list built and none to chunk: what a scope that narrows nothing
+        // resolves to, and the reason "stage everything and commit" has no size beyond which it stops working.
+        readonly stageAll: (dir: string) => Promise<void>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
@@ -1460,6 +1463,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             sync: gitSync,
             changedFiles,
             stagePaths,
+            stageAll,
             unstagePaths,
             commitIndex,
             discardPaths,

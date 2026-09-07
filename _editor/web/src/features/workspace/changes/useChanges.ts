@@ -5,9 +5,10 @@ import type {
     GitActionResult,
     GitChangesResponse,
     GitDiffSide,
+    GitTarget,
     OriginAgent,
     RepoChanges,
-    RepoPaths,
+    RepoTarget,
 } from "@intentic/api-contract";
 import type { PushRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
@@ -21,6 +22,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { refusalSummary } from "../health/fixProposal";
 import { outgoingWork } from "../push/outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
+import { truncatedTotal } from "./truncation";
 import { resetEditBuffers } from "../files/useEditBuffers";
 import { usePushRun } from "../push/usePushRun";
 import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
@@ -274,6 +276,23 @@ const invalidateChanges = (): Promise<void> =>
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
 
+/* A GROUP'S TARGET, on the wire. The repo is in the URL; what is left is the answer to "which of its changes",
+ * and the two shapes are not interchangeable:
+ *
+ *   paths ⇒ rows a person picked. Enumerated, and therefore limited to rows the panel actually drew.
+ *   scope ⇒ a description (a side, one conversation's landed files, both, or neither for the whole repo) that
+ *           the daemon resolves against the repository itself.
+ *
+ * Every BULK verb here sends the second, and that is the fix for the thing this panel used to do to a large
+ * change set: the review truncates past the daemon's per-repo budget (RepoChanges.truncated), so "Stage all"
+ * built from rows meant "stage the five hundred you can see", and a directory overhaul had to be recorded five
+ * hundred files at a time, one round of stage-and-commit per batch, with no way to reach the rest. A scope has
+ * no such ceiling and costs one `git status` however many files answer to it. */
+const targetBody = (target: GitTarget): Record<string, unknown> => ({
+    ...(target.paths !== undefined ? { paths: target.paths } : {}),
+    ...(target.scope !== undefined ? { scope: target.scope } : {}),
+});
+
 /* The commit's own answer, folded into the cached review set (the rule itself is spliceRepoChanges). Nothing is
  * written when the cache is empty: there is nothing to splice into, and seeding it here would paint a one-repo
  * review over a panel that has never loaded, the query's own fetch is what fills it.
@@ -292,12 +311,12 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 
 // Commit. git can't span repos, so each group gets its own real commit on its own branch, all sharing the
 // message. `stageFirst` is VSCode's "stage all and commit", for the case where nothing is staged yet, and the
-// group says HOW MUCH: the whole repo through the daemon's `all` shape (`git commit -a`, the only reading that
-// also reaches rows the daemon truncated past its budget), or exactly the `paths` the panel's origin filter
-// narrowed to. Either way the daemon stages inside the repo lock and then records the whole index, never a
-// partial commit, which is what keeps it honest about what the rows showed.
+// group's target says HOW MUCH: an empty one is the whole repo, a scope is whatever it describes (the origin
+// filter's conversation, say). Either way the daemon stages inside the repo lock and then records the whole
+// index, never a partial commit, which is what keeps it honest about what the rows showed.
 //
-// Without `stageFirst` the index alone decides, and `paths` is not sent: the panel's target is the staged repos.
+// Without `stageFirst` no target is sent at all: the index alone decides, and the panel's scope is the staged
+// repos.
 //
 // NO REFETCH ON THE HAPPY PATH, unlike every other verb here. Each commit answers with its own repo's rows and
 // they are spliced in as it lands, so by the time the batch is done the review is already correct, where the
@@ -309,7 +328,7 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // MARKED WHILE IT RUNS, so the panel can say so. The daemon reports the same fact on every changes response and
 // the two are unioned at the read, this half is what makes the button change on the click instead of a
 // round-trip later, and the daemon's half is what a reloaded tab has instead of this one.
-const commitRepos = async (groups: readonly RepoPaths[], message: string, stageFirst: boolean): Promise<void> => {
+const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<void> => {
     committingHere.value = groups.map((group) => group.repo);
     try {
         await runBatch(
@@ -319,7 +338,7 @@ const commitRepos = async (groups: readonly RepoPaths[], message: string, stageF
                 run: async (): Promise<void> => {
                     const result = await post<CommitResult>(group.repo, `commit`, {
                         message,
-                        ...(!stageFirst ? {} : group.paths === undefined ? { all: true } : { paths: group.paths }),
+                        ...(stageFirst ? { stage: targetBody(group) } : {}),
                     });
                     await applyCommitResult(group.repo, result);
                 },
@@ -331,15 +350,15 @@ const commitRepos = async (groups: readonly RepoPaths[], message: string, stageF
     }
 };
 
-// Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with no `paths`
-// discards the whole repo. Drop edit buffers + refresh the tree (the worktree changed under any open file).
-const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
+// Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with an empty
+// target discards the whole repo. Drop edit buffers + refresh the tree (the worktree changed under any open file).
+const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
     runBatch(
         groups.map((group) => ({
             scope: group.repo,
             action: `Discard failed`,
             run: async (): Promise<void> => {
-                await post(group.repo, `discard`, group.paths !== undefined ? { paths: group.paths } : {});
+                await post(group.repo, `discard`, targetBody(group));
             },
         })),
         () => {
@@ -381,15 +400,18 @@ const abortOperation = (repo: string): Promise<void> =>
 
 // Index moves. The worktree is untouched, so unlike discard there is nothing to reset or re-read beyond the
 // review set itself, no buffer drop, no tree refetch.
-const stageGroups = (groups: readonly RepoPaths[], staged: boolean): Promise<void> =>
+// A group whose target is an EMPTY path list is dropped: that is a selection nobody made, and sending it would
+// read as the whole-repo target on the wire. A group carrying a scope always goes, since a scope that matches
+// nothing is a fact only the daemon can establish.
+const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<void> =>
     runBatch(
         groups
-            .filter((group) => group.paths !== undefined && group.paths.length > 0)
+            .filter((group) => group.paths === undefined || group.paths.length > 0)
             .map((group) => ({
                 scope: group.repo,
                 action: staged ? `Stage failed` : `Unstage failed`,
                 run: async (): Promise<void> => {
-                    await post(group.repo, staged ? `stage` : `unstage`, { paths: group.paths });
+                    await post(group.repo, staged ? `stage` : `unstage`, targetBody(group));
                 },
             })),
         invalidateChanges,
@@ -510,13 +532,17 @@ export function useChanges() {
     // that needs attention was a bug) and the rows the daemon truncated past its per-repo budget: the badge
     // reports how much work EXISTS, not how much of it got shipped.
     const count = computed(() =>
-        repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0), 0),
+        repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + truncatedTotal(repo), 0),
     );
-    // How much a plain Commit would record, across every repo, what the commit box reads out, and what decides
-    // whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act
-    // (each has its own remote and branch), so the panel reads `repo.remote` straight off the row, for the row
-    // pills and for the primary button's aggregate alike, which hands syncAll the resolved per-repo targets.
-    const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length, 0));
+    /* How much a plain Commit would record, across every repo: what the commit box reads out, and what decides
+     * whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act
+     * (each has its own remote and branch), so the panel reads `repo.remote` straight off the row, for the row
+     * pills and for the primary button's aggregate alike, which hands syncAll the resolved per-repo targets.
+     *
+     * The staged rows the daemon could not fit count too, because the COMMIT takes them: it records the index,
+     * not the listing. Off the rows alone this read "500 staged" beside a button about to record five thousand,
+     * which is the state a big overhaul lands in the moment you stage it. */
+    const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + (repo.truncated?.staged ?? 0), 0));
     // What a clean tree still owes its remotes, the other half of "is there anything to do here", which the
     // count above deliberately says nothing about. See outgoingWork.ts for why it is outgoing-only.
     const outgoing = computed(() => outgoingWork(repos.value));

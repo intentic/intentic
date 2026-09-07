@@ -4,41 +4,105 @@ import { LandConflictSchema, LandedMessageSchema } from "./agents.js";
 import { CommandRunSchema } from "./ci.js";
 import { RefNameSchema } from "./internal.js";
 import { RepoParamSchema } from "./shared.js";
-// What a commit records, three shapes, each a real git spelling. The last two are for the case where nothing
-// is staged yet and the caller has said what to stage; they are alternatives, and a caller sends at most one:
-//   absent      ⇒ commit whatever is staged (plain `git commit`)
-//   all: true   ⇒ stage every change in the repo, then commit (`commit -a`; VSCode's "stage all and commit")
-//   paths       ⇒ `git add` those repo-relative paths, then commit the index
-//
-// `paths` is emphatically NOT `commit --only`. The index IS git's mechanism for choosing what a commit
-// contains, so a second path-selection channel alongside it could only disagree with it: a partial commit over
-// a half-staged file records the WORKTREE content while the row the user picked showed the INDEX content. This
-// stages and then records the whole index, which is why it is safe, and why it also survives a merge, where
-// git refuses a partial commit outright (and refuses it only AFTER moving the index).
+
+// Which of the working tree's diffs a row (or a scope, below) is about, the same split the Changes panel lists
+// under. A path that is staged AND edited again has genuinely different diffs, so a side is never defaulted: a
+// caller that doesn't say which one it means doesn't know what it is showing.
+//   staged     ⇒ index vs HEAD      (what a bare `git commit` would record)
+//   unstaged   ⇒ worktree vs index  (untracked ⇒ no before side)
+//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included, an unmerged path
+//                                    has no stage 0, so the index is not a side it can be diffed against)
+export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
+export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
+
+/* WHAT A BULK GIT ACTION APPLIES TO, and the whole reason it is not simply a list of paths.
+ *
+ * A review surface enumerates: it draws rows, and it has to stop somewhere (RepoChanges.truncated — a cloned
+ * monorepo or a directory overhaul runs to five and six figures, which no browser should hold and no screen can
+ * draw). An ACTION must not inherit that ceiling. When it did, every bulk button in the Changes panel meant
+ * "the rows we happened to ship": "Stage all" over 5,000 changes staged 500, and, because staging anything
+ * takes the panel out of its stage-everything shape, the user was then locked into recording the work 500 files
+ * at a time for as long as it took. The cap was right; defining the verb in terms of it was not.
+ *
+ * So a target is one of two things, never both:
+ *   paths ⇒ exactly these, the rows a person picked off the list. Bounded, because a browser built the list.
+ *   scope ⇒ a DESCRIPTION the daemon resolves against the repository's live status, which is the only reading
+ *           that cannot be stale and the only one whose cost does not grow with the answer. `git add -A` names
+ *           no paths at all; a side or an origin costs one status read and a handful of chunked spawns.
+ *
+ * Neither ⇒ the whole repository, which is what the discard route has always meant by an absent `paths`. */
+export const GitScopeSchema = z.object({
+    // Which of the three lists RepoChanges splits a repo into. Absent ⇒ every side (the whole repo).
+    side: GitDiffSideSchema.optional().describe(
+        "Narrow to one of the three lists a repository's changes split into. Leave it out for all of them, which is the whole repository.",
+    ),
+    /* WHICH CONVERSATION LANDED IT, the same attribution `RepoChanges.origins` carries, resolved daemon-side
+     * against the same registry the review reads it from. This is the scope behind the panel's "From <agent>"
+     * chip, and it is exactly the one a path list cannot express honestly: an agent that landed a directory
+     * overhaul has thousands of files in the tree and at most a few hundred rows on screen, so a client-built
+     * list would have committed a fraction of its work under a message describing all of it. */
+    origin: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Narrow to the files one conversation landed. Leave it out for everyone's, including your own edits."),
+});
+export type GitScope = z.infer<typeof GitScopeSchema>;
+
+/* How many paths one request may name explicitly. A WIRE bound, not a git one: the daemon splits whatever it
+ * resolves across as many invocations as the operating system's argv ceiling requires (changes-index.ts), so
+ * nothing downstream cares how long a list is. What this bounds is a request body a browser builds out of rows
+ * it drew, which is a different question and has a different right answer — past a few hundred rows a client
+ * should be naming a scope, not enumerating. */
+export const MAX_ACTION_PATHS = 1000;
+
+const ActionPathsSchema = z
+    .array(z.string().min(1))
+    .max(MAX_ACTION_PATHS)
+    .describe("Exactly these repository-relative paths. For anything bigger than a hand-picked selection, describe a scope instead.");
+
+// The target as it rides on a request. Deliberately two optional fields rather than a union: `{}` is a
+// meaningful value (the whole repository), which a discriminated union has no way to spell.
+export const GitTargetSchema = z.object({
+    paths: ActionPathsSchema.optional(),
+    scope: GitScopeSchema.optional().describe(
+        "What to act on, described rather than listed, so it covers every matching file in the repository and not just the ones a list could hold.",
+    ),
+});
+export type GitTarget = z.infer<typeof GitTargetSchema>;
+
+// Both together is a caller that has not decided which one it means, and silently preferring either would make
+// the other a lie. Refused at the door instead.
+const ONE_TARGET = { message: "name paths or a scope, not both" } as const;
+const oneTarget = (target: GitTarget): boolean => target.paths === undefined || target.scope === undefined;
+
+/* What a commit records. The index IS git's mechanism for choosing that, so `stage` is not a second
+ * path-selection channel alongside it: it says what to `git add` FIRST, and the commit that follows records the
+ * whole index either way.
+ *
+ *   stage absent           ⇒ commit whatever is already staged (plain `git commit`)
+ *   stage: {}              ⇒ stage every change in the repository, then commit (VSCode's "stage all and commit")
+ *   stage: { scope }       ⇒ stage everything the scope describes, then commit
+ *   stage: { paths }       ⇒ stage exactly those paths, then commit
+ *
+ * Never `commit --only`. A partial commit over a half-staged file records the WORKTREE content while the row
+ * the user picked showed the INDEX content, and git refuses one outright mid-merge — after moving the index. */
 export const CommitSchema = RepoParamSchema.extend({
     message: z.string().min(1).describe("The commit message."),
-    all: z
-        .boolean()
+    stage: GitTargetSchema.refine(oneTarget, ONE_TARGET)
         .optional()
-        .describe("Stage every change in the repository first, then commit. An alternative to naming paths, not a companion to it."),
-    paths: z
-        .array(z.string().min(1))
-        .max(500)
-        .optional()
-        .describe("Stage exactly these paths, then commit everything staged. Leave this and `all` out to commit whatever is already staged."),
+        .describe(
+            "What to stage before committing. Leave it out to record the index exactly as it stands; give it an empty object to stage everything first.",
+        ),
 });
-export const DiscardSchema = RepoParamSchema.extend({
-    // Repo-relative paths to discard; absent ⇒ discard every uncommitted change in the repo.
-    paths: z
-        .array(z.string().min(1))
-        .max(500)
-        .optional()
-        .describe("Which paths to throw away. Leave it out to discard every uncommitted change in the repository."),
-});
-// Index moves. Both are per-path and never touch the worktree, so they are always safe and need no checkpoint.
-export const GitStageSchema = RepoParamSchema.extend({
-    paths: z.array(z.string().min(1)).max(500).describe("The paths to move. Nothing on disk changes, so this is always safe and always reversible."),
-});
+export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
+    .describe("What to throw away. Neither paths nor a scope discards every uncommitted change in the repository.")
+    .refine(oneTarget, ONE_TARGET);
+// Index moves. Neither touches the worktree, so they are always safe and need no checkpoint. An empty target is
+// the whole repository, which for staging is `git add -A` and for unstaging is the entire index.
+export const GitIndexMoveSchema = RepoParamSchema.extend(GitTargetSchema.shape)
+    .describe("What to move across the index. Nothing on disk changes either way.")
+    .refine(oneTarget, ONE_TARGET);
 // `branch` defaults to the checked-out one. There is deliberately no "set upstream" flag: the daemon publishes
 // (`push -u`) exactly when the branch has no upstream yet, which is never destructive and is the only way the
 // result is coherent, see pushBranch.
@@ -82,15 +146,6 @@ export const GitFileWriteSchema = RepoParamSchema.extend({
     path: z.string().min(1).describe("Where to write, relative to the repository root. Missing folders are created."),
     content: z.string().describe("The file's whole new contents."),
 });
-// Which of the working tree's diffs to open, the same split the Changes panel lists under. A path that is
-// staged AND edited again has genuinely different diffs, so the side is required rather than defaulted: a
-// caller that doesn't say which one it means doesn't know what it is showing.
-//   staged     ⇒ index vs HEAD      (what a bare `git commit` would record)
-//   unstaged   ⇒ worktree vs index  (untracked ⇒ no before side)
-//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included, an unmerged path
-//                                    has no stage 0, so the index is not a side it can be diffed against)
-export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
-export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 export const GitFileDiffQuerySchema = RepoParamSchema.extend({
     path: z.string().min(1).describe("The file, relative to the repository root."),
     side: GitDiffSideSchema.describe(
@@ -111,13 +166,14 @@ export const GitFileSchema = z.object({
 });
 // CommitResultSchema is declared further down, after the RepoChanges/OriginAgent shapes a commit answers with.
 
-// One repo's slice of a workspace-wide git action: the whole repo, or only the repo-relative paths named. The
-// same pair the per-repo routes take as {repo} + `paths`, in the one shape a caller that spans repos can send.
-export const RepoPathsSchema = z.object({
-    repo: z.string().min(1).describe("Which repository."),
-    paths: z.array(z.string().min(1)).max(500).optional().describe("Which of its paths. Leave it out for the whole repository."),
-});
-export type RepoPaths = z.infer<typeof RepoPathsSchema>;
+// One repo's slice of a workspace-wide git action: a target (above) with the repo it belongs to. git cannot
+// span repositories, so a caller that does fans out into one of these per repo, and each carries its own
+// answer to what the action covers there.
+export const RepoTargetSchema = z
+    .object({ repo: z.string().min(1).describe("Which repository.") })
+    .extend(GitTargetSchema.shape)
+    .refine(oneTarget, ONE_TARGET);
+export type RepoTarget = z.infer<typeof RepoTargetSchema>;
 // One change to a file, an uncommitted working-tree change (status vs HEAD, untracked included), an agent
 // worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
 // undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).
@@ -276,15 +332,24 @@ export const RepoChangesSchema = z.object({
         .describe(
             "Edits on disk that are not staged, plus untracked files. A path can be in both lists at once with different line counts, which is why they are separate.",
         ),
-    // How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a
-    // mass delete carries six-figure change lists, a payload no panel can render and no browser should hold,
-    // so past the daemon's per-repo budget the lists arrive truncated and this carries the dropped count, which
-    // the panel adds to its badges and states under the group. Absent ⇒ the lists are complete.
+    /* How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a mass
+     * delete carries six-figure change lists, a payload no panel can render and no browser should hold, so past
+     * the daemon's per-repo budget the lists arrive truncated and this says what fell off. Absent ⇒ complete.
+     *
+     * PER SIDE, not one total, because the two answer different questions and the readouts that matter are the
+     * per-side ones. "How much would a commit record right now" is `staged.length` plus this side's share, and
+     * with a single figure a caller could not work out which side it belonged to: it would read a repo with
+     * five thousand staged files as five hundred, directly beside the button about to record all of them.
+     * Which side loses rows is the daemon's business (staged outranks unstaged), and it is not derivable from
+     * the lists, so it is stated. */
     truncated: z
-        .number()
+        .object({
+            staged: z.number().describe("Staged changes not listed above."),
+            unstaged: z.number().describe("Unstaged changes not listed above."),
+        })
         .optional()
         .describe(
-            "How many changes were cut from the two lists above. A freshly cloned monorepo or a mass delete runs to six figures, which no screen can draw, so past a budget the lists arrive short and this says by how much. Absent means they are complete.",
+            "How many changes were cut from each of the two lists above. A freshly cloned monorepo or a mass delete runs to six figures, which no screen can draw, so past a budget the lists arrive short and this says by how much on each side. Absent means they are complete.",
         ),
     // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
     remote: GitRemoteStateSchema.optional().describe("Where this repository stands against its remote."),

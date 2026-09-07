@@ -187,7 +187,10 @@ test("the git-history graph resolves the 'root' scope to /work: reads, and a HEA
     expect(await errorCode(client.git.log({ repo: "nope" }))).toBe("NOT_FOUND");
 });
 
-test("git.commit records the index by default and stages everything first for `all`", async () => {
+/* Every commit records the INDEX; `stage` only decides what is in it first. One spelling for both shapes is
+ * deliberate: the whole-repo one used to route to `commitAll`, which commits `--no-verify`, so whether the
+ * repository's own commit hooks ran depended on whether the user had staged anything beforehand. */
+test("git.commit records the index, staging the whole repo first when the target says so", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
     const calls: string[] = [];
     const client = clientFor(
@@ -196,9 +199,11 @@ test("git.commit records the index by default and stages everything first for `a
                 workspace,
                 git: {
                     ...services().git,
-                    commitAll: async (dir, message) => {
-                        calls.push(`all ${dir} ${message}`);
-                        return true;
+                    stageAll: async (dir) => {
+                        calls.push(`stage-all ${dir}`);
+                    },
+                    stagePaths: async (dir, paths) => {
+                        calls.push(`stage ${dir} ${paths.join(",")}`);
                     },
                     commitIndex: async (dir, message) => {
                         calls.push(`index ${dir} ${message}`);
@@ -208,11 +213,129 @@ test("git.commit records the index by default and stages everything first for `a
             }),
         ),
     );
-    // A bare message commits exactly the index: the only thing the panel ever asks for, because staging IS
-    // how the user chose. There is no path-scoped shape to route to any more.
+    // A bare message commits exactly the index: staging IS how the user chose. There is no path-scoped
+    // `commit --only` shape to route to.
     expect(await client.git.commit({ repo: "root", message: "m1" })).toEqual({ committed: true });
-    expect(await client.git.commit({ repo: "intent", message: "m2", all: true })).toEqual({ committed: true });
-    expect(calls).toEqual([`index ${workspace.root} m1`, `all ${join(workspace.root, "intent")} m2`]);
+    // An empty target is the whole repository, which git can stage without naming a single path — which is why
+    // this shape has no size beyond which it stops working.
+    expect(await client.git.commit({ repo: "intent", message: "m2", stage: {} })).toEqual({ committed: true });
+    // Named paths still go through as themselves: a hand-picked selection is the one thing enumeration is for.
+    expect(await client.git.commit({ repo: "intent", message: "m3", stage: { paths: ["a.ts", "b.ts"] } })).toEqual({ committed: true });
+    const intent = join(workspace.root, "intent");
+    expect(calls).toEqual([
+        `index ${workspace.root} m1`,
+        `stage-all ${intent}`,
+        `index ${intent} m2`,
+        `stage ${intent} a.ts,b.ts`,
+        `index ${intent} m3`,
+    ]);
+});
+
+// Paths and a scope together is a caller that has not decided which it means; preferring either silently would
+// make the other a lie, so the contract refuses it before any git runs.
+test("git actions refuse a target that names both paths and a scope", async () => {
+    const client = clientFor(createApp(services({ workspace: tempWorkspace([]) })));
+    expect(await errorCode(client.git.stage({ repo: "root", paths: ["a.ts"], scope: { side: "unstaged" } }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.git.discard({ repo: "root", paths: ["a.ts"], scope: {} }))).toBe("BAD_REQUEST");
+});
+
+/* THE POINT OF THE WHOLE SHAPE, stated as a test: a scope acts on more files than any request could name.
+ *
+ * The review ships at most MAX_REPO_CHANGES rows per repo and one request may name at most MAX_ACTION_PATHS
+ * paths, so a panel that built "Stage all" out of its rows could only ever move a few hundred of a big change
+ * set — and, having filled the index, dropped out of its stage-everything shape, which is how recording a
+ * directory overhaul became rounds of five hundred files. Read from the repo instead, the same click covers all
+ * of it, and the numbers below are deliberately past both ceilings. */
+test("a side scope stages every matching file, past anything a request could enumerate", async () => {
+    const unstaged = Array.from({ length: 1500 }, (_, index) => ({ path: `src/f${index}.ts`, status: "modified" as const }));
+    const staged: string[][] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                git: {
+                    ...services().git,
+                    changedFiles: async () => ({ conflicted: [], staged: [], unstaged, blobs: new Map() }),
+                    stagePaths: async (_dir, paths) => {
+                        staged.push([...paths]);
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.stage({ repo: "root", scope: { side: "unstaged" } })).toEqual({ ok: true });
+    expect(staged).toEqual([unstaged.map((change) => change.path)]);
+    // The same list is beyond what the route would have accepted as an argument, which is exactly why the panel
+    // describes it rather than sending it.
+    expect(await errorCode(client.git.stage({ repo: "root", paths: unstaged.map((change) => change.path) }))).toBe("BAD_REQUEST");
+});
+
+/* AN INDEX MOVE NEVER TOUCHES THE WORKTREE, WHICH IS WHY IT TAKES NO CHECKPOINT, and that is the whole of what
+ * makes stage and unstage safe to fire from a hover button with no confirmation in front of them.
+ *
+ * The claim was only ever written down in a comment, which is how it survived a rewrite of these very routes
+ * without anything noticing: `stage` gained a scope that reads the repo's status and resolves it to paths, and
+ * "it resolves like discard does" is one careless line away from "it should checkpoint like discard does". A
+ * checkpoint here would be a snapshot of the whole tree on every click of `+`, which on the change sets this
+ * work is about is exactly the cost the panel cannot afford; skipping one on `discard` would be unrecoverable
+ * work destroyed. So both halves are pinned together, against the same repo, in one test: the comment above
+ * GitIndexMoveSchema now has something underneath it that fails when it stops being true. */
+test("stage and unstage record no checkpoint and no user write; discard does both", async () => {
+    const workspace = tempWorkspace([]);
+    const snapshots: string[] = [];
+    let writes = 0;
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                history: fakeHistory({
+                    snapshot: async (trigger, label) => {
+                        snapshots.push(`${trigger} ${label}`);
+                        return undefined;
+                    },
+                    notifyUserWrite: () => {
+                        writes += 1;
+                    },
+                }),
+            }),
+        ),
+    );
+    expect(await client.git.stage({ repo: "root", paths: ["a.ts"] })).toEqual({ ok: true });
+    expect(await client.git.unstage({ repo: "root", paths: ["a.ts"] })).toEqual({ ok: true });
+    // The index moved and the disk did not, so there is nothing a restore point could give back.
+    expect(snapshots).toEqual([]);
+    expect(writes).toBe(0);
+
+    // The verb that DOES rewrite the worktree checkpoints before it runs, and says the tree moved after.
+    expect(await client.git.discard({ repo: "root", paths: ["a.ts"] })).toEqual({ ok: true });
+    expect(snapshots).toEqual(["user before discard in root"]);
+    expect(writes).toBe(1);
+});
+
+// An empty target is the whole repository, and git can stage that without being handed a single path: the one
+// verb in the panel whose cost does not grow with the size of the change set at all.
+test("an empty target stages the whole repo in one command, naming nothing", async () => {
+    const calls: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                git: {
+                    ...services().git,
+                    changedFiles: async () => {
+                        calls.push("status");
+                        return { conflicted: [], staged: [], unstaged: [], blobs: new Map() };
+                    },
+                    stageAll: async () => {
+                        calls.push("stage-all");
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.stage({ repo: "root", scope: {} })).toEqual({ ok: true });
+    // No status read either: there is nothing to resolve.
+    expect(calls).toEqual(["stage-all"]);
 });
 
 /* The commit answers with the repo it just wrote, so the panel replaces one repo's rows instead of firing the

@@ -8,6 +8,7 @@ import { connectedSandboxes } from "../../sandbox/live/roster";
 import { sandboxJsonQuietly } from "../../sandbox/client/sandboxClient";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { ahead, outgoingWork, unpublished } from "../push/outgoingWork";
+import { truncatedTotal } from "./truncation";
 import { usePushRun } from "../push/usePushRun";
 
 /* WORK THAT EXISTS ON ONE MACHINE AND NOWHERE ELSE, counted across every sandbox but this one.
@@ -190,7 +191,7 @@ export const rowsOf = (box: BoxChanges): LedgerRow[] =>
         sandboxName: box.sandbox.name,
         repo: repo.repo,
         branch: repo.branch,
-        uncommitted: repo.error === undefined ? repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0) : 0,
+        uncommitted: repo.error === undefined ? repo.staged.length + repo.unstaged.length + truncatedTotal(repo) : 0,
         ahead: ahead(repo),
         publish: unpublished(repo),
         unreadable: repo.error !== undefined,

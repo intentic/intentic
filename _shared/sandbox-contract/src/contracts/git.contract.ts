@@ -12,9 +12,9 @@ import {
     GitFileSchema,
     GitFilesSchema,
     GitFileWriteSchema,
+    GitIndexMoveSchema,
     GitOperationStateSchema,
     GitRemoteStateSchema,
-    GitStageSchema,
     GitStatusSchema,
     PushRunSchema,
     PushSchema,
@@ -353,7 +353,7 @@ export const gitContract = {
             path: "/git/{repo}/commit",
             summary: "Commit the pending changes",
             description:
-                "Records a commit with your message. Give it a list of paths to commit only those, or leave it out to commit everything pending. The answer carries the commit it created.",
+                "Records a commit with your message. It commits whatever is staged; add `stage` to stage something first — an empty object for everything pending, or a scope such as one side or one conversation's landed files. The answer carries the commit it created.",
         })
         .input(CommitSchema)
         .output(CommitResultSchema),
@@ -363,29 +363,36 @@ export const gitContract = {
             path: "/git/{repo}/discard",
             summary: "Throw away pending changes",
             description:
-                "Restores files to their committed state and deletes untracked ones. Give it paths to discard only those. The daemon checkpoints the workspace first, so this is recoverable from the timeline.",
+                "Restores files to their committed state and deletes untracked ones. Name paths or a scope to narrow it; with neither it throws away every uncommitted change in the repository. The daemon checkpoints the workspace first, so this is recoverable from the timeline.",
         })
         .input(DiscardSchema)
         .output(OkSchema),
-    // Index moves. Per-path, worktree untouched, so they need no checkpoint and can't fail destructively,
-    // git's own error (an unmatched pathspec) propagates.
+    /* Index moves. The worktree is untouched, so they need no checkpoint and can't fail destructively; git's
+     * own error (an unmatched pathspec) propagates.
+     *
+     * Both take a TARGET rather than a path list, and that is the point of them: a scope covers every matching
+     * file in the repository, including the ones the review had to truncate past its per-repo budget, and it
+     * costs one status read however many there are. A caller that enumerates instead can only ever act on the
+     * rows it managed to draw. */
     stage: oc
         .route({
             method: "POST",
             path: "/git/{repo}/stage",
-            summary: "Mark paths for the next commit",
-            description: "Adds paths to the index. Nothing on disk changes, so this is always safe and always reversible with the unstage call.",
+            summary: "Mark changes for the next commit",
+            description:
+                "Adds changes to the index: exactly the paths you name, everything a scope describes, or the whole repository when you name neither. Nothing on disk changes, so this is always safe and always reversible with the unstage call.",
         })
-        .input(GitStageSchema)
+        .input(GitIndexMoveSchema)
         .output(OkSchema),
     unstage: oc
         .route({
             method: "POST",
             path: "/git/{repo}/unstage",
-            summary: "Take paths back out of the next commit",
-            description: "Removes paths from the index and leaves the file itself untouched. The exact reverse of staging.",
+            summary: "Take changes back out of the next commit",
+            description:
+                "Removes changes from the index and leaves the files themselves untouched, on the same terms as staging. The exact reverse of it.",
         })
-        .input(GitStageSchema)
+        .input(GitIndexMoveSchema)
         .output(OkSchema),
     // Local branch management for the switcher. `branches` also carries per-branch ahead/behind, so the list
     // is enough to render sync state without a call per branch. Checkout is above (it moves HEAD, so it is

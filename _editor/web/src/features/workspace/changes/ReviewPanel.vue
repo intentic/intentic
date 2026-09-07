@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic/api-contract";
+import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
 import { Button, ChangeStatusMark, growTextarea, ui, Modal, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -33,6 +33,7 @@ import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../explorer/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "./changeModules";
+import { sideTotal, truncatedOn, truncatedTotal } from "./truncation";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { useChangeGrouping } from "./useChangeGrouping";
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "./changeWeight";
@@ -720,7 +721,11 @@ const actingRows = (row: Row, sameSideOnly: boolean): readonly Row[] => {
 
 // git can't span repos, so every batch action is grouped into one request per repo. Paths dedupe: a path
 // selected on both sides is still one worktree path to discard.
-const byRepo = (rows: readonly Row[]): RepoPaths[] => {
+//
+// This is the ONE shape that still enumerates, and rightly: these are rows a person clicked, so the list is as
+// long as the selection and no longer. Every verb whose scope is "all of something" sends a scope instead
+// (`scoped` below), because that one has to cover the rows the daemon never shipped.
+const byRepo = (rows: readonly Row[]): RepoTarget[] => {
     const grouped = new Map<string, Set<string>>();
     for (const row of rows) {
         const paths = grouped.get(row.repo);
@@ -742,39 +747,72 @@ const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.
 /* --- when Commit stages for you ------------------------------------------------------------------------------
  * Nothing staged anywhere with work on screen is the one state where Commit stages before it records: VSCode's
  * "would you like to stage all your changes and commit them directly?", made an explicit label instead of a
- * dialog. WHAT it stages is what the list is SHOWING, which makes the origin filter's two states the button's
- * two shapes:
- *   - unfiltered → "Commit all". The whole worktree, through the daemon's `all` shape (`git commit -a`), which
- *     is also the only reading that reaches the rows the daemon truncated past its per-repo budget.
- *   - filtered   → "Commit 7 files". Stage exactly that origin's paths, then commit the index. The chip was
- *     always a whole intent: it narrows the list AND files the session's title into the message, and this is
- *     the part of it the index never heard. It used to be withheld here, on the grounds that "Commit all"
+ * dialog. WHAT it stages is what the list is ABOUT, which makes the origin filter's two states the button's
+ * two shapes, and both are scopes the daemon resolves rather than lists this panel builds:
+ *   - unfiltered → "Commit all". The whole repository, staged in one `git add -A` per repo and then recorded.
+ *   - filtered   → "Commit 7 files". Stage that conversation's landed files, then commit the index. The chip
+ *     was always a whole intent: it narrows the list AND files the session's title into the message, and this
+ *     is the part of it the index never heard. It used to be withheld here, on the grounds that "Commit all"
  *     would sweep every other agent's work under a message about this one; that is an argument for scoping the
  *     staging, not for taking the button away, and the scope was sitting in the filter the whole time.
  * Never once something IS staged: the index is then the user's own answer to what goes in, and Commit records
- * it. Which is also what keeps this safe: with nothing staged there is no staged work for it to sweep in. */
+ * it. Which is also what keeps this safe: with nothing staged there is no staged work for it to sweep in.
+ *
+ * NEITHER SHAPE IS BOUNDED BY THE LISTING any more, which is what stops a big change set trapping the user
+ * here: staging used to move only the drawn rows, so the first "Stage all" on a truncated repo filled the index
+ * with a fraction of it and took this button out of its "Commit all" shape, leaving no way through but another
+ * round of the same. Now the first click covers the side and the second records all of it. */
 const stagesFirst = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
 const commitAll = computed(() => stagesFirst.value && originFilter.value === undefined);
-// The filtered set, per repo. Distinct paths, because a file staged AND edited again is two rows and one path
-// to git; and read through `sidesOf`, the single place the filter is applied, so this can only hold rows the
-// user can actually see.
-const filteredGroups = computed<readonly RepoPaths[]>(() =>
+/* A SCOPE FOR ONE REPO, which is how every "all of this" verb in the panel says what it means.
+ *
+ * It names a side and, when a chip is lit, a conversation; the daemon works out which files those are from the
+ * repository's own status. That indirection is the whole point: the review stops at the daemon's per-repo
+ * budget (RepoChanges.truncated), so a verb built from the rows on screen silently meant "the first five
+ * hundred of them" — which is what turned recording a directory overhaul into rounds of five hundred files.
+ * A scope has no ceiling, and it stays true for the seconds between drawing this and the click. */
+const scoped = (repo: string, side?: GitDiffSide): RepoTarget => ({
+    repo,
+    scope: { ...(side !== undefined ? { side } : {}), ...(originFilter.value !== undefined ? { origin: originFilter.value } : {}) },
+});
+// The filtered set, per repo: every repo the lit chip has rows in, scoped to that chip. Which repos is still
+// read off the visible rows — that is the list the user is looking at — but WHAT it commits in each is the
+// conversation's whole landed set there, truncated rows included.
+const filteredGroups = computed<readonly RepoTarget[]>(() =>
     scannable.value
-        .map((repo) => ({ repo: repo.repo, paths: [...new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path)))] }))
-        .filter((group) => group.paths.length > 0),
+        .filter((repo) => sidesOf(repo).some((section) => section.changes.length > 0))
+        .map((repo) => scoped(repo.repo)),
 );
-// What Commit acts on, in the one shape `commitRepos` and the AI draft both take: a bare repo for the two
-// whole-repo shapes, repo + paths for the filtered one.
-const commitGroups = computed<readonly RepoPaths[]>(() => {
+// What Commit acts on, in the one shape `commitRepos` and the AI draft both take: a bare repo (an empty target,
+// which the daemon reads as the whole repository) for the two whole-repo shapes, a scope for the filtered one.
+const commitGroups = computed<readonly RepoTarget[]>(() => {
     if (!stagesFirst.value) {
         return stagedRepos.value.map((repo) => ({ repo }));
     }
     return commitAll.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : filteredGroups.value;
 });
 const commitTarget = computed(() => commitGroups.value.map((group) => group.repo));
-// Only the filtered shape carries paths, so this reads 0 for every other one, which is exactly when the button
-// has no count to show.
-const commitFiles = computed(() => commitGroups.value.reduce((total, group) => total + (group.paths?.length ?? 0), 0));
+const repoIn = (id: string): RepoChanges | undefined => scannable.value.find((repo) => repo.repo === id);
+const truncatedIn = (id: string): number => {
+    const repo = repoIn(id);
+    return repo === undefined ? 0 : truncatedTotal(repo);
+};
+// Distinct paths a repo is SHOWING: a file staged and edited again is two rows over one path.
+const visibleIn = (repo: RepoChanges): number =>
+    new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path))).size;
+/* How many files the filtered shape is about, for the button's label, and 0 for every other shape, which is
+ * exactly when the button has no count to show.
+ *
+ * Counted off the rows rather than asked of the daemon, so it is a LOWER BOUND wherever the review truncated:
+ * the commit itself covers the scope, the label can only speak for what was drawn. `commitCountable` is that
+ * distinction, and the label drops the number rather than print one the click would beat. */
+const commitFiles = computed(() =>
+    commitGroups.value.reduce((total, group) => {
+        const repo = repoIn(group.repo);
+        return total + (group.scope === undefined ? (group.paths?.length ?? 0) : repo === undefined ? 0 : visibleIn(repo));
+    }, 0),
+);
+const commitCountable = computed(() => !commitGroups.value.some((group) => truncatedIn(group.repo) > 0));
 // An unresolved conflict in ANY repo blocks the button, not just in the repo that has it: a commit here is one
 // commit per repo sharing a message, and git would refuse the conflicted one halfway through: leaving the
 // others committed under a message that describes work that didn't all land. Better to not start.
@@ -799,11 +837,21 @@ const commitReady = computed(
         !changes.actionBusy.value &&
         !commitRunning.value,
 );
-// The count rides the LABEL rather than the readout beside it. This is the one shape whose scope is stated
-// nowhere else on the panel: a bare "Commit" over a list that is hiding rows says nothing about which ones it
-// is about to take.
+/* The count rides the LABEL rather than the readout beside it. This is the one shape whose scope is stated
+ * nowhere else on the panel: a bare "Commit" over a list that is hiding rows says nothing about which ones it
+ * is about to take.
+ *
+ * And it is dropped again wherever the review truncated, in favour of naming the filter. The commit covers the
+ * whole scope there, so a figure counted off the rows would undercount the very commit it labels — "Commit 500
+ * files" over a click that records five thousand is a worse promise than no figure at all. */
 const commitLabel = computed(() =>
-    commitAll.value ? `Commit all` : commitFiles.value > 0 ? `Commit ${plural(commitFiles.value, `file`)}` : `Commit`,
+    commitAll.value
+        ? `Commit all`
+        : commitFiles.value === 0
+          ? `Commit`
+          : commitCountable.value
+            ? `Commit ${plural(commitFiles.value, `file`)}`
+            : `Commit everything from ${filterLabel.value ?? `this filter`}`,
 );
 
 /* --- committing an unfinished session's work ------------------------------------------------------------------
@@ -863,7 +911,7 @@ const writingRepos = computed<ReadonlySet<string>>(
 const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
 const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
 
-const runCommit = async (target: readonly RepoPaths[]): Promise<void> => {
+const runCommit = async (target: readonly RepoTarget[]): Promise<void> => {
     await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
     // Keep the message on failure: it is the one thing here the user typed by hand.
     if (!changes.failures.value.has(COMMIT_SCOPE)) {
@@ -958,19 +1006,33 @@ const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: stri
     staged: { one: `Unstage`, all: `Unstage all`, icon: `undo` },
 };
 
-// The section header's verb as a sentence. Under a filter it says how much it will move and whose, because the
-// button no longer means "this whole side": it means the rows the filter has left on screen, which is a
-// different promise and the reason the button stops hiding itself (see the header's class below).
-const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string =>
-    filterLabel.value === undefined
-        ? INDEX_VERB[side].all
-        : `${INDEX_VERB[side].all}, ${plural(changesOn(repo, side).length, `file`)} from ${filterLabel.value}`;
+/* The section header's verb as a sentence. Under a filter it says whose files it will move, because the button
+ * no longer means "this whole side": it means that conversation's share of it, which is a different promise and
+ * the reason the button stops hiding itself (see the header's class below).
+ *
+ * The COUNT is only offered where the list is complete. This button acts on the side, not on the rows, so where
+ * the daemon truncated, the number on screen is a fraction of what the click moves, and naming a fraction is
+ * worse than naming none. */
+const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string => {
+    if (filterLabel.value === undefined) {
+        return INDEX_VERB[side].all;
+    }
+    const whose = `from ${filterLabel.value}`;
+    return truncatedOn(repo, side) > 0
+        ? `${INDEX_VERB[side].all}, every file ${whose}`
+        : `${INDEX_VERB[side].all}, ${plural(changesOn(repo, side).length, `file`)} ${whose}`;
+};
 
 // Row action: moves the acting rows across the index, in the direction their side implies.
 const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
-// Section action: the whole side, regardless of selection, VSCode's "Stage All Changes" / "Unstage All".
+/* Section action: the whole side, regardless of selection — VSCode's "Stage All Changes" / "Unstage All".
+ *
+ * Sent as a SCOPE, which is the single change that ends the panel's five-hundred-at-a-time behaviour. Built
+ * from the rows, this meant "stage the rows we drew": on a repo the daemon had truncated, staging everything
+ * moved the first budget's worth, the index went non-empty, the box dropped out of its "Commit all" shape, and
+ * the only way through a large change set was to repeat the whole round until the list ran out. */
 const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> =>
-    changes.stageGroups([{ repo: repo.repo, paths: changesOn(repo, side).map((change) => change.path) }], movesIntoIndex(side));
+    changes.stageGroups([scoped(repo.repo, side)], movesIntoIndex(side));
 
 // --- discard -----------------------------------------------------------------------------------------------
 // A modal confirm, like every other destructive git action in this app (the history graph's checkout/reset/drop), rather
@@ -989,7 +1051,13 @@ interface DiscardTarget {
     readonly deletes: readonly string[];
     // Distinct tracked paths returning to their last committed state.
     readonly restores: number;
-    readonly groups: readonly RepoPaths[];
+    /* THE FIGURES DESCRIBE THE ROWS, THE DISCARD DESCRIBES THE SCOPE, and past the daemon's per-repo budget
+     * those differ. A repo-wide discard has always covered every file, listed or not; what is new is that the
+     * filtered one does too. Either way the counts and the deletion list below can only speak for the rows the
+     * panel was given, so this says when they are a floor rather than the total, and the prompt says so too:
+     * understating what is about to leave the disk is the one thing this dialog must not do. */
+    readonly partial: boolean;
+    readonly groups: readonly RepoTarget[];
 }
 const pendingDiscard = ref<DiscardTarget | undefined>(undefined);
 
@@ -1015,26 +1083,36 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
         what: paths > 1 ? `${paths} selected files` : changeLabel(row.repo, change),
         deletes,
         restores: paths - deletes.length,
+        // A selection is exactly as long as the rows the user clicked, so it is never a floor.
+        partial: false,
         groups,
     };
 };
 
-// The repo's own Discard. Under an origin filter it narrows to that origin's files: the row it hangs off is
-// showing that subset, and wiping another agent's work from a list that isn't displaying it would be the worst
-// kind of surprise. Unfiltered it stays the whole repo (no `paths` in the group ⇒ the daemon discards it all).
+/* The repo's own Discard. Under an origin filter it narrows to that conversation's files: the row it hangs off
+ * is showing that subset, and wiping another agent's work from a list that isn't displaying it would be the
+ * worst kind of surprise. Unfiltered it is the whole repo (an empty target ⇒ the daemon discards it all).
+ *
+ * Both are SCOPES now, so the filtered one covers that conversation's landed files past the panel's budget too:
+ * a discard that quietly left thousands of a rejected overhaul's files in the tree is the mirror image of the
+ * commit that could only take five hundred of them. */
 const askDiscardRepo = (repo: RepoChanges): void => {
     // Distinct paths: a path staged AND edited again is two rows but one file on disk, and the prompt is
     // counting what happens to the disk.
     const paths = new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path)));
     const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
+    const partial = truncatedTotal(repo) > 0;
     pendingDiscard.value = {
         what:
             filterLabel.value === undefined
                 ? `every uncommitted change in ${repo.repo}`
-                : `${plural(paths.size, `file`)} from ${filterLabel.value} in ${repo.repo}`,
+                : partial
+                  ? `every file from ${filterLabel.value} in ${repo.repo}`
+                  : `${plural(paths.size, `file`)} from ${filterLabel.value} in ${repo.repo}`,
         deletes,
         restores: paths.size - deletes.length,
-        groups: [originFilter.value === undefined ? { repo: repo.repo } : { repo: repo.repo, paths: [...paths] }],
+        partial,
+        groups: [originFilter.value === undefined ? { repo: repo.repo } : scoped(repo.repo)],
     };
 };
 
@@ -1239,7 +1317,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 // A repo's own change count, for the row badge: every side it is SHOWING, so under an origin filter the badge
 // counts what the list holds rather than advertising rows the filter is hiding. The daemon-truncated remainder
 // counts too: a repo with 30k deletions must read as 30k, not as the 500 rows that fit the payload.
-const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, repo.truncated ?? 0);
+const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, truncatedTotal(repo));
 
 /* --- A COUNT APPEARS ONCE PER RANK, AND ONLY WHERE IT IS NOT ALREADY ON SCREEN --------------------------------
  * The state this rule was written from printed the same figure five times in a hundred pixels: the mode
@@ -1256,7 +1334,7 @@ const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, se
  * The module heading's count is gone outright, at every width. A module bucket has no fold of its own, so its
  * rows are on screen whenever the heading is. */
 const showRepoCount = (repo: RepoChanges): boolean =>
-    repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || (repo.truncated ?? 0) > 0);
+    repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || truncatedTotal(repo) > 0);
 
 /* --- ONE GUTTER, ONE STEP PER RANK ---------------------------------------------------------------------------
  * The list is up to four ranks deep (repo → side → module → file) and it used to draw them at three left edges,
@@ -1949,7 +2027,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
                                 >{{ section.label }}</span
                             >
-                            <span class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
+                            <!-- The side's REAL length, rows plus whatever did not fit, because the button at
+                                 the end of this row acts on the side and not on the listing. -->
+                            <span class="shrink-0 text-2xs text-subtle">{{ sideTotal(group, section.side, section.changes.length) }}</span>
                             <!-- THE SECTION'S ONLY MODULE, said here instead of on a row of its own directly
                                  below: see soleBucket. It is the label, not a control, and it takes the
                                  truncation this row needs (the side's word is nine characters at most and never
@@ -2148,11 +2228,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </template>
                     <!-- The daemon caps how many rows one repo ships (a cloned monorepo, a mass delete); the
                          remainder arrives as a count. Said plainly under the group, because a list that ends
-                         without it reads as complete, and whole-repo actions (commit all, discard repo) still
-                         cover every file, capped or not. -->
-                    <p v-if="(group.truncated ?? 0) > 0" class="py-1 pl-4 text-2xs text-subtle">
-                        …and {{ group.truncated }} more: showing the first {{ repoCount(group) - (group.truncated ?? 0) }}. Repo-wide commit and
-                        discard still cover everything.
+                         without it reads as complete.
+                         And it names what still covers the whole repo, which is now every verb that acts on a
+                         side or a repo rather than on a selection: those send a SCOPE the daemon resolves
+                         against the repository itself, so the cap decides what you can READ here and nothing
+                         about what you can DO. Only the row and multi-select verbs are limited to the list. -->
+                    <p v-if="truncatedTotal(group) > 0" class="py-1 pl-4 text-2xs text-subtle">
+                        …and {{ truncatedTotal(group) }} more: showing the first {{ repoCount(group) - truncatedTotal(group) }}. Stage all, commit and
+                        discard cover every file here, listed or not.
                     </p>
                 </div>
             </div>
@@ -2172,12 +2255,24 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <Modal :open="pendingDiscard !== undefined" size="sm" header="Discard changes" @update:open="pendingDiscard = undefined">
             <template v-if="pendingDiscard">
                 <p class="break-words text-xs text-content">Discard {{ pendingDiscard.what }}?</p>
+                <!-- THE NUMBERS BELOW ARE A FLOOR, said before them rather than after. The panel only holds the
+                     rows the daemon shipped, so on a repo it truncated (a directory overhaul, a mass delete)
+                     the discard covers more files than this dialog can count or list. Saying "at least" is the
+                     only honest way to put a partial count in front of an irreversible verb. -->
+                <p v-if="pendingDiscard.partial" class="mt-2 text-xs text-warning">
+                    More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.
+                </p>
+                <!-- The verb agrees with the count. `plural` inflects the noun and leaves the rest of the
+                     sentence to the caller, so a lone file read "1 untracked file leave the disk" — on the one
+                     line in this dialog that has to be read carefully. -->
                 <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
-                    {{ plural(pendingDiscard.restores, "file") }} return to their last committed state.
+                    {{ pendingDiscard.partial ? `At least ` : `` }}{{ plural(pendingDiscard.restores, "file") }}
+                    {{ pendingDiscard.restores === 1 ? `returns` : `return` }} to their last committed state.
                 </p>
                 <div v-if="pendingDiscard.deletes.length > 0" class="mt-2">
                     <p class="text-xs text-danger">
-                        {{ plural(pendingDiscard.deletes.length, "untracked file") }} leave the disk: they were never committed, so git has no copy:
+                        {{ pendingDiscard.partial ? `At least ` : `` }}{{ plural(pendingDiscard.deletes.length, "untracked file") }}
+                        {{ pendingDiscard.deletes.length === 1 ? `leaves` : `leave` }} the disk: they were never committed, so git has no copy:
                     </p>
                     <ul class="mt-1 max-h-24 overflow-auto">
                         <li v-for="path in pendingDiscard.deletes" :key="path" class="truncate font-mono text-2xs text-muted" dir="rtl">

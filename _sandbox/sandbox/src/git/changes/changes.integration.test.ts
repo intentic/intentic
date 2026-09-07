@@ -19,7 +19,7 @@ import {
     revertCommit,
 } from "./changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes-diff.js";
-import { commitIndex, discardPaths, stagePaths, unstagePaths } from "./changes-index.js";
+import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -496,6 +496,41 @@ test("stagePaths and unstagePaths move a path between the two sides without touc
     expect(afterUnstage.unstaged.map((change) => change.path)).toEqual(["a.txt"]);
     // The edit itself survived both moves: staging is an index operation, never a worktree one.
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("two\n");
+});
+
+/* A path list longer than one command line, against real git. This is the case a directory overhaul actually
+ * produces, and the reason the wire contract no longer caps path arrays at a few hundred: the ceiling is the
+ * operating system's argv limit, it is the daemon's to work around, and `git add` given more than it than it
+ * can hold fails with E2BIG rather than staging what it can. */
+test("stagePaths covers a list too long for one command line", async () => {
+    const dir = await tempRepo();
+    // 600 paths of ~250 bytes is ~150KB of names: more than one invocation may carry, and nothing like the
+    // scale a cloned monorepo reaches.
+    const paths = Array.from({ length: 600 }, (_, index) => `${String(index).padStart(4, "0")}-${"n".repeat(240)}.txt`);
+    await Promise.all(paths.map((path) => writeFile(join(dir, path), "x\n")));
+
+    await stagePaths(dir, paths);
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged.map((change) => change.path).toSorted()).toEqual(paths.toSorted());
+    expect(unstaged).toEqual([]);
+
+    // And back out again, which takes the same splitting: `git reset` has the same argv ceiling as `git add`.
+    await unstagePaths(dir, paths);
+    expect((await changedFiles(dir)).staged).toEqual([]);
+});
+
+// The whole repo without naming anything: one spawn, no list, no ceiling. What a target that narrows nothing
+// resolves to, and why "stage everything and commit" works at any size.
+test("stageAll stages every pending change, untracked files included, ignoring ignored ones", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await writeFile(join(dir, "fresh.txt"), "new\n");
+    await writeFile(join(dir, ".env"), "secret\n");
+
+    await stageAll(dir);
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged.map((change) => change.path).toSorted()).toEqual(["a.txt", "fresh.txt"]);
+    expect(unstaged).toEqual([]);
 });
 
 test("stagePaths stages a deletion, which a bare `git add` would skip", async () => {

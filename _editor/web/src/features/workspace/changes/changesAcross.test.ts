@@ -61,8 +61,10 @@ describe("whether the ledger draws at all", () => {
 describe("what one repo's row says", () => {
     // Uncommitted counts BOTH sides git models plus whatever the daemon cut past its budget: a six-figure
     // change list is exactly the case where the number matters and exactly the one where the rows were cut.
-    it("counts what a truncated scan dropped, not only what it shipped", () => {
-        const [row] = rowsOf(box([repo({ staged: [{ path: `a` }] as never, unstaged: [{ path: `b` }] as never, truncated: 900 })]));
+    it("counts what a truncated scan dropped on either side, not only what it shipped", () => {
+        const [row] = rowsOf(
+            box([repo({ staged: [{ path: `a` }] as never, unstaged: [{ path: `b` }] as never, truncated: { staged: 400, unstaged: 500 } })]),
+        );
         expect(row?.uncommitted).toBe(902);
     });
 

@@ -13,7 +13,7 @@ test("a repo under the budget ships whole, lists untouched", () => {
     expect(capped.conflicted).toBe(conflicted);
     expect(capped.staged).toBe(staged);
     expect(capped.unstaged).toBe(unstaged);
-    expect(capped.truncated).toBe(0);
+    expect(capped.truncated).toEqual({ staged: 0, unstaged: 0 });
 });
 
 test("past the budget, staged fills before unstaged and truncated carries the remainder", () => {
@@ -22,14 +22,16 @@ test("past the budget, staged fills before unstaged and truncated carries the re
     const capped = capRepoChanges([], staged, unstaged);
     expect(capped.staged).toHaveLength(MAX_REPO_CHANGES - 100);
     expect(capped.unstaged).toHaveLength(100);
-    expect(capped.truncated).toBe(4900);
+    // Per side, because the panel reads them apart: what a commit would record is the staged rows plus the
+    // staged share of this, and one total could not be split back out.
+    expect(capped.truncated).toEqual({ staged: 0, unstaged: 4900 });
 });
 
 test("a mass delete ships the first budget-worth of rows and counts the rest", () => {
     const unstaged = changes(30_000, "u");
     const capped = capRepoChanges([], [], unstaged);
     expect(capped.unstaged).toHaveLength(MAX_REPO_CHANGES);
-    expect(capped.truncated).toBe(30_000 - MAX_REPO_CHANGES);
+    expect(capped.truncated).toEqual({ staged: 0, unstaged: 30_000 - MAX_REPO_CHANGES });
 });
 
 test("conflicts are never cut, even past the budget on their own", () => {
@@ -38,5 +40,5 @@ test("conflicts are never cut, even past the budget on their own", () => {
     expect(capped.conflicted).toHaveLength(MAX_REPO_CHANGES + 50);
     expect(capped.staged).toHaveLength(0);
     expect(capped.unstaged).toHaveLength(0);
-    expect(capped.truncated).toBe(20);
+    expect(capped.truncated).toEqual({ staged: 10, unstaged: 10 });
 });

@@ -67,12 +67,14 @@ import type {
     GitLogSchema,
     GitRemoteStateSchema,
     GitReposSchema,
+    GitScopeSchema,
+    GitTargetSchema,
     LandedMessageDraftSchema,
     LandedMessageSchema,
     LandedMessageStepSchema,
     OriginAgentSchema,
     RepoChangesSchema,
-    RepoPathsSchema,
+    RepoTargetSchema,
     SnapshotChangeSchema,
     SnapshotDiffSchema,
     SnapshotSchema,
@@ -351,9 +353,13 @@ export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 // The Changes review (uncommitted work per repo, VSCode-SCM style).
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// One repo's slice of an action that spans repos, the whole repo, or just the paths named. git can't span
-// repos, so every batch verb in the Changes panel (stage, discard, commit, the AI draft) groups into these.
-export type RepoPaths = z.infer<typeof RepoPathsSchema>;
+/* WHAT A BULK GIT VERB ACTS ON: paths a person picked off rows, or a scope the daemon resolves for itself.
+ * git can't span repos, so every batch verb in the Changes panel (stage, discard, commit, the AI draft) groups
+ * into one RepoTarget per repo. The scope form is what lets a verb cover a repo the review had to truncate:
+ * see GitScopeSchema in the sandbox contract for why an action must never inherit a list's ceiling. */
+export type GitScope = z.infer<typeof GitScopeSchema>;
+export type GitTarget = z.infer<typeof GitTargetSchema>;
+export type RepoTarget = z.infer<typeof RepoTargetSchema>;
 // Who an agent id named in a repo's `origins` is, the review carries it, because the fleet roster drops an
 // archived agent while its landed lines are still in the tree.
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;

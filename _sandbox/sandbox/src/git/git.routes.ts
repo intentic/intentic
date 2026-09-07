@@ -2,7 +2,16 @@ import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "../path-exists.js";
-import { gitContract, type GitChange, type GitChanges, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract";
+import {
+    gitContract,
+    type GitChange,
+    type GitChanges,
+    type GitDiffSide,
+    type GitScope,
+    type GitTarget,
+    type OriginAgent,
+    type RepoChanges,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -11,6 +20,7 @@ import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { ActionResult } from "./changes/changes-commits.js";
+import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 import { createPushRuns } from "./ops/push-run.js";
@@ -28,19 +38,24 @@ const COALESCE_MS = 500;
 // what's left because it is what a commit is about to record.
 export const MAX_REPO_CHANGES = 500;
 
-// Apply the budget across the two cuttable sides; `truncated` is what fell off (0 ⇒ shipped whole).
+// Apply the budget across the two cuttable sides; `truncated` is what fell off each (0/0 ⇒ shipped whole).
+// Per side because the panel's readouts are per side: "how much would a commit record" is the staged list plus
+// its own share, and a single total cannot be split back out (see RepoChanges.truncated).
 export const capRepoChanges = (
     conflicted: GitChange[],
     staged: GitChange[],
     unstaged: GitChange[],
-): { conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[]; truncated: number } => {
+): { conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[]; truncated: { staged: number; unstaged: number } } => {
     const stagedBudget = Math.max(0, MAX_REPO_CHANGES - conflicted.length);
     const unstagedBudget = Math.max(0, stagedBudget - staged.length);
     return {
         conflicted,
         staged: staged.length > stagedBudget ? staged.slice(0, stagedBudget) : staged,
         unstaged: unstaged.length > unstagedBudget ? unstaged.slice(0, unstagedBudget) : unstaged,
-        truncated: Math.max(0, staged.length - stagedBudget) + Math.max(0, unstaged.length - unstagedBudget),
+        truncated: {
+            staged: Math.max(0, staged.length - stagedBudget),
+            unstaged: Math.max(0, unstaged.length - unstagedBudget),
+        },
     };
 };
 
@@ -161,6 +176,59 @@ export const createGitRoutes = (services: Services) => {
      * feels for nothing. */
     const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
         services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
+
+    /* WHAT A SCOPE COVERS IN THIS REPO, read from the repo instead of from the request.
+     *
+     * One `git status` answers it at any size, which is the property the whole shape exists for: the review has
+     * to stop shipping rows at MAX_REPO_CHANGES, and a verb defined over the shipped rows can only ever act on
+     * the first five hundred. Defined over the repo, "stage everything under this filter" means the same thing
+     * whether the panel drew all of it or a twentieth of it.
+     *
+     * Attribution is fetched only when a scope asks for it, and its failure is NOT swallowed here, unlike in the
+     * scan. There a missing origin costs a badge; here it would silently narrow a write to nothing, and an
+     * action that quietly does less than it said is worse than one that reports it could not run. */
+    const scopeToPaths = async (repo: string, dir: string, scope: GitScope, sides: readonly GitDiffSide[]): Promise<readonly string[]> => {
+        const { head, conflicted, staged, unstaged } = await services.git.changedFiles(dir);
+        const origins = scope.origin === undefined ? {} : await services.agentOrigins.forRepo(repo, dir, head);
+        return scopedPaths({ conflicted, staged, unstaged }, sides, scope, origins);
+    };
+
+    /* THE THREE WRITE VERBS' TARGETS, each spelled in the git that says it best.
+     *
+     * Staging and discarding the WHOLE repo have single-command spellings that name nothing (`git add -A`;
+     * `reset --hard` + `clean`), so those never build a list at all — which is what keeps the panel's two
+     * biggest buttons flat in cost no matter how many files are pending. Unstaging has no such spelling that is
+     * safe: a bare `git reset` also clears MERGE_HEAD (see changes-index.ts), so it always resolves and chunks.
+     *
+     * Callers must already hold the repo lock: each of these writes the index. */
+    const stageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
+        if (target.paths !== undefined) {
+            await services.git.stagePaths(dir, target.paths);
+            return;
+        }
+        const scope = target.scope ?? {};
+        if (isWholeRepo(scope)) {
+            await services.git.stageAll(dir);
+            return;
+        }
+        await services.git.stagePaths(dir, await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES));
+    };
+    const unstageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
+        await services.git.unstagePaths(
+            dir,
+            target.paths ?? (await scopeToPaths(repo, dir, target.scope ?? {}, UNSTAGEABLE_SIDES)),
+        );
+    };
+    const discardTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
+        if (target.paths !== undefined) {
+            await services.git.discardPaths(dir, target.paths);
+            return;
+        }
+        const scope = target.scope ?? {};
+        // `undefined` is discardPaths' own word for the whole repo: `reset --hard` plus a repo-wide `clean -fd`,
+        // which also removes the now-empty directories a path list has no way to name.
+        await services.git.discardPaths(dir, isWholeRepo(scope) ? undefined : await scopeToPaths(repo, dir, scope, DISCARDABLE_SIDES));
+    };
 
     /* WHICH REPOS ARE MID-COMMIT, the one piece of panel state that cannot live in the browser.
      *
@@ -301,7 +369,7 @@ export const createGitRoutes = (services: Services) => {
                         ...(operation !== undefined ? { operation } : {}),
                         staged: countedStaged,
                         unstaged: countedUnstaged,
-                        ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
+                        ...(capped.truncated.staged + capped.truncated.unstaged > 0 ? { truncated: capped.truncated } : {}),
                         remote,
                         ...(Object.keys(origins).length > 0 ? { origins } : {}),
                     };
@@ -582,8 +650,13 @@ export const createGitRoutes = (services: Services) => {
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
-        // Two commit shapes, both whole-repo (see CommitSchema): `all` stages every change first, otherwise the
-        // index is recorded as it stands. No path-scoped variant, staging is how the user chooses.
+        /* One commit shape (see CommitSchema): the index is recorded, and `stage` optionally says what to put
+         * in it first — a whole repo, a scope, or named paths. There is no path-scoped `commit --only`: staging
+         * is how the user chooses, and a second selection channel could only ever contradict the index.
+         *
+         * `stage` runs INSIDE the repo lock rather than as a separate request the panel makes first, because a
+         * land slipping between the add and the commit is the half-a-patch race the lock exists to close.
+         */
         // Marked as committing from the moment the request arrives, OUTSIDE the lock rather than inside it: a
         // commit queued behind an agent's land has not started and is absolutely running as far as the user is
         // concerned, and that wait is the longest part of the slow case the panel most needs to narrate.
@@ -595,17 +668,19 @@ export const createGitRoutes = (services: Services) => {
                     // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
                     // opaque 500 and the user would read "Commit failed." with nothing to act on.
                     try {
-                        // Nothing was staged, and the caller has said what to stage, so this commit stages first,
-                        // INSIDE the repo lock rather than as a second request the panel makes: a land slipping
-                        // between an add and a commit is exactly the half-a-patch race the lock exists to close.
-                        // A whole-index commit follows, never a partial one (see CommitSchema).
-                        if (input.paths !== undefined) {
-                            await services.git.stagePaths(dir, input.paths);
+                        /* The caller has said what to stage, so this commit stages first, then records the whole
+                         * index, never a partial commit (see CommitSchema).
+                         *
+                         * ONE COMMIT SPELLING for both shapes, where "stage everything" used to have its own
+                         * (`gitCommitAll`). That one commits with `--no-verify`, which is right for the
+                         * provenance commits the daemon makes on an agent's behalf and wrong here: it meant the
+                         * panel's "Commit all" quietly skipped the repository's own commit hooks while its plain
+                         * "Commit" ran them, so which of the user's rules applied depended on whether they had
+                         * staged first. */
+                        if (input.stage !== undefined) {
+                            await stageTarget(input.repo, dir, input.stage);
                         }
-                        const committed =
-                            input.all === true
-                                ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
-                                : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
+                        const committed = await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
                         invalidateScan();
                         /* AND WHAT THE REPO LOOKS LIKE NOW, still inside the lock, the panel's replacement for
                          * the workspace-wide rescan it used to fire the moment this returned. One repo's rows
@@ -635,17 +710,18 @@ export const createGitRoutes = (services: Services) => {
             ),
         ),
         // Index-only moves: the worktree is untouched, so no checkpoint and no history notification, only the
-        // panel's view of what's staged changes.
+        // panel's view of what's staged changes. Both take a target, so "stage all" means the whole side and not
+        // the part of it that fitted in a response (stageTarget).
         stage: i.stage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.git.stagePaths(dir, input.paths);
+                await stageTarget(input.repo, dir, input);
                 invalidateScan();
                 return { ok: true } as const;
             }),
         ),
         unstage: i.unstage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.git.unstagePaths(dir, input.paths);
+                await unstageTarget(input.repo, dir, input);
                 invalidateScan();
                 return { ok: true } as const;
             }),
@@ -709,7 +785,7 @@ export const createGitRoutes = (services: Services) => {
                 // is the timeline's other half and no safety net at all; the sequence verbs get this via
                 // `guarded`, and discard sat outside it purely because it reports no ActionResult.
                 await services.history.snapshot("user", `before discard in ${input.repo}`);
-                await services.git.discardPaths(dir, input.paths);
+                await discardTarget(input.repo, dir, input);
                 invalidateScan();
                 // The worktree changed under the user's feet, record it on the timeline like any user write.
                 services.history.notifyUserWrite();
