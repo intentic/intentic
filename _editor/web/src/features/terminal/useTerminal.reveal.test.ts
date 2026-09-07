@@ -37,10 +37,12 @@ const { createTerminalTabs } = await import("./useTerminal");
 const { showWorkTerminals } = await import("./useWorkTerminals");
 const { clearPendingTerminals } = await import("./terminalsQuery");
 
-type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job"; running: boolean };
-const shell = (name: string, running = true): Listed => ({ name, kind: `shell`, running });
-const job = (key: string, running: boolean): Listed => ({ name: `job-${key}`, label: key, kind: `job`, running });
-const agent = (id: string, running: boolean): Listed => ({ name: `agent-${id}`, label: id, kind: `agent`, running });
+// `activityAt` is the daemon's own stamp on every session it lists; nothing here turns on it (the sweep that
+// reads it has its own cases in terminalSweep.test.ts), so it is simply "just said something".
+type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job"; running: boolean; activityAt: number };
+const shell = (name: string, running = true): Listed => ({ name, kind: `shell`, running, activityAt: Date.now() });
+const job = (key: string, running: boolean): Listed => ({ name: `job-${key}`, label: key, kind: `job`, running, activityAt: Date.now() });
+const agent = (id: string, running: boolean): Listed => ({ name: `agent-${id}`, label: id, kind: `agent`, running, activityAt: Date.now() });
 
 // One panel instance over a mutable session list, standing in for the daemon.
 const panel = (initial: Listed[]) => {
@@ -146,7 +148,7 @@ test("opening an ALREADY-finished terminal from the chat's Bash card still tabs 
 
 test("the panel opens onto a live tab, never onto the dead pane it was last left on", async () => {
     store.set(`ui-test-terminal-active.sbx-1`, `panel-app`);
-    const { attach, tabs } = panel([{ name: `panel-app`, label: `app`, kind: `panel`, running: false }, shell(`web-1`)]);
+    const { attach, tabs } = panel([{ name: `panel-app`, label: `app`, kind: `panel`, running: false, activityAt: Date.now() }, shell(`web-1`)]);
     await attach();
 
     expect(tabs.activeName.value).toBe(`web-1`);

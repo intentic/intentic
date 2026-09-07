@@ -3,7 +3,14 @@ import { activeSandboxId } from "../sandbox/overview/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
-import { createTerminalSession, disposeTerminalSession, mountTerminalSession, parkTerminalSession, retypeTerminalSession, type TerminalSession } from "./terminalSession";
+import {
+    createTerminalSession,
+    disposeTerminalSession,
+    mountTerminalSession,
+    parkTerminalSession,
+    retypeTerminalSession,
+    type TerminalSession,
+} from "./terminalSession";
 import { useTextSize } from "@intentic/ui/text-size";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
@@ -30,6 +37,11 @@ export interface TerminalTab {
     // false dims the pill (an untracked session, e.g. a finished one-shot job) and offers it to the sweep.
     // Required, like the daemon's own field: a tab whose liveness is merely unknown has never existed.
     readonly running: boolean;
+    // When it last produced output, in epoch ms, and 0 when tmux did not say, which is UNKNOWN rather than
+    // 1970. Required for the same reason `running` is: the daemon states it for every session it lists, and an
+    // optional spelling would be a second way to say "unknown" beside the zero that already says it. What ages
+    // a quiet shell for the strip's inactive sweep (terminalSweep.ts), and what the work popover dates rows by.
+    readonly activityAt: number;
     // A user shell (numbered, restartable) vs a dev-server panel session (labeled, restarted via Start) vs an
     // AI-managed agent session (labeled, sparkles icon) the Claude agent's Bash commands run in vs a job
     // session (labeled) the daemon runs user-triggered flows in (capability adds, infra check) vs a managed
@@ -789,10 +801,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // handshake the daemon does not list the session. The claim (addPendingTerminal) is what carries it across:
     // it counts on the rail the moment the tab appears, and it survives the relists that would otherwise drop
     // the tab out from under a live socket. Retired by endSession, or by the first list that names it.
-    // The claim carries a full SESSION, not merely the tab the strip needs: `activityAt` is the one field the
-    // daemon would have filled in had it listed this name yet, and it is simply now, the browser created it a
-    // moment ago. (Inferred rather than annotated: the query's `TerminalSession` and this module's xterm-side
-    // one are different types under the same name.)
+    // `activityAt` is now: the browser created this session a moment ago, which is the answer the daemon would
+    // have given had it listed the name yet, and it is what keeps a brand-new shell out of the inactive sweep
+    // during the seconds before tmux has a stamp of its own for it.
     const claim = (name: string): TerminalTab => {
         const tab = { name, kind: `shell` as const, running: true, activityAt: Date.now() };
         addPendingTerminal(tab);

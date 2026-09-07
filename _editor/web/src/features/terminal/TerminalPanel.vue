@@ -11,6 +11,7 @@ import { useSandbox } from "../sandbox/client/useSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "./terminalMeta";
 import { useTerminalsQuery } from "./terminalsQuery";
+import { inactiveReason, inactiveTerminals, QUIET_MS } from "./terminalSweep";
 import { fetchScrollback } from "./terminalScrollback";
 import { copySelection, pasteIntoTerminal } from "./terminalSession";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
@@ -33,10 +34,13 @@ import { postTurnControl } from "../chat/run/turnStream";
  * The strip lists PLACES: the user's shells and their dev servers. The terminals WORK runs in (an agent's
  * Bash, a capability install) are records of something that already happened, so they tab only while someone is
  * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`); while they run
- * they are one click away in the toolbar's work-terminals popover. That is why there is no broom here: nothing
- * accumulates in the strip to sweep. Every tab still gets the hover-×, and a stopped dev server keeps its pill
- *: it's a place you restart, not litter. Restart is shell-only (a dev-server tab is re-run via Start, or ↑ at
- * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves: they live
+ * they are one click away in the toolbar's work-terminals popover. So the broom in this menu is not for THEM,
+ * which is what the old one was and why it went: what still accumulates here is the user's own shells, each
+ * opened for one command and left at a prompt. "Kill inactive terminals" clears exactly those, by the rule in
+ * terminalSweep.ts (nothing running in it, quiet a while, or simply finished, and never the tab you are on),
+ * and it says how many it has found before you click it. Every tab still gets the hover-×, and a RUNNING dev
+ * server keeps its pill however quiet it is: it's a place you restart, not litter. Restart is shell-only (a
+ * dev-server tab is re-run via Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves: they live
  * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
  * re-requesting the same session still refocuses. Height persists per storageKey; `resizable: false` pins the
  * panel to its container (the mobile route, and the floating window). */
@@ -248,9 +252,29 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
  *     the dialog is where the user finds out which they are. The rule the other two strips already follow (the
  *     chat's "stop N running agents?", the workspace's unsaved-edits dialog).
  *
- * A background process's × merely hides its read-only log view, so it is never either. */
+ * A background process's × merely hides its read-only log view, so it is never either.
+ *
+ * THE THIRD GESTURE IS THE SWEEP, and it is bulk by construction: "Kill 3 inactive terminals" names a count and
+ * nothing else, so it always goes through the dialog, even for a set of one. Which three is a question only the
+ * dialog can answer. */
 const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
-const pendingKill = ref<string[]>();
+/* WHAT THE SWEEP WOULD TAKE, and the clock it ages a quiet shell by. `sweepNow` is stamped when a menu opens
+ * and again when the row (or the palette command) fires, rather than ticked: the count is read at exactly those
+ * moments, and a panel holding a wall clock open for a menu nobody has right-clicked would pay a re-render per
+ * second for it. Re-stamping AT the gesture is also what keeps the number on the row and the kill it performs
+ * the same answer. */
+const sweepNow = ref(Date.now());
+const inactive = computed(() => inactiveTerminals(order.value, { now: sweepNow.value, focused: activeName.value }));
+const sweepInactive = (): void => {
+    sweepNow.value = Date.now();
+    requestKill(
+        inactive.value.map((tab) => tab.name),
+        true,
+    );
+};
+// The set a dialog is standing over, and WHY it opened: a sweep asks a different question ("these have been
+// quiet") from a bulk kill ("these are running"), and only the gesture knows which.
+const pendingKill = ref<{ names: string[]; inactive: boolean }>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
 // The tabs with work in them. `process` is excluded on its own terms: its × closes a view, not a session, so
 // a dev server's log tab never asks a question about a thing the click does not do.
@@ -262,10 +286,19 @@ const isBusy = (name: string): boolean => {
 };
 // What the dialog LISTS: the busy ones when that is why it opened, else the live ones a bulk kill is ending.
 // Never both: a mixed set would ask two questions in one list, and the busy ones are the answer that matters.
-const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value)));
-const pendingKillItems = computed(() =>
-    pendingKillBusy.value.length > 0 ? pendingKillBusy.value : pendingKill.value === undefined ? [] : runningIn(pendingKill.value),
-);
+const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value.names)));
+const pendingKillItems = computed(() => {
+    const pending = pendingKill.value;
+    if (pending === undefined) {
+        return [];
+    }
+    if (pendingKillBusy.value.length > 0) {
+        return pendingKillBusy.value;
+    }
+    // A sweep lists EVERY terminal it takes, finished panes included: they are most of why its count is what it
+    // is, and dropping them here would leave a dialog quietly naming fewer terminals than the row promised.
+    return pending.inactive ? order.value.filter((tab) => pending.names.includes(tab.name)) : runningIn(pending.names);
+});
 const killHeader = computed(() => {
     const busy = pendingKillBusy.value;
     if (busy.length === 1) {
@@ -276,28 +309,43 @@ const killHeader = computed(() => {
     if (busy.length > 1) {
         return `Kill ${busy.length} busy terminals?`;
     }
-    return pendingKillItems.value.length === 1 ? `Kill the running terminal?` : `Kill ${pendingKillItems.value.length} running terminals?`;
+    const count = pendingKillItems.value.length;
+    // A sweep can hold no busy terminal at all (that is the rule it selects on) and it does hold dead ones, so
+    // it says what it is: "running terminals" would be a miscount as well as the wrong word.
+    if (pendingKill.value?.inactive === true) {
+        return `Kill ${count} inactive ${count === 1 ? `terminal` : `terminals`}?`;
+    }
+    return count === 1 ? `Kill the running terminal?` : `Kill ${count} running terminals?`;
 });
-const killBody = computed(() =>
-    pendingKillBusy.value.length > 0
+// How long the sweep's rule waits, said in the dialog rather than kept as a secret in the source: a row that
+// offers to kill three terminals owes the reader the sentence that picked them.
+const QUIET_LABEL = `${Math.round(QUIET_MS / 60_000)} minutes`;
+const killBody = computed(() => {
+    if (pendingKill.value?.inactive === true) {
+        return `Nothing is running in any of them: each has either finished or sat at its prompt for ${QUIET_LABEL}. Scrollback goes with them, and there is no undo.`;
+    }
+    return pendingKillBusy.value.length > 0
         ? `This stops what ${pendingKillBusy.value.length === 1 ? `it is` : `they are`} doing. Scrollback goes with it, and there is no undo.`
-        : `Killing these ends whatever they are running. Scrollback goes with them.`,
-);
-const requestKill = (names: string[]): void => {
+        : `Killing these ends whatever they are running. Scrollback goes with them.`;
+});
+const requestKill = (names: string[], sweep = false): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // Nothing running in any of them, and nothing bulk about the gesture: the click is the whole decision.
-    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
+    // Nothing running in any of them, and nothing bulk about the gesture: the click is the whole decision. A
+    // sweep never takes this road however harmless its set looks, because its row named a count rather than a
+    // terminal, and the dialog is the only place that turns one into the other.
+    if (!sweep && busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
         killTabs(names);
         selectedKeys.value = [];
         return;
     }
-    pendingKill.value = names;
+    pendingKill.value = { names, inactive: sweep };
 };
 const confirmKill = (): void => {
-    if (pendingKill.value !== undefined) {
-        killTabs?.(pendingKill.value);
+    const pending = pendingKill.value;
+    if (pending !== undefined) {
+        killTabs?.(pending.names);
         selectedKeys.value = [];
     }
     pendingKill.value = undefined;
@@ -365,6 +413,8 @@ const customizeHeader = computed(() =>
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTarget = ref<{ groupIndex: number; name: string } | undefined>(undefined);
 const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void => {
+    // The sweep's clock, read at the moment its row is about to be drawn (see `sweepNow`).
+    sweepNow.value = Date.now();
     const group = groups.value[groupIndex] ?? [];
     // Right-click outside the current selection retargets it (VSCode's list behavior).
     if (!isSelected(group)) {
@@ -381,6 +431,17 @@ const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void 
 // row is absent when it would be a no-op, so the menu never offers one.
 const stripItems = computed<MenuItem[]>(() => {
     const items: MenuItem[] = [];
+    // The broom, above the kill-all it is the narrower version of: the two rows escalate in that order, and a
+    // count in the label is what makes the narrower one worth reaching for ("Kill 3 inactive terminals" tells
+    // you whether there is anything to tidy before you commit to finding out). Absent when it would find
+    // nothing, so a strip of shells you are actually using never offers to sweep them.
+    if (killTabs !== undefined && inactive.value.length > 0) {
+        items.push({
+            label: `Kill ${inactive.value.length} inactive ${inactive.value.length === 1 ? `terminal` : `terminals`}`,
+            shortcut: commandShortcut(`terminal.killInactive`),
+            command: sweepInactive,
+        });
+    }
     if (killTabs !== undefined && killable.value.length > 0) {
         items.push({ label: `Kill all terminals`, shortcut: commandShortcut(`terminal.killAll`), command: () => requestKill(killable.value) });
     }
@@ -893,19 +954,30 @@ const registerPanelCommands = (): void => {
             when: `tabSurface == 'terminal'`,
             handler: () => requestKill(killable.value),
         });
+        entries.push({
+            command: `terminal.killInactive`,
+            title: `Kill Inactive Terminals`,
+            icon: `trash`,
+            // Unbound by default, like the cosmetic pickers and the work-terminals toggle. Tidying is a
+            // once-in-a-while act, and any chord for it would live one slip away from the chord that kills the
+            // terminal you are typing in. The strip menu and the palette are its homes; Settings → Keybindings
+            // gives it a key for whoever sweeps often enough to want one.
+            handler: sweepInactive,
+        });
     }
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 };
 
-// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows: kill
-// all, sweep the finished, pop the panel out. It used to pop out on the spot, which turned a right-click that
-// merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on the
-// chat strip.
+// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows: sweep
+// the inactive ones, kill all, pop the panel out. It used to pop out on the spot, which turned a right-click
+// that merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on
+// the chat strip.
 const onBarContextMenu = (event: MouseEvent): void => {
     if (event.target instanceof Element && event.target.closest(`button, [data-term-tab]`) !== null) {
         return;
     }
     event.preventDefault();
+    sweepNow.value = Date.now();
     menuTarget.value = undefined;
     menu.value?.show(event);
 };
@@ -1507,6 +1579,9 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
                 <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
                 <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
+                <!-- What made this one inactive: "finished", or how long since it last said anything. The row's
+                     label was a count, and this is where the count becomes checkable. -->
+                <span v-else-if="pendingKill?.inactive" class="truncate text-xs text-muted">{{ inactiveReason(item, sweepNow) }}</span>
             </template>
             <p class="mt-3 text-xs text-muted">{{ killBody }}</p>
         </ConfirmDialog>

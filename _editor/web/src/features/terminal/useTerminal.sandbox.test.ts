@@ -42,8 +42,8 @@ vi.mock("./terminalSession", () => ({
 const { createTerminalTabs, disposeAllSessions } = await import("./useTerminal");
 const { clearPendingTerminals } = await import("./terminalsQuery");
 
-type Listed = { name: string; kind: "shell"; running: boolean };
-const shell = (name: string): Listed => ({ name, kind: `shell`, running: true });
+type Listed = { name: string; kind: "shell"; running: boolean; activityAt: number };
+const shell = (name: string): Listed => ({ name, kind: `shell`, running: true, activityAt: Date.now() });
 
 // Every panel this test has opened. A real one is always unmounted in the end (a v-if, a route, a reload), and
 // an attached instance that is never detached goes on relisting into the shared storage every other case reads:

@@ -11,6 +11,9 @@
 // click straight through it. The daemon now reports what the live pane is actually running (`command`), and
 // these cases pin the line that draws: idle closes on one click, busy asks and names the command.
 //
+// The same field is what makes the strip's inactive SWEEP safe, so its cases live here too, at the end: a row
+// that offers to kill three terminals is only as good as its account of which three.
+//
 // The pane is mocked wholesale: every case here is about the dialog, not about a terminal.
 import PrimeVue from "primevue/config";
 import Tooltip from "primevue/tooltip";
@@ -55,10 +58,16 @@ vi.mock(`./terminalsQuery`, () => ({
 }));
 
 const { default: TerminalPanel } = await import("./TerminalPanel.vue");
+const { commands } = await import("../../shell/commands/useCommands");
 
-type Listed = { name: string; kind: "shell" | "process"; running: boolean; label?: string; command?: string };
-const idle = (name: string): Listed => ({ name, kind: `shell`, running: true });
-const busy = (name: string, command: string): Listed => ({ name, kind: `shell`, running: true, command });
+type Listed = { name: string; kind: "shell" | "panel" | "process"; running: boolean; activityAt: number; label?: string; command?: string };
+// How long ago the session last said anything, which is what the strip's sweep ages a quiet shell by. Stated
+// per fixture rather than defaulted, so no case decides silently whether it is inside the threshold.
+const minutesAgo = (minutes: number): number => Date.now() - minutes * 60_000;
+const idle = (name: string, quietMinutes = 0): Listed => ({ name, kind: `shell`, running: true, activityAt: minutesAgo(quietMinutes) });
+const busy = (name: string, command: string): Listed => ({ name, kind: `shell`, running: true, command, activityAt: minutesAgo(0) });
+// A pane whose last window has exited: a stopped dev server, a one-shot job's leftover shell.
+const finished = (name: string): Listed => ({ name, kind: `panel`, label: name, running: false, activityAt: 0 });
 
 const mounted: { app: App; host: HTMLElement }[] = [];
 afterEach(() => {
@@ -66,6 +75,9 @@ afterEach(() => {
         app.unmount();
         host.remove();
     }
+    // The strip remembers its active tab and its splits per sandbox, so without this each case would open onto
+    // whatever the last one left focused, and which tab is focused is the one thing the sweep spares.
+    localStorage.clear();
 });
 
 // One panel over a fixed session list, plus the kills it issued.
@@ -107,6 +119,18 @@ const closeButton = (host: HTMLElement, label: string): HTMLElement => {
     return found as HTMLElement;
 };
 const dialogText = (): string => document.body.textContent ?? ``;
+const clickButton = (label: string): void => {
+    const button = [...document.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(label));
+    expect(button, `no button labelled ${label}`).toEqual(expect.any(Object));
+    button?.click();
+};
+// The panel's own registration, which is the strip row's handler and the palette's alike: what these cases are
+// about is which terminals a sweep selects and kills, not how PrimeVue draws a context menu over the bar.
+const runCommand = (id: string): void => {
+    const registered = commands.value.find((entry) => entry.command === id);
+    expect(registered, `no command registered as ${id}`).toEqual(expect.any(Object));
+    registered?.handler();
+};
 
 test(`an idle shell closes on one click: no dialog`, async () => {
     const { killed, host } = await openPanel([idle(`web-aaa`)]);
@@ -158,4 +182,51 @@ test(`the strip says what a busy terminal is running`, async () => {
     const { host } = await openPanel([busy(`web-aaa`, `pnpm build`), idle(`web-bbb`)]);
     expect(host.textContent).toContain(`pnpm build`);
     expect(closeButton(host, `Kill terminal, running pnpm build`)).toEqual(expect.any(Object));
+});
+
+/* THE SWEEP, the other end of the same problem. Shells accumulate one command at a time (open one, run
+ * something, walk away), and until this row the only ways out were the × per pill and "Kill all terminals",
+ * which also takes the three you are in the middle of using. So the row states a count, and what stands behind
+ * that count has to be exactly defensible: nothing running in it, quiet a while or simply over, and never the
+ * tab being read. (The selection rule has its own cases in terminalSweep.test.ts; these are about the panel
+ * doing what the rule says, through the dialog.) */
+test(`the sweep takes the quiet and the finished, and says why each qualified`, async () => {
+    const { killed } = await openPanel([
+        idle(`web-here`, 90),
+        idle(`web-old`, 42),
+        idle(`web-fresh`, 1),
+        busy(`web-build`, `pnpm build`),
+        finished(`panel-app`),
+    ]);
+    runCommand(`terminal.killInactive`);
+    await nextTick();
+    // Nothing dies on the gesture itself: it named a count, and the dialog is where that becomes a list.
+    expect(killed).toEqual([]);
+    expect(dialogText()).toContain(`Kill 2 inactive terminals?`);
+    expect(dialogText()).toContain(`last output 42m ago`);
+    expect(dialogText()).toContain(`finished`);
+    clickButton(`Kill anyway`);
+    await nextTick();
+    // `web-here` is the tab the panel opened onto, `web-fresh` spoke a minute ago, and `web-build` is busy.
+    expect(killed).toEqual([`web-old`, `panel-app`]);
+});
+
+// The fast lane the × and a single menu row take is closed to a sweep however harmless its set looks: a dead
+// pane costs only its scrollback, but "Kill 1 inactive terminal" still does not say WHICH.
+test(`a sweep of nothing but dead panes still asks first`, async () => {
+    const { killed } = await openPanel([idle(`web-here`, 90), finished(`panel-app`)]);
+    runCommand(`terminal.killInactive`);
+    await nextTick();
+    expect(killed).toEqual([]);
+    expect(dialogText()).toContain(`Kill 1 inactive terminal?`);
+});
+
+// And with nothing to tidy it is silent rather than confirming an empty set. (The strip's row is absent
+// entirely in this state, so this is the palette's copy of the same non-action.)
+test(`a strip of terminals in use sweeps nothing`, async () => {
+    const { killed } = await openPanel([idle(`web-here`, 90), idle(`web-fresh`, 2), busy(`web-build`, `vitest`)]);
+    runCommand(`terminal.killInactive`);
+    await nextTick();
+    expect(killed).toEqual([]);
+    expect(dialogText()).not.toContain(`Kill anyway`);
 });
