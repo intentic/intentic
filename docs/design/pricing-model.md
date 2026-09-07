@@ -147,17 +147,18 @@ idea a sentence), for `site-content/src/pricing.ts`:
   hardware. Agents run on the AI plans you already pay for; we never meter tokens or add a markup.
 - **Column 1, "Your machine", $0, "MIT on GitHub, platform included":** as many sandboxes as your hardware
   runs; every capability, extension and automation; shared workspaces, teammates by email; the desktop app,
-  the sandbox API and the whole source tree. CTA (primary): Set up on my computer. Note: You pay your AI
-  providers directly. Nothing of ours is running, so nothing is metered.
+  the sandbox API and the whole source tree; unlimited hours, nothing of ours running, so nothing is metered.
+  CTA (primary): Set up on my computer. Note: Your machine, your AI accounts. Nothing to pay us.
 - **Column 2, "Our machine", "Free, then $20", "a month via Stripe, cancel any time":** free: one hosted
   sandbox, 40 awake hours a month, removed after three weeks unopened; Hosted: always on, no hour ceiling,
   never reclaimed; 4 shared vCPUs, 4 GB memory, 10 GB disk; the same workspace and every feature, on either.
-  CTA: Start instantly. Note: Move the workspace to your own machine whenever you like; the plan is the only
-  thing you cancel.
+  CTA: Start instantly. Note: Our machine, your AI accounts. Move the workspace to your own whenever you like;
+  the plan is the only thing you cancel. The two notes stay parallel: the plan buys a machine, never inference,
+  so neither column may claim the AI providers as its own difference.
 - **FAQ.** *Is any of it paid?* The product is not: every sandbox, capability and shared workspace is free,
   with no tiers and no card, and all of intentic is MIT. The one paid thing is a hosted sandbox at $20 a month,
   for people who would rather not run a machine. *Do I need it to run agents?* No. Agents run on your own AI
-  accounts and your own machine. Only the hosted sandbox differs: free, it has 40 awake hours a month and is
+  accounts, on either machine. Only the hosted sandbox differs: free, it has 40 awake hours a month and is
   removed after three weeks unopened; on the plan it is always on. *Is there a team or enterprise tier?* No.
   Shared workspaces are part of the free product.
 

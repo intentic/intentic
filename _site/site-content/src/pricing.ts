@@ -9,7 +9,9 @@ import { APP_URL } from "./site";
  * pricing band. Every figure comes from hosted.ts; none is typed here.
  *
  * THE QUESTION THAT SEPARATES THE COLUMNS IS WHOSE MACHINE THE AGENTS RUN ON, the same question the
- * positioning doc asks first. Money changes whose machine, never what you can do (docs/design/pricing-model.md). */
+ * positioning doc asks first. Money changes whose machine, never what you can do (docs/design/pricing-model.md).
+ * The two column notes are parallel for that reason: AI accounts are the reader's own in BOTH, so neither note
+ * may put "you pay your AI providers" on one column alone, which reads as the hosted plan covering inference. */
 
 export interface PricingColumn {
     eyebrow: string;
@@ -36,7 +38,7 @@ const columns: PricingColumn[] = [
             "Unlimited hours. Nothing of ours is running, so nothing is metered",
         ],
         cta: { label: "Set up on my computer", href: "/where-it-runs/", primary: true },
-        note: "You pay your AI providers directly.",
+        note: "Your machine, your AI accounts. Nothing to pay us.",
     },
     {
         eyebrow: "Our machine",
@@ -51,7 +53,7 @@ const columns: PricingColumn[] = [
             "Sleeps while you are away; a sleeping machine spends no hours",
         ],
         cta: { label: "Start instantly", href: APP_URL },
-        note: "Move the workspace to your own machine whenever you like; the plan is the only thing you cancel.",
+        note: "Our machine, your AI accounts. Move the workspace to your own whenever you like; the plan is the only thing you cancel.",
     },
 ];
 
@@ -67,7 +69,7 @@ const faq: FaqItem[] = [
         id: "do-i-need-the-plan",
         question: "Do I need it to run agents?",
         answer: [
-            `No. Agents run on your own AI accounts and your own machine. Only the hosted sandbox differs: free, it has ${hosted.freeHours} awake hours a month and is removed after ${idleWeeks} weeks unopened; on the plan it is always on.`,
+            `No. Agents run on your own AI accounts, on either machine. Only the hosted sandbox differs: free, it has ${hosted.freeHours} awake hours a month and is removed after ${idleWeeks} weeks unopened; on the plan it is always on.`,
         ],
         more: { label: "Where your workspace runs", href: "/where-it-runs/" },
     },
@@ -85,7 +87,7 @@ export const pricingContent = {
     columns,
     // The economics band's own provider list, so the two cannot disagree about which plans work.
     providers: {
-        heading: "What you do pay for: your own AI plans.",
+        heading: "What you do pay for, on either machine: your own AI plans.",
         accounts: landingContent.economics.accounts,
         points: landingContent.economics.points,
     },
