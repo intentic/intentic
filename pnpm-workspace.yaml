@@ -218,7 +218,7 @@ catalog:
   # the api mounts it without an adapter.
   "@modelcontextprotocol/sdk": 1.30.0
   "@openai/codex-sdk": 0.147.0
-  "@opencode-ai/sdk": 1.18.18
+  "@opencode-ai/sdk": 1.18.29
   "@opentelemetry/api": 1.9.1
   "@opentelemetry/context-async-hooks": 2.10.0
   "@opentelemetry/core": 2.10.0

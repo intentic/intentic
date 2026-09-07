@@ -542,6 +542,11 @@ it(`offers the app first on a machine we ship a build for, with the command one 
 it(`keeps the command first where there is no build for the reader's machine`, async () => {
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
+    // The mint watcher debounces by 500ms (Setup.vue `mintTimer`). On a loaded CI runner that real wait
+    // plus the async mint can exceed vi.waitFor's default 1s budget, so the clock is walked forward
+    // instead. Only setTimeout is faked: mount's own macrotask flush is already past.
+    vi.useFakeTimers({ toFake: [`setTimeout`, `clearTimeout`] });
+    await vi.advanceTimersByTimeAsync(500);
     await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
     expect(linkLabelled(`Download for Windows`)).toBeUndefined();
     expect(linkLabelled(`Download for Linux`)).toBeUndefined();
