@@ -41,8 +41,22 @@ const PROBLEM_MS = 12_000;
 
 /* A receipt PAUSES while hovered. Vanishing under the cursor that came for its Undo would fail the affordance
  * at the only moment it is ever wanted. The window restarts on each new receipt: the watch reads the ref
- * itself, so replacing it re-arms the full dwell rather than inheriting the tail of the one before. */
-const hovered = ref(false);
+ * itself, so replacing it re-arms the full dwell rather than inheriting the tail of the one before.
+ *
+ * WHICH receipt is under the pointer, not WHETHER one is, and the difference is the whole correctness of the
+ * pause. A card is hovered by an event and un-hovered by its pair, but the card is also the thing that GOES
+ * AWAY: pressing Undo retires the receipt, and a hovered element that is removed fires no mouseleave (Chromium
+ * dispatches enter on whatever replaces it and never leave on it). A plain boolean therefore came to rest on
+ * `true` with nothing under the pointer at all, and since only a mouseleave could ever clear it, every later
+ * receipt was born paused and stood on screen for good. One press on one Undo switched the lane's whole
+ * self-retirement off for the session.
+ *
+ * Holding the id instead makes a stale mark inert by construction: it names a receipt that no longer exists, so
+ * it cannot match the one on screen and cannot pause it. The pointer resting on a card that is REPLACED is
+ * still handled, because the incoming card gets its own mouseenter. And the leave clears the mark only while it
+ * is still about that entry, so a browser that does deliver leave-on-removal cannot undo the enter that
+ * followed it. */
+const hoveredId = ref<string>();
 const announcement = ref(``);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -51,14 +65,14 @@ let timer: ReturnType<typeof setTimeout> | undefined;
  * about the component tree rather than a guarantee, and it stops being true the moment a module-scoped watcher
  * (draftingReceipts.ts) reports during another component's setup. */
 watch(
-    [receipt, hovered],
+    [receipt, hoveredId],
     () => {
         clearTimeout(timer);
         if (receipt.value === undefined) {
             return;
         }
         announcement.value = receipt.value.title;
-        if (!hovered.value) {
+        if (hoveredId.value !== receipt.value.id) {
             timer = setTimeout(dismissReceipt, receipt.value.tone === `problem` ? PROBLEM_MS : RECEIPT_MS);
         }
     },
@@ -138,8 +152,8 @@ const press = (entry: Notification, action: NotificationAction): void => {
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
                 :role="roleOf(entry)"
-                @mouseenter="entry.kind === `receipt` && (hovered = true)"
-                @mouseleave="entry.kind === `receipt` && (hovered = false)"
+                @mouseenter="entry.kind === `receipt` && (hoveredId = entry.id)"
+                @mouseleave="entry.kind === `receipt` && hoveredId === entry.id && (hoveredId = undefined)"
             >
                 <Icon
                     :name="entry.icon ?? GLYPH[entry.tone]"

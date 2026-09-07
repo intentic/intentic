@@ -225,3 +225,24 @@ it(`caps its height at the room its corner leaves`, async () => {
     expect(style().maxHeight).toBe(`660px`); // 768 − 100 − the 8px margin
     card.hide();
 });
+
+/* AN ANCHOR CAN BE TAKEN AWAY UNDER THE POINTER, which is the one way the surfaces' own `@mouseleave` never
+ * runs: a removed element fires no leave event (Chromium dispatches enter on whatever replaces it and never
+ * leave on it), so the row that would have closed this card is gone before it could. Both callers can do it
+ * without the pointer moving a pixel — a chat tab closed from its own ✕, a change row that refreshes away under
+ * an agent's write — and the card left behind is `pointer-events-none`, so it cannot even be clicked away. It
+ * floats over the app until some other anchor happens to take it over. */
+it(`stops showing once its anchor has been taken off the page`, async () => {
+    const { card, text } = await mount();
+    const event = anchorEvent();
+    const anchor = event.currentTarget as HTMLElement;
+    card.show(event, { title: `Right-click on empty space` });
+    await nextTick();
+    expect(text()).toContain(`Right-click on empty space`);
+
+    anchor.remove();
+    // The next thing the pointer does anywhere on the page, which is the first moment anyone could notice.
+    document.dispatchEvent(new MouseEvent(`pointermove`));
+    await nextTick();
+    expect(text()).not.toContain(`Right-click on empty space`);
+});

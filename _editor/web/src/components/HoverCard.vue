@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { basename } from "@intentic/ui/path";
 import { attachmentPreview } from "../features/chat/drafts/attachmentPreviews";
 
@@ -84,6 +84,38 @@ const widthIn = (room: number): number => Math.round(Math.min(MAX_WIDTH, Math.ma
 
 const placement = ref<{ content: HoverCardContent; left: number; width: number; top?: number; bottom?: number; maxHeight: number }>();
 
+/* THE ANCHOR CAN GO AWAY WHILE THE CARD IS UP, and the trigger side cannot notice: a removed element fires no
+ * mouseleave (Chromium dispatches enter on whatever replaces it and never leave on it), so the surface's own
+ * `@mouseleave="hoverCard?.hide()"` never runs. Both callers do it routinely without the pointer moving at all,
+ * a chat tab closed from its own ✕, a change row that refreshes away under an agent's write, and what is left
+ * is a card describing a row that no longer exists, `pointer-events-none` and so not even clickable away,
+ * floating until some other anchor happens to take it over.
+ *
+ * So the card holds the element it was opened FOR and drops itself once that element has left the document.
+ * Asked on the pointer's next move, which is both the first moment anyone could see the card is stale and the
+ * gesture that would have closed it had the row still been there. The listener lives only while a card is up,
+ * the same discipline the scroll/resize teardown in ui/lib/tooltip.ts follows, so an app with no card open
+ * pays nothing, and the check can only ever hide a card whose anchor is already gone. */
+let anchor: HTMLElement | undefined;
+const dropIfAnchorGone = (): void => {
+    if (anchor?.isConnected !== false) {
+        return;
+    }
+    hide();
+};
+const release = (): void => {
+    anchor?.ownerDocument.removeEventListener(`pointermove`, dropIfAnchorGone);
+    anchor = undefined;
+};
+/* Take over as the card's anchor, letting go of whatever held it before. Re-arming on the SAME document is a
+ * no-op (one listener, one function reference); an anchor handing over to one in the floating window is a
+ * different document, and the one being left would otherwise keep a listener for a card it no longer owns. */
+const adopt = (el: HTMLElement): void => {
+    release();
+    anchor = el;
+    el.ownerDocument.addEventListener(`pointermove`, dropIfAnchorGone);
+};
+
 // Anything at all to put under the title. An attachment counts before its bytes arrive: it is a picture the card
 // is about to draw, and declining to open on it would make the card depend on a fetch the user can't see.
 const says = (message: HoverCardMessage): boolean => (message.text ?? ``).trim() !== `` || (message.attachments?.length ?? 0) > 0;
@@ -93,6 +125,7 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
         return;
     } // nothing to reveal
     const el = event.currentTarget as HTMLElement;
+    adopt(el);
     // The anchor may live in the floating window, whose viewport (and fixed-position origin) is its own: measure
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
@@ -142,8 +175,13 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
     };
 };
 const hide = (): void => {
+    release();
     placement.value = undefined;
 };
+
+// Nothing outlives the surface that raised it: a card still up when its owner unmounts would keep a listener on
+// a document neither of them is on any more.
+onBeforeUnmount(hide);
 
 /* THE MESSAGES AS DRAWN: the blocks that have something left to say, each with its pictures resolved.
  *
