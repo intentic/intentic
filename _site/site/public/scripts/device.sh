@@ -8,10 +8,10 @@
 # What the agent may actually do here is decided on the sandbox's capability card, not by this script, and is
 # enforced by the agent installed on this machine. Revoking it there cuts this machine off immediately.
 #
-# THIS IS A BOOTSTRAP SHIM: its whole job is to put a FIRST agent on a machine that has none, then hand over
-# to `intentic-machine device setup`, which decides everything else — including moving an already-installed
-# agent onto the current release, so re-running this command still upgrades a machine. The decisions used to
-# live here, copied across four scripts in two shell dialects; they now live once, in the agent
+# THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `device setup` on a machine that
+# has none, then hand over to it — and that agent decides everything else, including moving itself onto the
+# current release, so re-running this command still upgrades a machine. The decisions used to live here, copied
+# across four scripts in two shell dialects; they now live once, in the agent
 # (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the device's capability card hands you this):
@@ -47,14 +47,23 @@ case "$arch" in
         ;;
 esac
 
+# WHICH HALF OF THE AGENT THIS SCRIPT CONNECTS, named once: `device` here, `sync` in sync.sh. The bootstrap
+# block below probes for it and the handover at the bottom makes it, so the two can never disagree.
+ROUTE="device"
+
 # ---- bootstrap the agent binary (identical in device.sh and sync.sh: standalone `curl | sh` files, no shared code) ----
 #
-# Only when NO working agent is installed: a machine that has one skips straight to `setup`, which asks the
-# release channel itself and self-updates first. The download is pinned to the tag `releases/latest` resolves
-# to right now (one HEAD, no body, no API rate limit), so an interrupted transfer resumes against the exact
-# release it started from, never a splice of two. What lands is probed by running it — `version` answering is
-# the only proof the file is a working agent rather than 95 MB of captive-portal login page — and only a
-# probed binary is moved into place.
+# Only when this machine has no agent that can take the handover: one that can skips straight to `setup`,
+# which asks the release channel itself and self-updates first. "Can" is asked by RUNNING the handover's own
+# help, never by comparing versions — an agent that answers `version` can still be older than the words this
+# script speaks to it, and then it is the `setup` that would have updated it that it cannot understand. That
+# is what renaming the `computer` route to `device` did: every machine paired before the rename answered the
+# card's own command with "No command registered for `device`", with no route back to the self-update.
+#
+# The download is pinned to the tag `releases/latest` resolves to right now (one HEAD, no body, no API rate
+# limit), so an interrupted transfer resumes against the exact release it started from, never a splice of two.
+# What lands is probed by running it — `version` answering is the only proof the file is a working agent
+# rather than 95 MB of captive-portal login page — and only a probed binary is moved into place.
 BIN="${AGENT_BIN:-}"
 if [ -z "$BIN" ]; then
     dest="${HOME}/.intentic/machine/bin/intentic-machine"
@@ -64,58 +73,73 @@ if [ -z "$BIN" ]; then
         ("$1" version 2>/dev/null | tr -d '\r\n') 2>/dev/null
     }
 
-    case "$(agent_version "$dest")" in
-        [0-9]*.[0-9]*.[0-9]*) ;; # a working agent — whether it updates is `setup`'s decision, not this file's
-        *)
-            mkdir -p "$(dirname "$dest")"
-            releases="https://github.com/intentic/intentic/releases"
-            published=""
-            latest="$(curl -fsSLI -o /dev/null -w '%{url_effective}' --max-time 20 "${releases}/latest" 2>/dev/null || true)"
-            case "$latest" in
-                */tag/v[0-9]*) published="${latest##*/tag/v}" ;;
-            esac
-            if [ -n "$published" ]; then
-                url="${releases}/download/v${published}/intentic-machine-${os}-${arch}"
-                part="${dest}.part-${published}"
+    # Does the agent at $1 understand the handover this script is about to make? `<route> setup --help`
+    # prints a usage screen and exits 0 on an agent that has the route, non-zero on one that does not, and
+    # connects nothing either way. $ROUTE is the one input the embedding script gives this block.
+    agent_speaks() {
+        ("$1" "$2" setup --help >/dev/null 2>&1)
+    }
+
+    have="$(agent_version "$dest")"
+    usable=no
+    case "$have" in
+        [0-9]*.[0-9]*.[0-9]*)
+            if agent_speaks "$dest" "$ROUTE"; then
+                usable=yes # whether it also UPDATES is `setup`'s decision, not this file's
             else
-                url="${releases}/latest/download/intentic-machine-${os}-${arch}"
-                part="${dest}.part"
+                echo "The agent installed here ($have) doesn't understand \`$ROUTE setup\` — replacing it."
             fi
-            # A partial from another release is bytes that can never be finished.
-            for stale in "${dest}".part*; do
-                [ "$stale" = "$part" ] || rm -f "$stale"
-            done
-            echo "Downloading the intentic machine agent${published:+ }${published}…"
-            # curl's own bar only where a person is watching; a pipe (the desktop app, `ic`) gets silence and
-            # the phase line above.
-            meter="--silent"
-            if [ -t 2 ] && [ -z "${INTENTIC_PLAIN:-}" ] && [ "${INTENTIC_UI:-}" != "plain" ]; then
-                meter="--progress-bar"
-            fi
-            # shellcheck disable=SC2086 — $meter is one deliberate word, chosen just above.
-            if ! curl --fail --location --show-error $meter --retry 3 --retry-delay 2 --continue-at - \
-                --output "$part" "$url"; then
-                echo "error: the download didn't finish — what did arrive is kept, so re-running this command resumes it." >&2
-                exit 1
-            fi
-            chmod +x "$part"
-            case "$(agent_version "$part")" in
-                [0-9]*.[0-9]*.[0-9]*) ;;
-                *)
-                    rm -f "$part"
-                    echo "error: what downloaded isn't a working agent (a captive portal, a truncated body, or the wrong architecture) — re-run this command to try again." >&2
-                    exit 1
-                    ;;
-            esac
-            # Rename into place: overwriting a running executable fails outright ("Text file busy"); a rename
-            # swaps the directory entry and leaves any live process on the old inode until it restarts.
-            mv -f "$part" "$dest"
             ;;
     esac
+    if [ "$usable" = no ]; then
+        mkdir -p "$(dirname "$dest")"
+        releases="https://github.com/intentic/intentic/releases"
+        published=""
+        latest="$(curl -fsSLI -o /dev/null -w '%{url_effective}' --max-time 20 "${releases}/latest" 2>/dev/null || true)"
+        case "$latest" in
+            */tag/v[0-9]*) published="${latest##*/tag/v}" ;;
+        esac
+        if [ -n "$published" ]; then
+            url="${releases}/download/v${published}/intentic-machine-${os}-${arch}"
+            part="${dest}.part-${published}"
+        else
+            url="${releases}/latest/download/intentic-machine-${os}-${arch}"
+            part="${dest}.part"
+        fi
+        # A partial from another release is bytes that can never be finished.
+        for stale in "${dest}".part*; do
+            [ "$stale" = "$part" ] || rm -f "$stale"
+        done
+        echo "Downloading the intentic machine agent${published:+ }${published}…"
+        # curl's own bar only where a person is watching; a pipe (the desktop app, `ic`) gets silence and
+        # the phase line above.
+        meter="--silent"
+        if [ -t 2 ] && [ -z "${INTENTIC_PLAIN:-}" ] && [ "${INTENTIC_UI:-}" != "plain" ]; then
+            meter="--progress-bar"
+        fi
+        # shellcheck disable=SC2086 — $meter is one deliberate word, chosen just above.
+        if ! curl --fail --location --show-error $meter --retry 3 --retry-delay 2 --continue-at - \
+            --output "$part" "$url"; then
+            echo "error: the download didn't finish — what did arrive is kept, so re-running this command resumes it." >&2
+            exit 1
+        fi
+        chmod +x "$part"
+        case "$(agent_version "$part")" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+                rm -f "$part"
+                echo "error: what downloaded isn't a working agent (a captive portal, a truncated body, or the wrong architecture) — re-run this command to try again." >&2
+                exit 1
+                ;;
+        esac
+        # Rename into place: overwriting a running executable fails outright ("Text file busy"); a rename
+        # swaps the directory entry and leaves any live process on the old inode until it restarts.
+        mv -f "$part" "$dest"
+    fi
     BIN="$dest"
 fi
 # ---- end of the agent binary bootstrap ----
 
 # BIN may be a multi-word AGENT_BIN dev command (intentional word-split); a real path runs directly.
 # shellcheck disable=SC2086
-exec $BIN device setup --url "$URL" --pair "$PAIR"
+exec $BIN "$ROUTE" setup --url "$URL" --pair "$PAIR"

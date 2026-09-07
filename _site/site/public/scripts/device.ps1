@@ -7,11 +7,11 @@
 # What the agent may actually do here is decided on the sandbox's capability card, not by this script, and is
 # enforced by the agent installed on this machine. Revoking it there cuts this machine off immediately.
 #
-# THIS IS A BOOTSTRAP SHIM: its whole job is to put a FIRST agent on a machine that has none, then hand over
-# to `intentic-machine device setup`, which decides everything else - self-updating an installed agent,
-# putting the bin folder on your PATH, fetching the windowless launcher - so re-running this command still
-# upgrades a machine. The decisions used to live here, copied across four scripts in two shell dialects; they
-# now live once, in the agent (_devices/machine/src/install.ts), where they are compiled and tested.
+# THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `device setup` on a machine
+# that has none, then hand over to it - and that agent decides everything else: self-updating, putting the
+# bin folder on your PATH, fetching the windowless launcher - so re-running this command still upgrades a
+# machine. The decisions used to live here, copied across four scripts in two shell dialects; they now live
+# once, in the agent (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the device's capability card hands you this):
 #   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; irm https://intentic.dev/device.ps1 | iex
@@ -21,14 +21,23 @@
 #           agent, whitespace-separated (e.g. "node C:\intentic\_devices\machine\dist\cli.js").
 $ErrorActionPreference = 'Stop'
 
+# WHICH HALF OF THE AGENT THIS SCRIPT CONNECTS, named once: `device` here, `sync` in sync.ps1. The bootstrap
+# block below probes for it and the handover at the bottom makes it, so the two can never disagree.
+$route = 'device'
+
 # ---- bootstrap the agent binary (identical in device.ps1 and sync.ps1: standalone irm|iex files, no shared code) ----
 #
-# Only when NO working agent is installed: a machine that has one skips straight to `setup`, which asks the
-# release channel itself and self-updates first. The download is pinned to the tag `releases/latest` resolves
-# to right now (one HEAD, no body, no API rate limit), so an interrupted transfer resumes against the exact
-# release it started from, never a splice of two. What lands is probed by running it - `version` answering is
-# the only proof the file is a working agent rather than 95 MB of captive-portal login page - and only a
-# probed binary is moved into place.
+# Only when this machine has no agent that can take the handover: one that can skips straight to `setup`,
+# which asks the release channel itself and self-updates first. "Can" is asked by RUNNING the handover's own
+# help, never by comparing versions - an agent that answers `version` can still be older than the words this
+# script speaks to it, and then it is the `setup` that would have updated it that it cannot understand. That
+# is what renaming the `computer` route to `device` did: every machine paired before the rename answered the
+# card's own command with "No command registered for `device`", with no route back to the self-update.
+#
+# The download is pinned to the tag `releases/latest` resolves to right now (one HEAD, no body, no API rate
+# limit), so an interrupted transfer resumes against the exact release it started from, never a splice of
+# two. What lands is probed by running it - `version` answering is the only proof the file is a working agent
+# rather than 95 MB of captive-portal login page - and only a probed binary is moved into place.
 
 function Get-IntenticAgentVersion {
     param([string]$Path)
@@ -47,6 +56,27 @@ function Get-IntenticAgentVersion {
         # is the answer this exists to give. Nothing is silenced with a redirection - on 5.1 that would turn a
         # native command's stderr into a terminating NativeCommandError under $ErrorActionPreference = 'Stop'.
         return ''
+    }
+}
+
+# WHETHER THE INSTALLED AGENT UNDERSTANDS THE HANDOVER, asked by running its help rather than by reading its
+# version: `<route> setup --help` prints a usage screen and exits 0 on an agent that has the route, exits
+# non-zero on one that does not, and connects nothing either way.
+#
+# Assigned to $null rather than redirected, and the assignment is doing two jobs: it keeps the usage screen
+# off the user's screen, and it keeps the function's return value a plain boolean instead of the help text
+# plus a boolean. Silencing the older agent's complaint instead would need a stderr redirection, which no
+# .ps1 here may hold while $ErrorActionPreference = 'Stop' is in force - on Windows PowerShell 5.1 that pair
+# turns a native command's diagnostics into a terminating error, on the very outcome a probe exists to
+# detect (src-tauri/src/scripts.rs holds that line for every bundled script). So the one line such an agent
+# writes stays visible, which is no loss: it is the truth, and the line after it says what is being done.
+function Test-IntenticAgentSpeaks {
+    param([string]$Path, [string]$Route)
+    try {
+        $null = & $Path $Route setup --help
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
     }
 }
 
@@ -190,11 +220,16 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' 
 $bin = $env:AGENT_BIN
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\machine\bin\intentic-machine.exe'
-    if (-not (Get-IntenticAgentVersion -Path $dest)) { Install-IntenticAgent -Dest $dest -Arch $arch }
+    $have = Get-IntenticAgentVersion -Path $dest
+    if ($have -and -not (Test-IntenticAgentSpeaks -Path $dest -Route $route)) {
+        Write-Host "The agent installed here ($have) doesn't understand ``$route setup`` - replacing it."
+        $have = ''
+    }
+    if (-not $have) { Install-IntenticAgent -Dest $dest -Arch $arch }
     $bin = $dest
 }
 
-$hostArgs = @('device', 'setup', '--url', $url, '--pair', $pair)
+$hostArgs = @($route, 'setup', '--url', $url, '--pair', $pair)
 if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
     # A whitespace-separated command: first token is the executable, the rest are leading args before setup.
     $parts = $env:AGENT_BIN -split '\s+'

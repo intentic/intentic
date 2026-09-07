@@ -10,6 +10,16 @@
     // handed out https://intentic.dev/device.ps1, while the site still served /computer.ps1 and answered the new
     // path with the 404 page — piped straight into somebody's PowerShell.
     "name": "intentic",
+    /* WHICH ACCOUNT THAT NAME LIVES IN. The API token this repo deploys with can see two accounts, and wrangler
+     * will not pick between them without a terminal: a deploy from CI or from an agent's shell stops with "More
+     * than one account available but unable to select one in non-interactive mode" AFTER the astro build, which
+     * reads as a build that failed at the last step. Worse is the version where somebody exports
+     * CLOUDFLARE_ACCOUNT_ID by hand and gets the other account, which is how a Worker called `intentic` comes to
+     * exist twice, in two accounts, with the live domain bound to only one of them.
+     *
+     * This is the zone's own account (the one intentic.dev is in), written down rather than left to the
+     * environment. An account id is an identifier, not a credential — the token stays in the environment. */
+    "account_id": "14aaba5ad087e7ed506d1470b14489ab",
     "compatibility_date": "2026-03-26",
     "main": "./worker.ts",
     /* WHAT PRODUCES ./dist, AND NOTHING ELSE. `build.command` is the step wrangler runs BEFORE it deploys, so a

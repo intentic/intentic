@@ -122,14 +122,21 @@ Runs on the user's machine, not in the sandbox. Installed by `device.{sh,ps1}` /
 put the same binary in `~/.intentic/machine/bin`), shipped as a bun-compiled binary per platform, self-updated
 by `upgrade`.
 
-Those four installers are **bootstrap shims**: they download a first agent onto a machine that has none
-(pinned to the tag `releases/latest` resolves to, resumable, probed by running `version` before it may become
-the agent) and exec `setup`. Every other decision — installed-vs-published, PATH repair, the Windows launcher
-stub — runs from [src/install.ts](src/install.ts) at the top of every `setup`: it self-updates through the
-same download→probe→swap→rollback machinery as `upgrade`, then re-execs the new agent with the same argv, so
+Those four installers are **bootstrap shims**: they download an agent onto a machine that has none (pinned to
+the tag `releases/latest` resolves to, resumable, probed by running `version` before it may become the agent)
+and exec `setup`. Every other decision — installed-vs-published, PATH repair, the Windows launcher stub — runs
+from [src/install.ts](src/install.ts) at the top of every `setup`: it self-updates through the same
+download→probe→swap→rollback machinery as `upgrade`, then re-execs the new agent with the same argv, so
 re-running a card's command still upgrades a machine while the rule lives in exactly one compiled, tested
-place. The shims' remaining bootstrap blocks are held identical per dialect by
-[src/installers.test.ts](src/installers.test.ts), which also pins that no decision creeps back into shell.
+place.
+
+The one decision a shim cannot delegate is whether the installed agent can take the handover at all: `device
+setup` is itself part of this CLI's vocabulary, so an agent older than a route rename rejects it — and the
+self-update that would have replaced it lives behind that same command. Renaming `computer` to `device` did
+that to every machine paired before it. So each shim runs `<route> setup --help` on the installed binary
+first, and replaces an agent that cannot answer. The shims' bootstrap blocks are held identical per dialect by
+[src/installers.test.ts](src/installers.test.ts), which also pins that probe, that the route is named once per
+file, and that no other decision creeps back into shell.
 
 The install-and-stay-alive plumbing is
 [`@intentic/local-agent`](../local-agent)'s; the windowless Windows logon start is

@@ -6,10 +6,11 @@ import { describe, expect, it } from "vitest";
 
 /* THE FOUR INSTALLERS THAT PUT THIS AGENT ON A MACHINE, HELD TO WHAT LITTLE THEY STILL DO.
  *
- * `device.sh`, `sync.sh`, `device.ps1` and `sync.ps1` are bootstrap shims: they download a FIRST agent
- * onto a machine that has none, and exec `setup`. Every decision they used to make — installed-vs-published,
- * PATH, the Windows launcher — runs from `setup` itself now (install.ts), so those rules are held by
- * install.test.ts and the compiler rather than by string-matching shell.
+ * `device.sh`, `sync.sh`, `device.ps1` and `sync.ps1` are bootstrap shims: they download an agent onto a
+ * machine that has none — or has one that cannot take their handover — and exec `setup`. Every decision they
+ * used to make — installed-vs-published, PATH, the Windows launcher — runs from `setup` itself now
+ * (install.ts), so those rules are held by install.test.ts and the compiler rather than by string-matching
+ * shell.
  *
  * What still has to exist twice per dialect (each file is handed to `curl | sh` or `irm | iex` as one
  * standalone string — no import, no dot-sourcing) is the bootstrap block, and what still goes quietly wrong
@@ -36,9 +37,21 @@ const bootstrapBlock = (text: string): string | undefined => {
 };
 
 const PAIRS = [
-    { dialect: `sh`, device: `deviceSh`, sync: `desktopSh` },
-    { dialect: `PowerShell`, device: `devicePs1`, sync: `desktopPs1` },
-] as const satisfies readonly { dialect: string; device: keyof typeof INSTALL_SCRIPTS; sync: keyof typeof INSTALL_SCRIPTS }[];
+    { dialect: `sh`, device: `deviceSh`, sync: `desktopSh`, declares: /^ROUTE="(?:device|sync)"$/mu, handsOver: /"\$ROUTE" setup/u },
+    {
+        dialect: `PowerShell`,
+        device: `devicePs1`,
+        sync: `desktopPs1`,
+        declares: /^\$route = '(?:device|sync)'$/mu,
+        handsOver: /@\(\$route, 'setup'/u,
+    },
+] as const satisfies readonly {
+    dialect: string;
+    device: keyof typeof INSTALL_SCRIPTS;
+    sync: keyof typeof INSTALL_SCRIPTS;
+    declares: RegExp;
+    handsOver: RegExp;
+}[];
 
 describe.each(PAIRS)(`the $dialect installers`, (pair) => {
     const both = [script(pair.device), script(pair.sync)];
@@ -69,9 +82,31 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
         }
     });
 
+    /* THE PROPERTY THAT SURVIVES A ROUTE RENAME, which is the one decision the shims cannot delegate: their
+     * handover is itself part of the agent's vocabulary, so an installed agent older than that vocabulary
+     * cannot take it — and the self-update that would have replaced it sits behind the very command it does
+     * not understand. `computer` -> `device` cost every already-paired machine exactly that: the card's own
+     * command answered "No command registered for `device`", and nothing short of deleting the binary by hand
+     * got past it.
+     *
+     * So each shim ASKS before it hands over — `<route> setup --help`, which prints a usage screen and
+     * connects nothing — and replaces an agent that cannot answer. The route is named once per file, above the
+     * block, because a probe and a handover that disagree is the same bug in a new hat. */
+    it(`ask whether the installed agent understands the handover, and name the route once`, () => {
+        for (const { path, text } of both) {
+            expect(bootstrapBlock(text) ?? ``, `${path} hands over without asking whether the installed agent understands it`).toContain(
+                `setup --help`,
+            );
+            expect(text, `${path} does not name its route once, above the bootstrap block`).toMatch(pair.declares);
+            expect(text, `${path} spells the route again at the handover instead of using the one it declared`).toMatch(pair.handsOver);
+        }
+    });
+
     /* The property the shims exist for: the DECISIONS stay in the agent. A script that grows an
      * installed-vs-published comparison, a force-download switch, or an npx fallback is a script on its way
-     * back to being four copies of install.ts in two dialects — the design this rewrite retired. */
+     * back to being four copies of install.ts in two dialects — the design this rewrite retired. The probe
+     * above is not that comparison: it asks whether an agent can take the handover, never which build is
+     * newer, and it is answered by running the agent rather than by reading a version out of it. */
     it(`leave every decision beyond the first download to \`setup\``, () => {
         for (const { path, text } of both) {
             expect(text, `${path} carries a force-download switch; deleting the installed binary is the way to force a reinstall`).not.toContain(
