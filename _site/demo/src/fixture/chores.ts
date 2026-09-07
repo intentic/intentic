@@ -315,6 +315,14 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
         // The agent looked at exactly this duplication and reported it was generated code and deliberately
         // repetitive tests. `clean` is what makes that verdict stick until the evidence moves.
         entry(`api`, `duplication`, 3, `clean`),
+        /* ANSWERED, AND STILL DUE, which is the state a real board spends most of its time in and the one this
+         * fixture had no example of. An agent looked at the storefront's two majors and reported back that
+         * react-router 7 is a routing rewrite rather than a bump: nothing changed, the evidence has since been
+         * re-measured and has not moved, so the row is `due` and `settled`. It keeps its place and its evidence,
+         * carries a `reported` mark, and stops being counted as this morning's work. Older than the `outdated`
+         * probe above it on purpose: a run NEWER than the measurement is the `stale` case, which is a different
+         * row and already tells a different story. */
+        entry(`web`, `dependencies-outdated`, 5, `reported`),
         // "Not this cycle", the drizzle major is a project, and the owner said so from the panel.
         entry(`api`, `dependencies-outdated`, 8, `reported`, { snoozedUntil: now + 22 * DAY }),
     ];

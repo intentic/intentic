@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import { CHORE_KINDS, CHORES, type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
+import { CHORE_KINDS, CHORES, choreAnswered, type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
 import {
     Button,
     Notice,
@@ -37,6 +37,17 @@ import { useRuns } from "./useRuns";
  * That grouping is also the page keeping its own promise. Every row here shows its working so you can disagree
  * with it; the ordering was the one editorial claim the page made, it lived in a comment in the chore book, and it
  * was thrown away at render: a claim nobody could see, let alone argue with.
+ *
+ * AND THE SAME MISTAKE, ONE AXIS OVER: WHETHER ANYONE HAD ALREADY ANSWERED A ROW. The verdict has carried that
+ * fact all along — `lastRun` says what a turn concluded, `settled` says the evidence was re-measured and did not
+ * move — and this page used both only inside an opened drawer. So a `security-advisories` row an agent had
+ * reported back on ten minutes earlier wore full amber under a heading counting it as work, indistinguishable
+ * from a finding nobody had opened, and with `cadenceMs: 0` it would have worn it for ever. The answer is on the
+ * collapsed row now (ChoreRow's mark), answered rows sink under the ones nobody has looked at, and every count on
+ * this page — the tab badge, the group headings, the rail column — stops counting them, which is finally the same
+ * definition `unseenVerdicts` has always used for the tile. Sunk and unbadged, never hidden: the row keeps its
+ * place, its evidence and its verbs, because a chore that disappears the moment somebody worked on it is how this
+ * surface would lose the argument in the other direction.
  *
  * The rail NARROWS, it does not select a document: every row is a real chore under "All repositories" as much as
  * under one of them. So the page keeps <SplitView>'s default `collapse` behaviour on a phone, and the rail sits
@@ -99,11 +110,18 @@ const railTone = (carrying: number): string => (carrying > 0 ? `text-warning` : 
 const railNote = (due: number, carrying: number): string =>
     carrying === 0 ? `${due} due` : `${due} due · ${carrying} a risk being carried right now`;
 
+/* WHAT COUNTS AS OUTSTANDING, in the one place every number on this page derives from. A chore a turn has already
+ * answered, and whose answer still stands (choreAnswered), is NOT this morning's work: it is a decision the owner
+ * made, sitting where they can see it. Counting it kept the rail column, the group headings and the tile badge
+ * disagreeing, because `unseenVerdicts` has always excluded settled chores and these two counts never did: an
+ * amber "CARRYING 1" over a row nobody needed to touch, beside a dark tile that was right. */
+const outstanding = (verdict: ChoreVerdict): boolean => verdict.state === `due` && !choreAnswered(verdict);
+
 const counts = computed(() =>
     byRepo.value.map(({ repo: at, verdicts }) => ({
         repo: at,
-        due: verdicts.filter((verdict) => verdict.state === `due`).length,
-        carrying: verdicts.filter((verdict) => verdict.state === `due` && verdict.severity === `warning`).length,
+        due: verdicts.filter((verdict) => outstanding(verdict)).length,
+        carrying: verdicts.filter((verdict) => outstanding(verdict) && verdict.severity === `warning`).length,
     })),
 );
 
@@ -169,10 +187,18 @@ const groups = computed(() =>
                 kind: spec.kind,
                 label: spec.label,
                 caption: spec.caption,
-                rows: kindRows,
-                // The heading counts what is DUE, not how many rows are under it: under "Everything" a group of
-                // six with one due is a very different heading from a group of six with six.
-                due: kindRows.filter((verdict) => verdict.state === `due`).length,
+                /* ANSWERED ROWS SINK, they do not leave. A turn that has concluded against a row's exact evidence
+                 * makes it a different KIND of thing from the rows above it — something to read rather than
+                 * something to start — and interleaving the two meant a group of four had no reading order at
+                 * all: the eye had to open each one to find out which was which. Sorting rather than filtering,
+                 * because a chore vanishing from the page the moment somebody worked on it is the trust failure
+                 * this whole surface is built to avoid (verdict.ts), and it is the same disappearance whether the
+                 * filter does it or the group does. `sort` is stable, so within each half the book's own order
+                 * survives. */
+                rows: [...kindRows].sort((a, b) => Number(choreAnswered(a)) - Number(choreAnswered(b))),
+                // The heading counts what is OUTSTANDING, not how many rows are under it: under "Everything" a
+                // group of six with one due is a very different heading from a group of six with six.
+                due: kindRows.filter((verdict) => outstanding(verdict)).length,
             },
         ];
     }),
@@ -184,7 +210,10 @@ const only = computed(() => (scoped.value.length === 1 ? scoped.value[0] : undef
 // Under a wider scope the repository is what tells two otherwise identical rows apart, so the row carries it.
 const showRepo = computed(() => scoped.value.length > 1);
 
-const scopeDue = computed(() => scoped.value.flatMap((group) => group.verdicts).filter((verdict) => verdict.state === `due`).length);
+// The tab's own badge, on the same definition as everything else: it is a claim on the reader's attention, and an
+// answered chore has stopped making one. It has always counted fewer rows than the tab shows (snoozed and stale
+// are listed and uncounted), which is the point of it: the number is the work, the list is the record.
+const scopeDue = computed(() => scoped.value.flatMap((group) => group.verdicts).filter((verdict) => outstanding(verdict)).length);
 
 /* Acknowledge whatever is currently on screen, whenever it changes while this page is open. `immediate` because
  * the common case is arriving here BECAUSE the tile was lit: the first render is the moment the evidence was

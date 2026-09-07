@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { type ChoreVerdict, probeSpec, repoName } from "@intentic/sandbox-contract/chores";
+import { choreAnswer, choreAnswered, type ChoreVerdict, probeSpec, repoName } from "@intentic/sandbox-contract/chores";
 import {
     AgentRunButton,
     type AgentRunChoice,
     Button,
     DisclosureRow,
+    freshness,
     Icon,
     type IconName,
     StatusBadge,
@@ -129,10 +130,65 @@ watch(busyHere, (running, was) => {
     }
 });
 
-// The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
-// not measured it, and painting that amber would make every repo without knip look broken. `stale` is quiet for
-// the same reason and one more: it is the state a row lands in BECAUSE the work got done, and a colour that reads
-// as a problem would make finishing a chore look like breaking something.
+const liveAgent = computed(() => (run?.running === true ? run.manifest.conversationId : undefined));
+
+/* WHETHER ANYONE HAS ALREADY ANSWERED THIS ROW, on the row, where it is read. A chore is a question, a turn is
+ * somebody answering it, and the collapsed row used to carry only the question: an advisory an agent had reported
+ * back on ten minutes earlier was drawn exactly like one nobody had ever opened, so the only way to find out that
+ * the work had been done was to open every row and read to the bottom of the drawer.
+ *
+ * `choreAnswer` (verdict.ts) is the shared decision, digest-checked, so this mark and the demotion the list does
+ * around it are one fact rather than two that can drift.
+ *
+ * Not while a turn is live. `liveAgent` and the spinner already say a turn is HAPPENING, and "reported 5m ago"
+ * beside them would be the previous answer competing with the one being written.
+ *
+ * And not on a CLEAR row, where the headline is already the answer in words — "Checked, the findings did not hold
+ * up", "Surveyed 12 days ago" — so the mark would say the same thing a second time, in a smaller font, next to
+ * the age it just quoted. The mark exists to tell a live finding that has been answered from one that has not;
+ * a row with nothing to act on is not asking that question. */
+const answer = computed(() => (liveAgent.value === undefined && verdict.state !== `clear` ? choreAnswer(verdict) : undefined));
+
+/* Whether there is anything left to start here, which is what the tint below turns on and what the list sorts
+ * on. A lapsed chore is not one of these: it still shows what was concluded last time and still asks at full
+ * weight, because the cadence lapsing is the book asking again.
+ *
+ * Read from the verdict rather than from `answer` above, so starting a second turn does not undo the first. If
+ * this hung off the suppressed mark, pressing the button on an answered row would flip its badge back to amber
+ * for the length of the turn: a row visibly getting WORSE the moment you act on it, saying a thing that is not
+ * true. A turn being under way does not unmake the one that already ran. */
+const standing = computed(() => choreAnswered(verdict));
+
+/* Three words with three meanings, and the mark is two of them wide, so the sentence lives in the tooltip. The
+ * distinction that matters most is `reported` against `acted`: one of them left a branch to read and the other
+ * left a decision to make, and a reader who takes "reported" for "fixed" has been misled by this row. */
+const ANSWER_MEANS: Record<string, string> = {
+    acted: `changed something`,
+    reported: `changed nothing and handed back what it found`,
+    clean: `looked, and the findings did not hold up`,
+};
+const answerTitle = computed<string>(() => {
+    const at = answer.value;
+    if (at === undefined) {
+        return ``;
+    }
+    const said = `A turn ran against exactly this evidence ${timeAgo(at.ranAt, { days: true })} and ${ANSWER_MEANS[at.outcome] ?? at.outcome}.`;
+    // A lapsed answer is the one case where the row keeps asking despite having been answered, and saying so is
+    // the difference between a reader trusting the two marks and thinking they contradict each other.
+    return standing.value ? `${said} Open the row to read it.` : `${said} It is being asked again on this chore's own cadence.`;
+});
+
+/* The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
+ * not measured it, and painting that amber would make every repo without knip look broken. `stale` is quiet for
+ * the same reason and one more: it is the state a row lands in BECAUSE the work got done, and a colour that reads
+ * as a problem would make finishing a chore look like breaking something.
+ *
+ * AND NEITHER IS AN ANSWERED `due` ROW, which is the same argument one step further on. Amber is this page's only
+ * alarm and it is worth exactly what it is spent on: a risk nobody has looked at yet. A `security-advisories` row
+ * has `cadenceMs: 0`, so once a turn has reported on it and the evidence has been re-measured it is `due` and
+ * `settled` FOREVER — and it wore full amber the whole time, next to a heading counting it as this morning's
+ * work, for a decision the owner had already made. The word stays (`carrying` is still true, and the row is still
+ * in the CARRYING group with all of its evidence); the shout comes off, because it was answered. */
 const status = computed<{ variant: StatusVariant; label: string } | undefined>(() => {
     // Measuring outranks every settled state, because it is the only one that is about to stop being true, and
     // a row that reads "stale" while it is being re-measured is the exact complaint this all started as.
@@ -140,6 +196,9 @@ const status = computed<{ variant: StatusVariant; label: string } | undefined>((
         return { variant: `info`, label: `measuring` };
     }
     if (verdict.state === `due`) {
+        if (standing.value) {
+            return { variant: `neutral`, label: verdict.severity === `warning` ? `carrying` : `due` };
+        }
         return verdict.severity === `warning` ? { variant: `warning`, label: `carrying` } : { variant: `info`, label: `due` };
     }
     if (verdict.state === `stale`) {
@@ -176,8 +235,6 @@ const evidenceNote = computed<string | undefined>(() => {
         ? `Re-measured since the turn that ran ${timeAgo(run.manifest.createdAt)}, and the evidence has not moved.`
         : undefined;
 });
-
-const liveAgent = computed(() => (run?.running === true ? run.manifest.conversationId : undefined));
 
 /* THE EVIDENCE, SPLIT WHERE IT WAS ALREADY BROKEN. Every chore writes its lines as `<tag> · <claim>` —
  * `high · image-size, ICNS parser…`, `major · vite 6.3.5 → 8.2.1`, `unreferenced · src/legacyPlans.ts` — and
@@ -285,6 +342,29 @@ watch(
              them does not. -->
         <template #meta>
             <Icon v-if="liveAgent || busyHere" name="spinner" spin class="shrink-0 text-subtle" />
+            <!-- THE ANSWER, LEFT OF THE STATE. Reading order is the argument: the state badge is the row's
+                 conclusion and belongs at the end of the line, so what qualifies it has to come before it —
+                 "reported 5m ago, carrying" is a sentence, "carrying, reported 5m ago" is a correction.
+
+                 OUTLINED WHERE THE STATE BADGE IS FILLED, which is the whole reason this is not a second
+                 <StatusBadge>. On an answered row the state badge is neutral, so two neutral pills would be two
+                 identical grey lozenges and the reader would have to read both to find out which was which. A
+                 hairline mark against a filled one is a rank the eye resolves before it reads either.
+
+                 The age drops on a narrow pane and the word never does: `reported` alone is still the answer,
+                 where a bare "5m ago" is a fact about nothing. The exact sentence is in the tooltip either way. -->
+            <span
+                v-if="answer"
+                :title="answerTitle"
+                class="flex shrink-0 items-center gap-1 rounded-full border border-line/60 px-1.5 py-0.5 text-2xs text-subtle"
+            >
+                <Icon name="check-circle" class="text-2xs" />
+                <!-- The lowercasing is the badge convention and it belongs to the WORD, not to the chip: run it
+                     over the whole mark and `freshness` past a day comes out as "sep 2, 2026", a date drawn in a
+                     way no other date in the app is. -->
+                <span class="lowercase">{{ answer.outcome }}</span>
+                <span class="@lg:inline hidden text-subtle/70">{{ freshness(answer.ranAt) }}</span>
+            </span>
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
         </template>
 
@@ -403,10 +483,16 @@ watch(
                  end. -->
                 <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
                     <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing
-                     is wrong is an invitation this surface should not be making. -->
+                     is wrong is an invitation this surface should not be making.
+
+                     AND IT SAYS "AGAIN" WHEN IT WOULD BE AGAIN. A row whose answer still stands kept offering
+                     "Fix it" in the same words as a row nobody had opened, which reads as the first attempt and
+                     is the second: the press is still available, because a second turn at a better tier is a
+                     legitimate thing to want, but the button should not be the one telling you the work has not
+                     been done. -->
                     <AgentRunButton
                         v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
-                        :label="verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
+                        :label="standing ? `Run it again` : verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
                         icon="play"
                         :model-label="runModel.model.value.label"
                         :effort-label="runModel.model.value.effortLabel"

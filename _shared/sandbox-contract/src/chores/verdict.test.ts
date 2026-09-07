@@ -11,7 +11,7 @@ import type {
 } from "../schemas/maintenance.js";
 import { describe, expect, test } from "vitest";
 import { choreById, CHORES } from "./chores.js";
-import { assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";
+import { assessReport, choreAnswer, choreAnswered, ledgerKey, unseenVerdicts } from "./verdict.js";
 
 /* The state machine, tested at the distinctions it exists to draw. Every case below is one that a simpler design
  * gets wrong in a way that costs the surface its credibility: reporting a repository clean that was never
@@ -731,6 +731,106 @@ describe(`hard-coded styles`, () => {
             (id) => verdictFor(withProbes([], { deps: [`pino`] }), id).state,
         );
         expect(states).toEqual([`not-applicable`, `not-applicable`, `not-applicable`, `not-applicable`]);
+    });
+});
+
+/* THE SECOND AXIS: has anyone already answered this, and does the answer still stand. The panel demotes on these
+ * two — the mark on the collapsed row, the tint it drops, the counts it leaves out — so what they draw apart has
+ * to be exactly what the panel means by "you do not need to act on this one". */
+describe(`whether a chore has already been answered`, () => {
+    const withAdvisories = report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] });
+    const ledgerEntry = (over: Partial<ChoreLedgerEntry> = {}): ChoreLedgerEntry => ({
+        repo: `app`,
+        chore: `security-advisories`,
+        ranAt: NOW - DAY,
+        runId: `r1`,
+        outcome: `reported`,
+        digest: verdictFor(withAdvisories, `security-advisories`).digest,
+        ...over,
+    });
+
+    // The row this whole distinction was built for: an advisory with no upstream patch, reported on, re-measured,
+    // and due for ever. It has to be legible as answered or it wears the page's one alarm colour permanently.
+    test(`a settled chore carries its answer, and the answer stands`, () => {
+        const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry()] }, `security-advisories`);
+        expect(verdict.state).toBe(`due`);
+        expect(choreAnswer(verdict)).toEqual({ outcome: `reported`, ranAt: NOW - DAY });
+        expect(choreAnswered(verdict)).toBe(true);
+    });
+
+    // A turn landed and nothing has measured since. The row's badge says "re-measure", which is the next move and
+    // not the news: the news is that an agent already acted here, and it is the mark that says so.
+    test(`a stale chore carries its answer too`, () => {
+        const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, outcome: `acted` })] }, `security-advisories`);
+        expect(verdict.state).toBe(`stale`);
+        expect(choreAnswer(verdict)?.outcome).toBe(`acted`);
+        expect(choreAnswered(verdict)).toBe(true);
+    });
+
+    /* THE TWO ARE ASKED OF DIFFERENT THINGS, and this is the row that proves it: a run whose recorded digest no
+     * longer lines up with what is on screen. There is no answer to SHOW — naming an outcome would be claiming
+     * that turn had seen this evidence — but there is still nothing to press, because a stale chore carries no
+     * prompt in any case. Demoting on the mark instead would sort the one row you cannot act on above the ones
+     * you can. */
+    test(`a stale chore with nothing to show is still nothing to start`, () => {
+        const verdict = verdictFor(
+            { ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, digest: `answered-something-else` })] },
+            `security-advisories`,
+        );
+        expect(verdict.state).toBe(`stale`);
+        expect(verdict.prompt).toBeUndefined();
+        expect(choreAnswer(verdict)).toBeUndefined();
+        expect(choreAnswered(verdict)).toBe(true);
+    });
+
+    /* The digest is what makes this an answer rather than a timestamp. A run against evidence that has since
+     * changed answered a different question, and a mark claiming otherwise would be the exact false reassurance
+     * this feature exists to remove: the reader would see "reported" over a finding nobody has read. */
+    test(`a run against evidence that has since moved has answered nothing`, () => {
+        const moved = report({
+            repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `minimist`])], signals: signals() }],
+            ledger: [ledgerEntry()],
+        });
+        const verdict = verdictFor(moved, `security-advisories`);
+        expect(verdict.state).toBe(`due`);
+        expect(choreAnswer(verdict)).toBeUndefined();
+        expect(choreAnswered(verdict)).toBe(false);
+    });
+
+    /* THE TWO COME APART WHEN THE CADENCE LAPSES, which is the only case where they do, and the reason they are
+     * two functions rather than one boolean. The answer is still a fact worth showing — "an agent reported on
+     * exactly this, a year ago" is what you want in front of you before spending a second turn — but it has
+     * stopped standing, so the row goes back to full weight and gets counted again. */
+    test(`a lapsed chore still shows what was concluded, and no longer counts as answered`, () => {
+        const dependencies = choreById(`dependencies-outdated`);
+        expect(dependencies?.cadenceMs).toBeGreaterThan(0);
+        const lapsedAt = NOW - (dependencies?.cadenceMs ?? 0) - DAY;
+
+        const outdatedProbe = probe({
+            id: `outdated`,
+            facts: { id: `outdated`, packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }] },
+        });
+        const repos = [{ repo: `app`, probes: [outdatedProbe], signals: signals() }];
+        // The digest is taken from the verdict itself rather than transcribed, so this stays a test about the
+        // cadence and cannot quietly become a test about a mismatched fingerprint.
+        const digest = verdictFor(report({ repos }), `dependencies-outdated`).digest;
+        const entry: ChoreLedgerEntry = { repo: `app`, chore: `dependencies-outdated`, ranAt: lapsedAt, runId: `r0`, outcome: `acted`, digest };
+
+        const verdict = verdictFor(report({ repos, ledger: [entry] }), `dependencies-outdated`);
+        expect(verdict.state).toBe(`due`);
+        // Same evidence, so the run did answer THIS; the cadence expiring is the book asking again anyway.
+        expect(verdict.settled).toBe(false);
+        expect(choreAnswer(verdict)?.outcome).toBe(`acted`);
+        expect(choreAnswered(verdict)).toBe(false);
+    });
+
+    // Nothing to answer: an empty digest identifies no evidence, so a plain clear or unmeasured row can never
+    // pick up a mark from a ledger entry that happens to sit beside it.
+    test(`a row with no finding of its own has no answer`, () => {
+        const clear = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([])], signals: signals() }], ledger: [ledgerEntry()] }), `security-advisories`);
+        expect(clear.state).toBe(`clear`);
+        expect(clear.digest).toBe(``);
+        expect(choreAnswer(clear)).toBeUndefined();
     });
 });
 

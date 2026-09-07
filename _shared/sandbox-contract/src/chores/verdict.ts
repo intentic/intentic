@@ -1,4 +1,4 @@
-import type { ChoreLedgerEntry, ChoresReport, ProbeId, ProbeResult } from "../schemas/maintenance.js";
+import type { ChoreLedgerEntry, ChoreOutcome, ChoresReport, ProbeId, ProbeResult } from "../schemas/maintenance.js";
 import { type Chore, type ChoreContext, type ChoreFinding, CHORES, chorePrompt } from "./chores.js";
 import { probeSpec } from "./probes.js";
 
@@ -36,6 +36,9 @@ import { probeSpec } from "./probes.js";
  * have not looked since the fix" arrived at this function looking identical, and the panel showed the second as
  * the first, quoting a week-old count an hour after the work that invalidated it. Comparing the run's time to the
  * MEASUREMENT's time is what separates them, and it is a comparison of two numbers the report already carries.
+ *
+ * Those six are about the EVIDENCE. Whether anyone has already answered it is a second axis entirely, and one
+ * the panel needs just as badly: see `choreAnswer` at the foot of this file.
  *
  * Nothing here can hide a problem. Snoozing and settling change whether the rail SPEAKS; the panel still shows
  * the chore, its evidence and its state. The one thing that removes a row entirely is `not-applicable`, and that
@@ -215,6 +218,52 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
         settled: sameEvidence,
     };
 };
+
+/* HAS ANYONE ALREADY ANSWERED THIS, and does the answer still stand. Two questions, because they have different
+ * answers and the panel needs both.
+ *
+ * This function exists because the panel could not tell an unexamined finding from one an agent had reported back
+ * on ten minutes earlier. Everything needed to say so was already on the verdict — `lastRun` carries the outcome,
+ * `settled` says the evidence was re-measured and did not move — and the list threw both away at render, so a
+ * chore that had been looked at, argued about and consciously left alone wore the same amber `carrying` badge as
+ * one nobody had opened. That is the surface spending its one alarm colour on work that is done, which is exactly
+ * what `unseenVerdicts` below refuses to do for the rail tile: the list simply never learned the same lesson.
+ *
+ * The DIGEST is what makes this an answer rather than a timestamp, for the same reason the ledger stores one:
+ * "an agent ran three days ago" cannot tell you whether it ran against THIS. A run against evidence that has since
+ * changed answered a different question and must not claim to have answered this one. */
+export interface ChoreAnswer {
+    readonly outcome: ChoreOutcome;
+    readonly ranAt: number;
+}
+
+// WHAT WAS CONCLUDED ABOUT THIS EVIDENCE, whenever it was concluded — history, not standing. A lapsed chore still
+// shows its old answer, because "an agent reported on exactly this two months ago" is a fact worth having in front
+// of you when deciding whether to spend a second turn on it.
+export const choreAnswer = (verdict: ChoreVerdict): ChoreAnswer | undefined => {
+    const { lastRun, digest } = verdict;
+    // An empty digest identifies no evidence, so nothing can have been concluded ABOUT it: that is the
+    // `unavailable`, `not-applicable` and plain `clear` rows, none of which has a finding to answer.
+    if (lastRun === undefined || digest === `` || lastRun.digest !== digest) {
+        return undefined;
+    }
+    return { outcome: lastRun.outcome, ranAt: lastRun.ranAt };
+};
+
+/* AND WHETHER THERE IS ANYTHING LEFT TO START, which is what the panel demotes on: an answered row keeps its
+ * place and its evidence, loses its warning tint, sorts under the rows nobody has looked at, and stops being
+ * counted as this morning's work.
+ *
+ * `settled` and `stale` are the two shapes that takes — we looked and re-measured and it did not move, or we
+ * looked and nothing has measured since. Deliberately NOT gated on `choreAnswer` above, even though both states
+ * imply a ledger entry: what a stale row needs is a measurement, so it carries no prompt and there is nothing on
+ * it to press whether or not the run's digest still lines up with the evidence on screen. Sorting it in among the
+ * rows that DO have a verb, on the grounds that we cannot name what the last turn concluded, would put the one
+ * row you cannot act on at the top of the ones you can.
+ *
+ * A LAPSED chore is not one of them: the cadence expiring is the book saying that answer is old enough to want a
+ * fresh one, so the row goes back to full weight while `choreAnswer` keeps showing what was said last time. */
+export const choreAnswered = (verdict: ChoreVerdict): boolean => verdict.settled || verdict.state === `stale`;
 
 // The ledger is keyed by repo + chore, which is the grain a verdict is decided at: the same chore in two repos is
 // two independent questions with two independent answers.

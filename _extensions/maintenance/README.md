@@ -46,6 +46,13 @@ which cost the column a silent seat on every workspace.
   than due: the probes refresh on a daily-to-weekly TTL, so an hour after a run the numbers on the row describe a
   tree that no longer exists. A stale row keeps its evidence, drops the claim, and offers a re-measure instead of a
   second turn.
+- A row says whether anyone has already answered it, not just what the evidence found. A turn that concluded
+  against a row's exact evidence (`choreAnswer`, digest-checked) puts a `reported` / `acted` mark on the collapsed
+  row; while that answer stands the row loses its warning tint, sorts under the rows nobody has looked at, and is
+  left out of every count on the page — the tab badge, the group headings, the rail column, which is finally the
+  same definition the tile badge has always used. Demoted, never hidden: it keeps its place, its evidence and its
+  verbs, and the button that starts a second turn says "Run it again". A chore whose cadence has lapsed still
+  shows what was concluded last time but goes back to full weight, because the lapse is the book asking again.
 - The page's own Reload **re-reads**, it does not re-measure. Measuring again costs a subprocess and minutes, so
   it is a decision made on the row that needs it: every chore resting on a probe carries its own Re-measure, and
   that is the only place the page asks for one.
