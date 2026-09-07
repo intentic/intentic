@@ -151,8 +151,22 @@ jobs:
       - run: pnpm e2e
       # Tonight's build displaces last night's layers under the same tag, and a dangling layer on a runner that
       # outlives the job is nobody's to evict. Same rule, filter and `always()` as the onboarding job's prune.
+      #
+      # THE WINDOW HAS TO BE SHORTER THAN THE CADENCE, and `until=336h` was not. `until` filters on when an
+      # image was CREATED, so a fourteen-day window exempts every layer this pipeline has ever displaced —
+      # last night's are twenty-four hours old when this step runs, and the bound evicted nothing for two
+      # weeks at a time. That is the standing occupancy behind both host-disk incidents in
+      # docs/ops/ci-runner.md: 2.04 GB free of 1 TB on 30 August, and run 34096964073, where docker's data
+      # disk could not extend while update-survival was mid-extraction and the ext4 inside it went read-only
+      # under a job that had done nothing wrong.
+      #
+      # 12h is half the 24h cadence: it always catches the generation this run displaced, and never touches
+      # anything a job on this box created today. It is not a retention policy — there is nothing here worth
+      # retaining. Two sandbox images built from two different commits share ZERO of their 106 layers (checked
+      # against ghcr for :latest and :stable), so each build is a full 1.58 GB compressed and the generation
+      # it displaces is 1.58 GB that will never be read again.
       - if: always()
-        run: docker image prune -f --filter until=336h || true
+        run: docker image prune -f --filter until=12h || true
 
   # THE ONBOARDING JOURNEY (@intentic/onboarding), once per way of getting a sandbox.
   #
@@ -317,11 +331,15 @@ jobs:
       # it. `always()`, because a failed run leaves exactly as much behind as a green one — and `|| true`
       # because the one failure that reaches here with no daemon to talk to is the daemon step itself, which
       # has already said so.
+      #
+      # 12h rather than the 336h this was written with, for the reason the e2e job's prune spells out in full:
+      # `until` reads an image's CREATION time, so a window longer than the 24h cadence exempts the very
+      # generation the step exists to evict.
       - if: always()
         shell: bash
         run: |
           export DOCKER_HOST="$JOB_DOCKER_HOST"
-          docker image prune -f --filter until=336h || true
+          docker image prune -f --filter until=12h || true
 
   # Desktop verification tier 3: verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a
   # clean Docker host and waits for the sandbox daemon to answer /health. It pulls the sandbox image, so it is

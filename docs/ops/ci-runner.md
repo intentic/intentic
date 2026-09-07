@@ -245,6 +245,18 @@ pressing the button.**
 virtual size: 680 GB free against the host's 2.04. Only a check on Windows sees the real number, which is why
 that check lives in the reconciler below rather than in any CI step.
 
+**It does not always block — sometimes it errors, and then it reads as a broken test.** Nightly run
+34096964073's `update-survival` had a healthy sandbox on `:stable` and was extracting the second sandbox image
+when the data disk stopped extending. The ext4 inside `docker_data.vhdx` went read-only under it, and
+everything downstream of that reported the fault as its own: containerd `failed to extract layer … read-only
+file system`, then `write …/io.containerd.metadata.v1.bolt/meta.db: read-only file system`, then
+`rm: cannot remove '/tmp/tmp.aBPJdVOpbA': Read-only file system` in the job container's own `/tmp`, then a
+**`Bus error`** from the `docker` CLI (its mapped pages came off the same filesystem), and finally a post-job
+`docker rm --force` answered **502** and a `docker network rm` **500** by the host daemon. Job-level, that is
+one red tier and 900 log lines with no statement of cause; the tell is that *every* write failed, including
+ones nothing in the repository touches. `ic` itself behaved correctly throughout — it refused the update and
+said `the sandbox is untouched`. Read `EROFS` on a runner as this, not as the tier under it.
+
 The second failure mode is why the fix is a **setting** and not only a watchdog. A three-minute reconcile
 against a sixty-second timeout leaves the fleet down most of the time; `vmIdleTimeout=-1` removes the cause.
 WSL reads `.wslconfig` only when the VM starts, so the setting is inert until the next `wsl --shutdown`.
@@ -495,6 +507,17 @@ Tauri toolchains: is baked into `ci-base` and `ci-desktop`.
   every image build, which is cheap here because **that store is not the cache of record**: `--cache-to
   type=inline` writes the layer cache into the pushed image and the next build reads it back over `--cache-from
   type=registry`, so a swept builder costs a registry read rather than a cold build.
+- **the host daemon's image store**, which is what actually fills that volume. Every sandbox build tags a
+  fresh image over yesterday's and leaves the whole previous generation dangling, and two sandbox images built
+  from two different commits share **zero of their 106 layers** (checked against ghcr for `:latest` and
+  `:stable`), so a generation is a full 1.58 GB compressed — several times that extracted — and none of it is
+  ever read again. The nightly's `e2e` and `onboarding` jobs each end with a `docker image prune` for exactly
+  that garbage. Both were written `--filter until=336h`, which **evicted none of it**: `until` filters on when
+  an image was *created*, so a fourteen-day window exempts every layer the pipeline displaces, all of which
+  are hours old. Now `until=12h` — half the nightly's 24h cadence, so it always catches the generation the run
+  displaced and never touches anything a job on this box created today. Nothing tagged and no volume is ever
+  in scope; a dangling image any container still references, including a stopped sandbox of the operator's own,
+  is not either.
 - **the host volume itself**, which is the one nothing in this file could see. On 30 August the runner box
   reached **2.04 GB free of 1 TB** — `docker_data.vhdx` at 456 GB, the distro's `ext4.vhdx` at 188 GB. A docker
   whose data disk cannot extend **stops answering rather than erroring**, and six pipelines in a row then hung
