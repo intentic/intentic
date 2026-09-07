@@ -337,17 +337,22 @@ const main = async (): Promise<void> => {
     }
 
     /* Setup-time CONNECTED DEVICE: create the card for the machine that ran the installer and arm its pairing,
-     * so the agent that same flow installed can enroll. A no-op on every boot after the first, the token is
-     * burned on /history when it is redeemed, and on every sandbox that was set up before this existed.
+     * so the agent that same flow installed can enroll. The CARD is written on the first boot only — the id is
+     * remembered on /history, so a device the owner deleted is not offered back to them at the next restart
+     * (host-seed.ts) — while the pairing is re-armed every boot, since a machine agent that comes up late still
+     * needs a live token to enroll against.
      *
      * Detached like the sync seed above: the machine agent retries its enroll on its own backoff, so nothing here
      * needs to hold the boot. A failure leaves the device unconnected and the Devices view saying so, which
      * is exactly what it said before this existed. */
     if (config.hostPairToken !== "") {
         void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
-            .then(({ armed, id }) => {
-                if (armed) {
-                    logger.info({ host: id }, "setup device armed: it may manage this machine's sandboxes; widen or revoke on its capability card");
+            .then(({ offered, id }) => {
+                if (offered) {
+                    logger.info(
+                        { host: id },
+                        "setup device connected: it may manage this machine's sandboxes; widen or revoke on its capability card",
+                    );
                 }
             })
             .catch((error: unknown) =>
