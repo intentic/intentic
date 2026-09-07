@@ -68,6 +68,7 @@ PROBE="$(
     cat <<'JS'
 const { existsSync } = require("node:fs");
 const { join } = require("node:path");
+const { pathToFileURL } = require("node:url");
 const fail = (code, why) => { console.error(why); process.exit(code); };
 (async () => {
     let res;
@@ -113,17 +114,28 @@ const fail = (code, why) => { console.error(why); process.exit(code); };
      *
      * Names come from the image's own contract module, never from a copy in this script: the browser, the
      * daemon and the Dockerfile all read them from there, and a fourth spelling here would be the one that
-     * rots. */
+     * rots. Reached through the package's PUBLIC entry, resolved from the daemon's install root the way the
+     * daemon's own import resolves — never a path into the package's internals. A path was what this read
+     * first (`dist/starter.js`), and the 2026-09-06 reorganisation moved the file to `dist/state/starter.js`
+     * behind an unchanged root export: every real reader followed it, this gate did not, and it failed two
+     * perfectly healthy halves on a module that was right there. */
     let starter;
     try {
-        starter = require("/opt/sandbox/node_modules/@intentic/sandbox-contract/dist/starter.js");
+        starter = await import(pathToFileURL(require.resolve("@intentic/sandbox-contract", { paths: ["/opt/sandbox"] })).href);
     } catch (error) {
-        // Terminal and named: an unreadable contract module is a moved path, not a slow boot, and retrying it
-        // until the timeout would report "still not healthy" over a daemon that is perfectly alive.
+        // Terminal and named: an unreadable contract module is a pruned or unresolvable package, not a slow
+        // boot, and retrying it until the timeout would report "still not healthy" over a daemon that is
+        // perfectly alive.
         fail(2, `cannot read the starter contract from the image: ${error instanceof Error ? error.message : String(error)}`);
         return;
     }
     const { STARTER_APP, STARTER_REPO } = starter;
+    if (typeof STARTER_APP !== "string" || typeof STARTER_REPO !== "string") {
+        // The contract loaded but no longer names the starter site — a rename that reached the package and not
+        // its readers, which `existsSync(join(dir, undefined))` would otherwise report as a missing bake.
+        fail(2, `the contract names no starter site: STARTER_REPO=${JSON.stringify(STARTER_REPO)} STARTER_APP=${JSON.stringify(STARTER_APP)}`);
+        return;
+    }
     if (!existsSync(join("/opt/starter/_apps", STARTER_APP))) {
         fail(2, `the image bakes no starter site: /opt/starter/_apps/${STARTER_APP} is absent`);
         return;
