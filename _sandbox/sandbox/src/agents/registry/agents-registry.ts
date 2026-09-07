@@ -12,7 +12,7 @@ import {
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { opt } from "../../agent/run/opt.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
-import { MAX_NOTE_LENGTH } from "../../git/ops/commit-message.js";
+import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { watchProjection } from "../../agent/verification/watch-state.js";
 import { loopProjection } from "../../loops/loop-state.js";
 import { workflowProjection } from "../../workflows/workflow-state.js";
@@ -77,6 +77,19 @@ const cannotBeAName = (title: string): boolean => isFailureSentence(title) || is
  * The ceiling itself belongs to the prompt that writes these (git/commit-message.ts), which asks for a sentence
  * that fits it. One number, so a note is never cut at a length nothing asked it to respect. */
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
+
+/* A DRAFTED SUBJECT IS NOT A TITLE, and giving it the title's ceiling is what cut one in half.
+ *
+ * This went through sanitizeTitle until it filed `feat(access): StatusBadge on member roster and expired
+ * tokens, ui.inputSm on inv` into the commit box: a conventional header severed at exactly 80 characters,
+ * mid-word, which the user had to finish typing before they could commit. 80 is the width of a CARD. A commit
+ * subject answers to what git will accept, which is the 100 of every conventional hook's header-max-length, and
+ * that number lives with the prompt that writes to it (git/ops/commit-message.ts, MAX_SUBJECT_LENGTH).
+ *
+ * The same one-line scrub, and the same mistake sharing a ceiling already made of the release notes one layer
+ * up (see sanitizeNote). A BACKSTOP rather than the working limit: the drafter clips on a word boundary before
+ * this is reached (conventionalSubject), so a cut here means something bypassed it. */
+const sanitizeSubject = (subject: string): string | undefined => sanitizeLine(subject, MAX_SUBJECT_LENGTH);
 
 /* There is no body scrub here any more, and there is no body to scrub: a drafted message is a subject and, for a
  * repo that keeps a changelog, its notes (git/commit-message.ts). The multi-line cleaner this replaces existed
@@ -1190,9 +1203,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         },
         setLandedSubject: async (id, draft) => {
             const entry = entryOf(id);
-            const clean = sanitizeTitle(draft.subject);
-            // Sanitized through the title cleaner, which is the same job: one bounded line, no control
-            // characters. An empty draft writes nothing rather than clearing what the last land said.
+            const clean = sanitizeSubject(draft.subject);
+            // One bounded line, no control characters, on the SUBJECT's own ceiling rather than a card's (see
+            // sanitizeSubject). An empty draft writes nothing rather than clearing what the last land said.
             if (entry === undefined || clean === undefined) {
                 return;
             }

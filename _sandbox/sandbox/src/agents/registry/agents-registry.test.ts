@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
-import { MAX_NOTE_LENGTH } from "../../git/ops/commit-message.js";
+import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
@@ -1041,12 +1041,20 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
-    /* A RELEASE NOTE IS NOT A TITLE, which is what this pins. The note and its breaking sibling used to be
-     * scrubbed through the title's cleaner, so every sentence longer than a card's 80 characters reached the
-     * published Release, and the changelog page, and the update card, cut mid-word: four of the first five
-     * entries ended like "…versus addin". The subject is still one bounded line; the sentences written for users
-     * are not bounded by a card's width, only by a ceiling a page of prose cannot pass. */
-    it("setLandedSubject keeps the release note and the breaking warning whole, and still bounds the subject", async () => {
+    /* NEITHER A RELEASE NOTE NOR A SUBJECT IS A TITLE, which is what this pins, and the second half of it was
+     * learned the same way as the first.
+     *
+     * The note and its breaking sibling used to be scrubbed through the title's cleaner, so every sentence
+     * longer than a card's 80 characters reached the published Release, and the changelog page, and the update
+     * card, cut mid-word: four of the first five entries ended like "…versus addin". The SUBJECT went on being
+     * scrubbed that way for longer, and cost the same thing one layer down — a conventional header severed at
+     * exactly 80 (`feat(access): StatusBadge on member roster and expired tokens, ui.inputSm on inv`) sitting in
+     * the commit box for the user to finish typing before they could commit.
+     *
+     * All three are still bounded, on the ceiling each one actually answers to: a note by what a changelog entry
+     * can hold, a subject by what a commit-msg hook will take (MAX_SUBJECT_LENGTH, git's 100), and only a title
+     * by the width of a card. */
+    it("setLandedSubject keeps the release note and the breaking warning whole, and bounds the subject by git's header limit rather than a card's width", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());
         await registry.init();
@@ -1058,7 +1066,9 @@ describe("agents registry", () => {
         const saved = () => store.saved().find((entry) => entry.id === "c1");
         expect(saved()?.landedNote).toBe(note);
         expect(saved()?.landedBreaking).toBe(breaking);
-        expect(saved()?.landedSubject).toHaveLength(80);
+        expect(saved()?.landedSubject).toHaveLength(MAX_SUBJECT_LENGTH);
+        // And the number is the commit header's, not the card's: 80 is what this used to cut at, mid-word.
+        expect(MAX_SUBJECT_LENGTH).toBeGreaterThan(80);
 
         // The ceiling is still a ceiling: a model that ignored "one plain sentence" cannot put a page onto a
         // Release. It is the same number the prompt asks a note to fit in (MAX_NOTE_LENGTH), never a second one.

@@ -13,6 +13,7 @@ import {
     fallbackBreakingNote,
     markSubjectBreaking,
     MAX_NOTE_LENGTH,
+    MAX_SUBJECT_LENGTH,
     type RepoDiff,
 } from "./commit-message.js";
 
@@ -270,6 +271,74 @@ test("unwraps the packaging a cheap model adds even when told not to", () => {
     expect(cleanCommitSubject("Subject: feat: add autofill")).toBe("feat: add autofill");
     expect(cleanCommitSubject("- feat: add autofill")).toBe("feat: add autofill");
     expect(cleanCommitSubject("   \n\nfeat: add autofill\n")).toBe("feat: add autofill");
+});
+
+/* THE REFUSALS THE CHEAP RUNG EARNS, AND THE ONES IT NO LONGER DOES. Each case below is a real commit-msg
+ * rejection that reached the user as a red box under a message that was otherwise the one they wanted, which is
+ * the entire cost of drafting these on a cheap model. Asserted as a group because the rule they answer to is a
+ * group: a message routinely breaks two at once (a capitalised subject that ends in a full stop). */
+test("repairs the mechanical rules a commit-msg hook refuses, and leaves the sentence alone", () => {
+    // A leading capital on an ordinary word: lowered, which is what the prompt asked for and costs nothing.
+    expect(cleanCommitSubject("feat(ui): Redesign the sandbox access view")).toBe("feat(ui): redesign the sandbox access view");
+    // A trailing period, and both spellings of it.
+    expect(cleanCommitSubject("fix: stop the picker reordering.")).toBe("fix: stop the picker reordering");
+    expect(cleanCommitSubject("fix: stop the picker reordering...")).toBe("fix: stop the picker reordering");
+    // A capitalised type, and a colon the model spaced oddly.
+    expect(cleanCommitSubject("Feat:  add autofill")).toBe("feat: add autofill");
+    // A shout has no identifier spelling left to protect, so it is lowered whole rather than by its first letter.
+    expect(cleanCommitSubject("fix: STOP THE PICKER REORDERING")).toBe("fix: stop the picker reordering");
+    // Nothing wrong ⇒ nothing touched, including a name in the middle of the line, where the case rule never
+    // looked. This is the common reply and the repair must be invisible on it.
+    expect(cleanCommitSubject("feat(access): show StatusBadge on the member roster")).toBe("feat(access): show StatusBadge on the member roster");
+});
+
+test("a name leading the subject keeps its spelling instead of being mangled to fit the case rule", () => {
+    /* THE FAILURE THIS EXISTS FOR, verbatim: the prompt tells the drafter to name things as the code spells
+     * them, and `subject-case` reads a capital first letter as sentence-case and refuses the commit. Lowering
+     * the letter would "fix" it by writing a token that is not in the code (`statusBadge`, `eSLint`), which
+     * defeats the reason the subject names things at all. Backticked instead: `subject-case` short-circuits on a
+     * subject that does not start with a cased letter, so the identifier survives exactly. */
+    expect(cleanCommitSubject("feat(access): StatusBadge on the member roster")).toBe("feat(access): `StatusBadge` on the member roster");
+    expect(cleanCommitSubject("fix(api): API tokens no longer expire early")).toBe("fix(api): `API` tokens no longer expire early");
+    expect(cleanCommitSubject("feat: OAuth callback handles a state mismatch")).toBe("feat: `OAuth` callback handles a state mismatch");
+    expect(cleanCommitSubject("refactor: ESLint config moves to oxlint")).toBe("refactor: `ESLint` config moves to oxlint");
+    // A dotted name, capitalised by the model, and the comma after it stays outside the quotes.
+    expect(cleanCommitSubject("style(ui): Ui.inputSm, applied to the invite controls")).toBe("style(ui): `Ui.inputSm`, applied to the invite controls");
+    // A word that only LOOKS capitalised is a word, and `a11y` is how it is spelled anyway.
+    expect(cleanCommitSubject("fix(ui): A11y labels on the roster")).toBe("fix(ui): a11y labels on the roster");
+    // A name that already starts lowercase was never in danger: `subject-case` reads the first character only,
+    // so quoting this one would be noise added to a message nothing was going to refuse.
+    expect(cleanCommitSubject("perf: resolveRoleModels() no longer sorts on every read")).toBe(
+        "perf: resolveRoleModels() no longer sorts on every read",
+    );
+});
+
+test("an over-long subject is clipped on a word boundary at the header ceiling, never mid-word", () => {
+    /* THE OTHER HALF OF THE SAME REFUSAL, and the bug that filed `… ui.inputSm on inv` into the commit box: the
+     * subject was being scrubbed through the session-title cleaner, so a header whose real ceiling is 100 was
+     * severed at exactly 80, mid-word, and the user had to finish typing it before they could commit. */
+    const long = `feat(access): show the StatusBadge on the member roster and on expired tokens, with invite and mint controls sized to match`;
+    const clipped = cleanCommitSubject(long);
+    expect(clipped.length).toBeLessThanOrEqual(MAX_SUBJECT_LENGTH);
+    // Whole words only, and no dangling punctuation where the cut landed.
+    expect(long).toContain(clipped);
+    expect(clipped).not.toMatch(/[\p{P}\s]$/u);
+    expect(long.charAt(clipped.length)).toBe(" ");
+    // The ceiling is git's, not a card's: an 80-character cut is what this replaced.
+    expect(MAX_SUBJECT_LENGTH).toBe(100);
+    expect(clipped.length).toBeGreaterThan(80);
+});
+
+test("asks for a lowercase verb first so the naming rule and the case rule stop contradicting each other", () => {
+    const prompt = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", blocks: [] }]);
+    // The demand, and the worked pair beside it: the cheap rung follows an example where it argues with prose.
+    expect(prompt).toContain("Begin the subject with a LOWERCASE word");
+    expect(prompt).toContain("good: feat(access): show StatusBadge on the member roster");
+    expect(prompt).toContain("bad:  feat(access): StatusBadge on the member roster");
+    // And the instruction it used to contradict is still there: this was resolved, not dropped.
+    expect(prompt).toContain("NAME THINGS");
+    // The clause that caused it is gone, so nothing in the prompt asks for the whole subject to be lower case.
+    expect(prompt).not.toContain("lower case after the colon");
 });
 
 test("skips a preamble to the line that is actually the message", () => {

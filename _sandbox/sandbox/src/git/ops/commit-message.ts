@@ -265,6 +265,23 @@ const TYPES = [`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`,
  * cheap rung writes when nothing bounds it, which is the shorter, plainer note this is for. */
 export const MAX_NOTE_LENGTH = 160;
 
+/* HOW LONG A DRAFTED SUBJECT MAY BE, and why this number is not the 72 the prompt asks for or the 80 a card is.
+ *
+ * What this bounds is a whole conventional HEADER, `type(scope): text`, because that is what the drafter returns
+ * and what the commit box files. 100 is the ceiling every conventional commit-msg hook puts on that line
+ * (commitlint's `header-max-length`, config-conventional's default and this repo's), so it is the point past
+ * which a subject stops being one that git will accept. The prompt still asks for under 72, and should: a
+ * shorter subject reads better in a log. The two numbers are different jobs — one is style, this one is the wall.
+ *
+ * IT IS EMPHATICALLY NOT THE CARD'S 80. This used to be scrubbed through the session-title cleaner
+ * (agents-registry.ts, MAX_TITLE_LENGTH), and an 80-character cut on a line whose real ceiling is 100 filed
+ * `feat(access): StatusBadge on member roster and expired tokens, ui.inputSm on inv` into the commit box — a
+ * header severed mid-word at exactly 80, which the user then had to finish by hand before they could commit.
+ * That is the same mistake sharing the title's ceiling once made of the release notes, which published ending
+ * "…versus addin" (see sanitizeNote's comment). A title is bounded by the width of a card. A commit subject is
+ * bounded by what git will take. */
+export const MAX_SUBJECT_LENGTH = 100;
+
 // The prompt. Written flat rather than as a system/user pair because the one-shot sends no system prompt at all
 // (see claude/claude-one-shot.ts): the instruction, the style examples and the material are one message, in the order the
 // model should weigh them.
@@ -294,7 +311,25 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         `- The type is EXACTLY one of: ${TYPES.join(`, `)}. Choose by what the change does: feat = new capability,`,
         `  fix = wrong behaviour corrected, refactor = same behaviour rearranged, perf = faster or lighter,`,
         `  docs = documentation, test = tests, build/ci = tooling and pipelines, chore = everything else.`,
-        `- Subject: imperative mood, lower case after the colon, no trailing period, under 72 characters.`,
+        `- Subject: imperative mood, no trailing period, under 72 characters.`,
+        /* THE ONE CONTRADICTION THIS PROMPT USED TO CONTAIN, resolved out loud, because the cheap rung resolved
+         * it the other way and a hook then refused the answer.
+         *
+         * "lower case after the colon" and "name things, spelled as the code spells them" (the rule below) are
+         * in direct conflict the moment the thing worth naming is what the subject is ABOUT: `StatusBadge`,
+         * `API` and `OAuth` are spelled with a capital or they are spelled wrong. Told both in one breath, the
+         * cheap rung obeyed the naming rule and led with the identifier, and `subject-case` refused the commit.
+         * Both halves are kept, in the order that makes them compatible: a verb first, the name straight after,
+         * which is also simply the better subject. A worked pair beside it does more here than the rule does —
+         * the rung follows examples where it argues with prose.
+         *
+         * The draft is repaired mechanically either way (conventionalSubject below), so this text is what keeps
+         * repair rare rather than what makes it unnecessary. */
+        `- Begin the subject with a LOWERCASE word, and make it the verb: "show", "stop", "drop", "rename".`,
+        `  A name from the code goes straight after it, spelled exactly as the code spells it.`,
+        `    good: feat(access): show StatusBadge on the member roster`,
+        `    bad:  feat(access): StatusBadge on the member roster`,
+        `    bad:  feat(access): Show StatusBadge on the member roster`,
         /* THE INSTRUCTION THAT MAKES THIS HISTORY SEARCHABLE. A message reading "improve error handling" matches
          * nothing anyone would ever look for; the same change written as "surface the 401 from resolveCredential
          * in the account picker" matches the symbol, the surface and the condition. The cheap rung will not do
@@ -423,12 +458,108 @@ const messageLines = (reply: string): string[] => {
     return start === -1 ? lines : lines.slice(start);
 };
 
-// The subject: the first line of the message proper. Skipping the note rather than taking line one outright is
-// what keeps a model that leads with its note from putting the note in the subject, the answer is still right,
-// it simply arrived in the other order, and rejecting it over that would waste a good draft.
+/* WHAT A COMMIT-MSG HOOK WOULD REFUSE, PUT RIGHT BEFORE ANYBODY IS ASKED TO PUT IT RIGHT.
+ *
+ * The rung that writes these messages is the cheap one, by design: this is a one-line job on a small prompt and
+ * paying a frontier model for it would be absurd. What the cheap rung does is break the mechanical rules while
+ * getting the sentence right — a capital on the first word, a full stop on the end, a line four characters over
+ * the ceiling — and every one of those came back to the user as a red "Commit failed" box under a message that
+ * was otherwise exactly what they wanted. The refusal is the whole cost of running this cheaply, and the
+ * refusals are all deterministic, so they are corrected here instead of being reported.
+ *
+ * THE TARGET IS THE STRICTEST COMMON CONFIG, not this repo's. config-conventional's defaults are what an
+ * arbitrary workspace's hook runs, and the daemon drafts for whatever repos the user has, so a subject that
+ * leaves here must satisfy the strict reading even though this repo now allows a leading identifier
+ * (commitlint.config.ts). Three repairs cover every error-level rule that repair can reach:
+ *
+ *   subject-case      a leading capital, lowered when it is an ordinary word and BACKTICKED when it is a name;
+ *   subject-full-stop a trailing period, dropped;
+ *   header-max-length an over-long header, clipped on a word boundary;
+ *   type-case         a capitalised type (`Feat:`), lowered when the header is rebuilt.
+ *
+ * What is NOT repaired: an empty subject, and a reply with no conventional type at all. Both mean the model
+ * answered something other than the question, there is no correct mechanical guess at what it meant, and the
+ * ask already hands those to the next model in the chain (agents/land/landed-subject.ts, messageAnswer). A
+ * subject that is one PascalCase token with no spaces in it (`fix: StopTheReordering`) is left alone for the
+ * same reason: it is not a sentence, and nothing here could turn it into one. */
+
+// A leading word that is a NAME rather than a capitalised English word, which is the distinction that decides
+// whether lowering its first letter is a correction or a corruption. Prose does not put two capitals in a row,
+// a capital after a lowercase, or a dot in the middle of a word; code does all three constantly. So `API`,
+// `OAuth`, `ESLint`, `StatusBadge`, `ui.inputSm` and `resolveRoleModels()` are names, and `Sandbox`, `Show`,
+// `Fix` and `A11y` are words — the last of which is exactly right to lower, since `a11y` is how it is written.
+const looksLikeName = (word: string): boolean => /\p{Lu}\p{Lu}|\p{Ll}\p{Lu}/u.test(word) || /[._/]\p{L}|\(\)/u.test(word);
+
+// The leading token, without the punctuation that trails it, so a name is quoted and the comma after it is not.
+const LEAD = /^[\p{L}\d._/]+(?:\(\))?/u;
+
+/* THE SUBJECT'S FIRST LETTER, MADE LOWERCASE OR MADE EXEMPT.
+ *
+ * An ordinary word is simply lowered: that is what the prompt asked for and it loses nothing. A NAME cannot be
+ * lowered — `statusBadge` and `eSLint` are different tokens from the ones in the code, and the whole point of
+ * naming things in a subject is that a later search matches them — so it is wrapped in backticks instead, which
+ * is not a dodge but the documented way out: the `subject-case` rule in @commitlint/rules checks nothing at all
+ * unless the subject starts with a cased letter (it short-circuits on its own `startsWithLetterRegex`), and
+ * @commitlint/ensure strips backticked spans before it looks anyway. A backticked identifier also reads as one,
+ * which is more than the mangled spelling managed.
+ *
+ * Gated on the FIRST CHARACTER alone, because that is the only character `subject-case` reads. A name in any
+ * other position was never in danger and is left exactly as the model wrote it, `resolveRoleModels()` included:
+ * quoting one to protect it from a rule that never looked at it would be noise the drafter has to explain. */
+const leadingCase = (text: string): string => {
+    if (!/^\p{Lu}/u.test(text)) {
+        return text;
+    }
+    const lead = LEAD.exec(text)?.[0];
+    if (lead === undefined) {
+        return text;
+    }
+    return looksLikeName(lead) ? `\`${lead}\`${text.slice(lead.length)}` : text.charAt(0).toLowerCase() + text.slice(1);
+};
+
+// A subject shouted in full. Lowered whole rather than by its first letter, because an all-caps line has no
+// identifiers left to protect: their spelling is already gone.
+const isShout = (text: string): boolean => text === text.toUpperCase() && /\p{Lu}/u.test(text);
+
+// `subject-full-stop`, which reads the last character only, so `foo.` and `foo...` both break it.
+const TRAILING_STOP = /\.+$/u;
+
+/* Clipped on a WORD BOUNDARY, never at the byte, and this is the difference between a subject the user commits
+ * and one they have to finish typing. A header cut at a count reads as a shorter, wrong sentence that stops
+ * mid-noun ("… ui.inputSm on inv"), and the punctuation left dangling at the cut ("… expired tokens,") makes it
+ * read as truncated even when the words are whole. */
+const clipSubject = (subject: string): string => {
+    if (subject.length <= MAX_SUBJECT_LENGTH) {
+        return subject;
+    }
+    const cut = subject.slice(0, MAX_SUBJECT_LENGTH);
+    const boundary = cut.lastIndexOf(` `);
+    return (boundary === -1 ? cut : cut.slice(0, boundary)).replace(/[\p{P}\s]+$/u, ``);
+};
+
+// The header taken apart so the repairs above land on the SUBJECT rather than on the `feat(scope):` in front of
+// it. Rebuilt with a lowercase type and exactly one space after the colon, which is `type-case` and
+// `header-trim` for free. A reply with no conventional type has no parts to take apart and is only clipped: the
+// hook refuses it whatever this did, and half-fixing it would hide which rung wrote it.
+const HEADER = new RegExp(String.raw`^(${TYPES.join(`|`)})(\([^)]*\))?(!?):\s*(.*)$`, `iu`);
+
+export const conventionalSubject = (header: string): string => {
+    const parts = HEADER.exec(header);
+    if (parts === null) {
+        return clipSubject(header);
+    }
+    const [, type = ``, scope = ``, breaking = ``, text = ``] = parts;
+    const cased = isShout(text) ? text.toLowerCase() : leadingCase(text);
+    return clipSubject(`${type.toLowerCase()}${scope}${breaking}: ${cased.replace(TRAILING_STOP, ``)}`);
+};
+
+// The subject: the first line of the message proper, unwrapped and then made committable. Skipping the note
+// rather than taking line one outright is what keeps a model that leads with its note from putting the note in
+// the subject, the answer is still right, it simply arrived in the other order, and rejecting it over that would
+// waste a good draft.
 export const cleanCommitSubject = (reply: string): string => {
     const [first] = messageLines(reply);
-    return first === undefined ? `` : unwrap(first);
+    return first === undefined ? `` : conventionalSubject(unwrap(first));
 };
 
 /* THERE IS NO BODY READER, and its absence is deliberate rather than an omission.
@@ -465,8 +596,10 @@ export const cleanBreakingNote = (reply: string): string => {
 
 // The `!` on a conventional subject, added when the type carries none. A subject that is not conventional is
 // returned untouched, the commit-msg hook rejects it before the marker could matter.
+// Re-clipped after the insert, not before: the marker is one character, and a subject already sitting on the
+// ceiling would leave here at 101 and be refused for a length the drafter never wrote.
 const TYPE_HEAD = new RegExp(String.raw`^(${TYPES.join(`|`)})(\([^)]*\))?:`, `i`);
-export const markSubjectBreaking = (subject: string): string => subject.replace(TYPE_HEAD, `$1$2!:`);
+export const markSubjectBreaking = (subject: string): string => clipSubject(subject.replace(TYPE_HEAD, `$1$2!:`));
 
 /* The sentence used when the model wrote none: the removed surfaces' schema names, stated plainly. Weaker than
  * a written warning, it names what shrank without saying what to do instead, but it is TRUE, it reaches the

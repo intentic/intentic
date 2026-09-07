@@ -21,6 +21,24 @@ const config: UserConfig = {
          */
         "body-max-line-length": [0],
         "footer-max-line-length": [0],
+        /* A SUBJECT MAY LEAD WITH A NAME FROM THE CODE, which is what dropping `sentence-case` from this list
+         * buys and the only thing it drops.
+         *
+         * config-conventional bans four case shapes here, and three of them are real: a Title Cased subject, a
+         * shout, and one PascalCase blob in place of a sentence are all a message written in the wrong register.
+         * `sentence-case` is not a shape at all. @commitlint/ensure implements it as
+         * `upperFirst(subject) === subject`, so it means exactly one thing: THE FIRST LETTER MUST BE LOWERCASE.
+         *
+         * That fights the house rule one layer up. Both the drafter's prompt and this repo's own history ask a
+         * subject to NAME THINGS, spelled as the code spells them (_sandbox/sandbox/src/git/ops/commit-message.ts),
+         * and `StatusBadge`, `API`, `OAuth`, `ESLint` are spelled with a capital or they are spelled wrong. So a
+         * subject that obeyed the naming rule was refused by the case rule, and the only ways out were to mangle
+         * the identifier (`statusBadge`, `eSLint`) or to bounce the message back at whoever wrote it. Neither is
+         * worth a rule whose entire content is the case of one character.
+         *
+         * The other three stay, and still bite: `feat: Sandbox Access View Redesign`, `fix: STOP THE REORDERING`
+         * and `fix: StopTheReordering` are all refused exactly as before. */
+        "subject-case": [2, `never`, [`start-case`, `pascal-case`, `upper-case`]],
     },
 };
 
