@@ -846,6 +846,72 @@
     .lozenge-quiet {
         color: var(--color-subtle);
     }
+
+    /* ── A MARK BESIDE A RUN OF TEXT ──────────────────────────────────────────────────────────────────
+     * The bullet of a list, the flower on a heading, the tick on a FAQ summary, a provider's logo in a
+     * row. One rule, because the alignment it does is the one thing nothing in flexbox can do for you.
+     *
+     * A MARK IS A BOX AND TEXT IS A BASELINE GRID, and there is no layout keyword that relates the two.
+     * `align-items: center` centres the mark on the whole flex line, which is right until the words wrap
+     * and then parks the bullet between line one and line two. `flex-start` puts the mark's top at the
+     * row's content edge, which is half the leading above where the letters start. So every caller
+     * reached for a hand-tuned `margin-top` instead, and every one of them tuned it against the type size
+     * it happened to be sitting next to: this site carried five different answers (0.2rem twice, 0.35rem,
+     * 0.15rem, and a `mt-1.5` that was 3.6px out on a 20px line), because the constant travels by
+     * copy-paste and the type context that justified it does not.
+     *
+     * ONE LINE TALL, WITH THE MARK CENTRED IN IT. `1lh` is whatever line-height this row inherits, so the
+     * mark lands on the middle of the FIRST line at every type size, wraps and all, and there is no
+     * number here to go stale when the text around it changes. The mark keeps its own size inside the box
+     * (`.lotus-sm`, `.lozenge`, an 18px logo); this only says where the box sits.
+     *
+     * The drawings are centred in their own viewBoxes (components/ornaments.ts), so the box's centre is
+     * the ink's centre. If a mark is ever redrawn off-centre, fix it there — not with a margin here. */
+    .mark {
+        display: grid;
+        place-items: center;
+        align-self: start;
+        flex: none;
+        block-size: 1lh;
+    }
+    /* One point in a list: the mark and the words beside it. `--point-gap` because the gap is the only
+     * thing a list legitimately varies; the vertical relation is not the caller's to set. */
+    .point {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--point-gap, 0.625rem);
+    }
+
+    /* ── THE WORDMARK LOCKUP ──────────────────────────────────────────────────────────────────────────
+     * The flower beside the word, in the bar and in the footer's first cell. A DIFFERENT relation from
+     * the one above and the reason it gets its own rule: here the mark is aligned on the LETTERS, not on
+     * the line box. Baloo 2 reserves descender room the word "intentic" never uses, so a box-centred
+     * flower reads visibly high against a word with no descenders in it.
+     *
+     * That offset is a metric of the typeface, so it is one number, in `em`, in one place. It was two —
+     * `-0.125rem` in the bar and `-0.09rem` in the footer — which is the same constant re-eyeballed at a
+     * second size, and the two disagreed by more than either was accurate to. In `em` it holds at every
+     * size a lockup is drawn at, so the mobile bar and the footer get it for free. */
+    .lockup {
+        --wordmark-size: 1.55rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.33em;
+        font-size: var(--wordmark-size);
+        text-decoration: none;
+    }
+    .lockup .wordmark {
+        font-family: var(--font-mark);
+        font-size: inherit;
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: 0.005em;
+        color: var(--color-primary-500);
+    }
+    .lockup .lotus {
+        transform: translateY(-0.065em);
+    }
+
     /* The horizontal breath between a block of copy and the thing it leads to. */
     .divider {
         display: block;
@@ -1316,7 +1382,6 @@
         flex: none;
         width: 0.6rem;
         height: 0.6rem;
-        margin-top: 0.35rem;
         color: var(--color-gold);
         transition: transform 0.25s ease;
     }

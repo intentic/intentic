@@ -58,6 +58,7 @@ export const CHECKS = [
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },
     { id: "tailwind", file: "tailwind-bypass.mjs", needs: "checkout", gate: "tidy", about: "no arbitrary colours or pixel sizes in class attributes" },
     { id: "display", file: "display-descenders.mjs", needs: "checkout", gate: "tidy", about: "clipped display type keeps its descender clearance" },
+    { id: "marks", file: "mark-alignment.mjs", needs: "checkout", gate: "tidy", about: "a mark beside text is placed by the `.mark` rule, never by a hand-tuned offset" },
     { id: "rows", file: "row-tiers.mjs", needs: "checkout", gate: "tidy", about: "every list draws at its RowGroup's tier" },
     { id: "buttons", file: "button-tiers.mjs", needs: "checkout", gate: "tidy", about: "every action button is <Button>" },
     { id: "inputs", file: "input-tiers.mjs", needs: "checkout", gate: "tidy", about: "every field is ui-field-box" },

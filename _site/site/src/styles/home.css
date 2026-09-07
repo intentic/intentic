@@ -453,16 +453,10 @@
     gap: 0.85rem;
 }
 .home .compare li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
+    --point-gap: 0.75rem;
     font-size: 0.9375rem;
     line-height: 1.6;
     color: var(--color-content);
-}
-.home .compare li .lotus,
-.home .compare li .lozenge {
-    margin-top: 0.2rem;
 }
 .home .compare-chat li {
     color: var(--color-muted);
@@ -514,10 +508,15 @@
     padding: 0;
     list-style: none;
 }
+/* HUNG FROM THE ROW'S FIRST LINE, not centred in it. This row wraps: below ~30rem the detail takes two lines
+   while the logo and the name take one, and `center` then drops the name (and only the name) half a line, which
+   leaves the logo — placed on the first line, as every mark is — six pixels above the word it labels. Hanging
+   from the top is the arrangement that stays true at both widths. The chip keeps its own centring below, since
+   it is a box beside the text rather than a line of it. */
 .home .accounts li {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.85rem;
     border-bottom: 1px solid var(--color-line);
     padding: 0.95rem 1.3rem;
@@ -543,6 +542,7 @@
 .home .account-tag {
     display: inline-flex;
     align-items: center;
+    align-self: center;
     line-height: 1;
     border: 1px solid var(--color-line-strong);
     padding: 0.28rem 0.6rem;
@@ -562,15 +562,10 @@
     list-style: none;
 }
 .home .flat li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
+    --point-gap: 0.75rem;
     font-size: 0.9375rem;
     line-height: 1.6;
     color: var(--color-muted);
-}
-.home .flat li .lotus {
-    margin-top: 0.2rem;
 }
 
 /* ── 5 · Who builds it ───────────────────────────────── */
@@ -655,24 +650,24 @@
 }
 /* A station on the plan: a lotus in the margin where the numeral used to be, and the beat hung off it. The
    marker is the same one the page sets every bullet with, so a step reads as one more item in the page's
-   own vocabulary rather than as a counter with a typeface of its own. */
+   own vocabulary rather than as a counter with a typeface of its own.
+
+   The mark lives INSIDE the heading it marks, hung back into the station's indent, rather than absolutely
+   positioned over it. Absolute wanted a `top` in the station's line-height while the thing it had to line
+   up with was the h3's — two type contexts, joined by a constant that was right for neither. As a child of
+   the h3 it is on that heading's own line box (`.mark`), and the indent is arithmetic anyone can check:
+   1.7rem of padding, pulled back by the same 1.7, is a 0.95rem mark and a 0.75rem gap. */
 .home .station {
-    position: relative;
     padding-left: 1.7rem;
 }
 .home .station + .station {
     margin-top: 1.7rem;
 }
-.home .station-mark {
-    position: absolute;
-    top: 0.15rem;
-    left: 0;
-    display: block;
-    width: 0.85rem;
-    height: 0.85rem;
-}
 .home .station h3 {
-    margin: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin: 0 0 0 -1.7rem;
     font-size: 1.0625rem;
     color: var(--color-content);
 }

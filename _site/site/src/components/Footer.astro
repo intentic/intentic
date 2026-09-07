@@ -146,11 +146,12 @@ const legalLinks = [
         is the width that had five labels wrapping. Two even rows beat one row of ragged ones. */}
     <div class="relative mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 xl:grid-cols-6 xl:gap-8">
         <div class="col-span-2 sm:col-span-1">
-            {/* The wordmark is DRAWN rather than an image here, the same pair the bar sets: the flower and
-                the word, aligned on the letters. The nudge is the bar's, at this cell's size. */}
-            <div class="inline-flex items-center gap-2">
-                <Lotus size="md" class="-translate-y-[0.09rem]" />
-                <span class="font-mark text-[1.55rem] leading-none font-medium text-primary-500">intentic</span>
+            {/* The wordmark is DRAWN rather than an image here, the same pair the bar sets — and by the same
+                rule: `.lockup` in global.css owns the flower's relation to the letters, at whatever size
+                `--wordmark-size` says. This cell used to re-eyeball that offset for its own size. */}
+            <div class="lockup">
+                <Lotus size="md" />
+                <span class="wordmark">intentic</span>
             </div>
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
             <div class="mt-4 flex gap-4">

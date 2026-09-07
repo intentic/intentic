@@ -22,13 +22,14 @@ import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import AutomateFigure from "./AutomateFigure.astro";
+import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
 import Divider from "./Divider.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
 import Lotus from "./Lotus.astro";
-import Lozenge from "./Lozenge.astro";
 import Nav from "./Nav.astro";
+import Point from "./Point.astro";
 import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
@@ -108,9 +109,9 @@ const machineStep = content.connect.steps.at(-1)!;
                             than underlined — the band eyebrows elsewhere trail a hairline to the right,
                             which on a centred axis would tip the whole block sideways. */}
                         <p class="hero-eyebrow">
-                            <Lozenge />
+                            <Bullet mark="lozenge" />
                             <span>Welcome to {ORG_NAME}</span>
-                            <Lozenge />
+                            <Bullet mark="lozenge" />
                         </p>
 
                         {/* A space between the beats. Each is its own block, so nothing paints it; without it
@@ -235,7 +236,7 @@ const machineStep = content.connect.steps.at(-1)!;
                             <div class="stage fade-in">
                                 <div class="stage-head">
                                     <h3 class="stage-verb">
-                                        <Lotus size="md" />
+                                        <Bullet size="md" />
                                         {item.verb}
                                     </h3>
                                     <p class="stage-line">{item.line}</p>
@@ -306,12 +307,7 @@ const machineStep = content.connect.steps.at(-1)!;
                             </div>
                             <ul>
                                 {
-                                    content.workspace.comparison.ours.items.map((item) => (
-                                        <li>
-                                            <Lotus />
-                                            {item}
-                                        </li>
-                                    ))
+                                    content.workspace.comparison.ours.items.map((item) => <Point>{item}</Point>)
                                 }
                             </ul>
                         </div>
@@ -324,10 +320,9 @@ const machineStep = content.connect.steps.at(-1)!;
                             <ul>
                                 {
                                     content.workspace.comparison.chat.items.map((item) => (
-                                        <li>
-                                            <Lozenge class="lozenge-quiet" />
+                                        <Point mark="lozenge" markClass="lozenge-quiet">
                                             {item}
-                                        </li>
+                                        </Point>
                                     ))
                                 }
                             </ul>
@@ -358,9 +353,11 @@ const machineStep = content.connect.steps.at(-1)!;
                                 {
                                     content.economics.accounts.map((account) => (
                                         <li>
-                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                                                <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
-                                            </svg>
+                                            <Bullet>
+                                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                                    <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                                </svg>
+                                            </Bullet>
                                             <span class="account-name">{account.name}</span>
                                             <span class="account-detail">{account.detail}</span>
                                             <span class="account-tag">subscription</span>
@@ -375,12 +372,7 @@ const machineStep = content.connect.steps.at(-1)!;
                             <div class="eyebrow">Flat, not metered</div>
                             <ul>
                                 {
-                                    content.economics.points.map((point) => (
-                                        <li>
-                                            <Lotus />
-                                            {point}
-                                        </li>
-                                    ))
+                                    content.economics.points.map((point) => <Point>{point}</Point>)
                                 }
                             </ul>
                         </div>
@@ -428,10 +420,10 @@ const machineStep = content.connect.steps.at(-1)!;
                             {
                                 browserSteps.map((step) => (
                                     <div class="station">
-                                        <span class="station-mark" aria-hidden="true">
-                                            <Lotus />
-                                        </span>
-                                        <h3>{step.title}</h3>
+                                        <h3>
+                                            <Bullet />
+                                            {step.title}
+                                        </h3>
                                         <p>{step.body}</p>
                                     </div>
                                 ))
@@ -443,10 +435,10 @@ const machineStep = content.connect.steps.at(-1)!;
                         <div class="flow-zone">
                             <div class="flow-where">on your machine</div>
                             <div class="station">
-                                <span class="station-mark" aria-hidden="true">
-                                    <Lotus />
-                                </span>
-                                <h3>{machineStep.title}</h3>
+                                <h3>
+                                    <Bullet />
+                                    {machineStep.title}
+                                </h3>
                                 <p>{machineStep.body}</p>
                             </div>
 
@@ -502,7 +494,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                         {group.items.map((item) => (
                                             <details id={item.id} name={group.id} class="faq-item scroll-mt-28">
                                                 <summary>
-                                                    <Lozenge class="faq-mark" />
+                                                    <Bullet mark="lozenge" markClass="faq-mark" />
                                                     <span>{item.question}</span>
                                                 </summary>
                                                 <div class="faq-answer">

@@ -35,6 +35,9 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   divider) every flourish here is one of, as strings so markup and CSS `background-image` share one definition.
   `scripts/icons.mjs` reads the lotus out of it to build every favicon, so the mark in the bar and the mark in
   a browser tab cannot become two drawings.
+- [src/components/Bullet.astro](src/components/Bullet.astro) and
+  [src/components/Point.astro](src/components/Point.astro): a mark on a line of text, and a whole list row. The
+  only way a mark is placed beside words here — see the conventions below.
 - [src/pages/pricing.astro](src/pages/pricing.astro): your machine beside ours, words from
   `site-content/pricing.ts`, figures from `site-content/hosted.ts`.
 - [src/pages/docs](src/pages/docs): the documentation pages.
@@ -66,6 +69,14 @@ This package is layout and routing; a wording change should not need to touch it
 
 ## Conventions & gotchas
 
+- **A mark beside text is never placed by hand.** Bullets, the flower on a heading, the tick on a FAQ summary, a
+  provider's logo in a row: all of them go through `<Bullet>` (or `<Point>` for a list row), and `.mark` in
+  global.css puts them on the middle of the first line by making the box one line box tall (`1lh`). Do not add a
+  `mt-*`, a `translate-y`, or a `margin-top` to get a mark to look level — that constant is right only for the
+  type size it was typed at, and this site carried five different ones before the rule existed.
+  `_tools/checks/mark-alignment.mjs` refuses a new one, and `pnpm test` here measures every mark on four pages
+  at two widths in a real browser ([scripts/check-alignment.mjs](scripts/check-alignment.mjs)). The single
+  exception is `.lockup`, the wordmark, which is aligned on the letters rather than the line box.
 - **Docs pages author prose headings BARE**: `<h2>`, not `<h2 class="…">`. That is what marks a heading as a
   section of the page rather than furniture inside a card, and it is what earns it an anchor and a place in the
   section list. A heading that needs a class is a component's, and is skipped on purpose.

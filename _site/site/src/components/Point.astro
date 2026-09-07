@@ -1,0 +1,25 @@
+---
+/* ONE POINT IN A LIST: a mark, and the words beside it, as a row that cannot be assembled wrongly.
+ *
+ * The row used to be spelled out at each call site — a flex `li`, a mark, a hand-tuned margin to drag the
+ * mark back onto the line, and a span — which is four chances to get it wrong and no way to fix all of
+ * them at once. Here the `li` and the mark are the component's, and the caller passes what it actually
+ * owns: the words, the text styling, and `--point-gap` if this list sits closer or wider than the rest. */
+import Bullet from "./Bullet.astro";
+
+interface Props {
+    /** Which house ornament leads the row. */
+    mark?: "lotus" | "lozenge";
+    /** Classes for the DRAWING: colour, opacity. Never position (Bullet.astro says why). */
+    markClass?: string;
+    /** Type and colour for the row. */
+    class?: string;
+}
+
+const { mark = "lotus", markClass = "", class: className = "" } = Astro.props;
+---
+
+<li class:list={["point", className]}>
+    <Bullet mark={mark} markClass={markClass} />
+    <span><slot /></span>
+</li>

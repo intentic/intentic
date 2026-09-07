@@ -30,6 +30,7 @@ import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
+import Bullet from "./Bullet.astro";
 import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
@@ -38,7 +39,7 @@ const currentPath = Astro.url.pathname;
 
 <header class="bar" id="site-bar">
     <div class="bar-inner">
-        <a href="/" class="brand" aria-label="intentic">
+        <a href="/" class="brand lockup" aria-label="intentic">
             <Lotus size="lg" class="brand-mark" />
             <span class="wordmark">intentic</span>
         </a>
@@ -124,7 +125,7 @@ const currentPath = Astro.url.pathname;
                                             target={entry.action.external ? "_blank" : undefined}
                                             rel={entry.action.external ? "noopener" : undefined}
                                         >
-                                            <Lotus />
+                                            <Bullet />
                                             {entry.action.label}
                                             <span aria-hidden="true">→</span>
                                         </a>
@@ -482,31 +483,14 @@ const currentPath = Astro.url.pathname;
     }
 
     /* ── The brand ───────────────────────────────────────
-       ALIGNED ON THE LETTERS, not on the boxes. Two things fight here: the flower is a square and the word
-       is a line box, and `align-items: center` lines up the two BOXES. Baloo 2 carries tall ascender and
-       descender metrics, so the word's ink sits high inside a box that reserves room for descenders the
-       word "intentic" does not have — which parks the flower visibly above the letters. The nudge is in
-       `rem` rather than `em` so it holds at every size the bar uses. */
+       The lockup itself — the flower aligned on the LETTERS rather than on the boxes, and why that needs a
+       rule at all — is `.lockup` in global.css, shared with the footer's cell. All this file says is how
+       big this one is drawn; the bar's own glow stays here because the footer's does not have it. */
     .brand {
-        --mark-nudge: -0.125rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.62rem;
+        --wordmark-size: 1.85rem;
         flex: none;
-        text-decoration: none;
-    }
-    /* `:global`, because the class is handed to a CHILD COMPONENT: Astro scopes this block to elements this
-       file renders, and the mark's span is rendered by Lotus.astro. */
-    .brand :global(.brand-mark) {
-        transform: translateY(var(--mark-nudge, 0));
     }
     .wordmark {
-        font-family: var(--font-mark);
-        font-size: 1.85rem;
-        font-weight: 500;
-        line-height: 1;
-        letter-spacing: 0.005em;
-        color: var(--color-primary-500);
         text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
     }
 
@@ -962,9 +946,11 @@ const currentPath = Astro.url.pathname;
         .bar-icon {
             display: none;
         }
-        .wordmark {
-            font-size: 1.45rem;
+        .brand {
+            --wordmark-size: 1.45rem;
         }
+        /* `:global`, because the class is handed to a CHILD COMPONENT: Astro scopes this block to elements
+           this file renders, and the mark's span is rendered by Lotus.astro. */
         .brand :global(.brand-mark) {
             width: 1.9rem;
             height: 1.9rem;

@@ -26,8 +26,7 @@
  * The words are `site-content/automate.ts`, shared with every placement. Only the drawing is here.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { automateMachine, type AutomateTrigger } from "@intentic/site-content/automate";
-import Lotus from "./Lotus.astro";
-import Lozenge from "./Lozenge.astro";
+import Bullet from "./Bullet.astro";
 
 const machine = automateMachine;
 
@@ -125,14 +124,14 @@ const glyph = (paths: string) =>
         <div class="am-body am-body-run">
             <div class="am-node am-outcome">
                 <p class="am-node-title">
-                    <Lotus size="md" />
+                    <Bullet size="md" />
                     {machine.run.title}
                 </p>
                 <ul class="am-points">
                     {
                         machine.run.points.map((point) => (
                             <li>
-                                <Lozenge />
+                                <Bullet mark="lozenge" />
                                 {point}
                             </li>
                         ))
@@ -392,7 +391,7 @@ const glyph = (paths: string) =>
     }
     .am-points li {
         display: flex;
-        align-items: baseline;
+        align-items: flex-start;
         gap: 0.55rem;
         font-size: 0.875rem;
         line-height: 1.5;

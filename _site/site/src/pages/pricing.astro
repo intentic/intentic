@@ -6,11 +6,12 @@
 import { pricingContent } from "@intentic/site-content/pricing";
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import Bullet from "../components/Bullet.astro";
 import Corners from "../components/Corners.astro";
 import Divider from "../components/Divider.astro";
 import Footer from "../components/Footer.astro";
-import Lotus from "../components/Lotus.astro";
 import Nav from "../components/Nav.astro";
+import Point from "../components/Point.astro";
 
 const content = pricingContent;
 const faq = content.faq.map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
@@ -43,10 +44,7 @@ const faq = content.faq.map((item) => ({ question: item.question, answer: item.a
                             </header>
                             <ul class="flex flex-col gap-3">
                                 {column.includes.map((item) => (
-                                    <li class="flex items-start gap-2.5 text-sm text-muted">
-                                        <Lotus class="mt-0.5 shrink-0" />
-                                        <span>{item}</span>
-                                    </li>
+                                    <Point class="text-sm text-muted">{item}</Point>
                                 ))}
                             </ul>
                             <div class="mt-auto">
@@ -70,9 +68,11 @@ const faq = content.faq.map((item) => ({ question: item.question, answer: item.a
                         content.providers.accounts.map((account) => (
                             <li class="card flex flex-col gap-1.5 p-4">
                                 <span class="flex items-center gap-2 text-sm font-semibold text-content">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                                        <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
-                                    </svg>
+                                    <Bullet>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                                            <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                        </svg>
+                                    </Bullet>
                                     {account.name}
                                 </span>
                                 <span class="text-2xs leading-relaxed text-subtle">{account.detail}</span>
@@ -81,14 +81,7 @@ const faq = content.faq.map((item) => ({ question: item.question, answer: item.a
                     }
                 </ul>
                 <ul class="mt-8 flex flex-col gap-2.5">
-                    {
-                        content.providers.points.map((point) => (
-                            <li class="flex items-start gap-2.5 text-sm text-muted">
-                                <Lotus class="mt-0.5 shrink-0" />
-                                <span>{point}</span>
-                            </li>
-                        ))
-                    }
+                    {content.providers.points.map((point) => <Point class="text-sm text-muted">{point}</Point>)}
                 </ul>
             </div>
         </section>

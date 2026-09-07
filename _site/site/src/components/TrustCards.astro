@@ -1,8 +1,8 @@
 ---
 import { trustCards } from "@intentic/site-content/about";
 import { gitStats } from "@intentic/astro-integrations";
+import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
-import Lotus from "./Lotus.astro";
 
 /* The four checkable claims, shared by the landing band and /about/.
  *
@@ -34,7 +34,7 @@ const { class: className } = Astro.props;
             <div class="card p-[1.4rem]">
                 <Corners set="diag" />
                 <h3 class="m-0 flex items-center gap-[0.6rem] text-[1.0625rem] text-content">
-                    <Lotus />
+                    <Bullet />
                     {card.title}
                 </h3>
 

@@ -9,6 +9,7 @@
         "deploy": "wrangler deploy && node scripts/submit-indexnow.mjs",
         "preview": "astro preview",
         "check": "astro check",
+        "test": "node scripts/check-alignment.mjs",
         "astro": "astro",
         "sync:registry": "node scripts/sync-registry.mjs"
     },
@@ -28,6 +29,7 @@
     "devDependencies": {
         "@astrojs/check": "catalog:",
         "@intentic/demo": "workspace:*",
+        "playwright": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
         "wrangler": "catalog:"

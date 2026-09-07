@@ -9,8 +9,9 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 - Hold the repository's structural promises: the lockfile records the manifests, every test file is in a
   type-check program and under a budget, the workflows keep the fork boundary and the permission ceilings, a
   shrunk wire contract arrives declared, the daemon's module seams stay where they are, no build script removes
-  a directory agent turns have mounted over, the UI draws from its design system, no tracked text file
-  carries a control byte, and every skill description fits the budget the prompt pays for on every call.
+  a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is
+  placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
+  byte, and every skill description fits the budget the prompt pays for on every call.
 
 ## Key files
 
