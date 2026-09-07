@@ -42,6 +42,21 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
     return (score / (n.length * 2.4)) * 0.7 * Math.min(1, 20 / Math.max(20, h.length - n.length));
 };
 
+// What `iq files` resolves to, pattern or not.
+//
+// No pattern is "which files are there", never "no files match", and the distinction is the whole point: the
+// positional used to be required, so a bare `iq files` exited 2 with a usage error on STDERR — and 95% of
+// transcript calls redirect stderr, so `iq files 2>/dev/null | grep -i fleet` came back completely empty and
+// was read as an authoritative "no such file exists". Five of those in a fortnight, each one a false negative
+// the agent then reasoned from. A verb must not have a failure mode shaped like an answer.
+//
+// Only the `files` verb routes here; `q`'s path-classified branch calls fileSearch directly, where an empty
+// pattern would mean flooding fusion with every path in the workspace.
+export const filesVerbHits = (pattern: string, paths: readonly string[], glob: boolean): EngineHit[] =>
+    pattern === ""
+        ? paths.toSorted((a, b) => (a < b ? -1 : 1)).map((path) => ({ path, line: 1, text: path, tags: [{ kind: "path" as const }] }))
+        : fileSearch(pattern, paths, glob);
+
 // Filename search over the sweep's paths: fuzzy by default, exact globbing with `glob: true`. Hits are
 // score-ranked; line 1 anchors the file itself.
 export const fileSearch = (pattern: string, paths: readonly string[], glob: boolean): EngineHit[] => {

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { astSearch } from "../engines/astq.js";
 import { bm25Search, prfTerms } from "../engines/bm25.js";
-import { fileSearch } from "../engines/files.js";
+import { fileSearch, filesVerbHits } from "../engines/files.js";
 import { changedFiles, logSearch, recentFiles, whoAnchor } from "../engines/git.js";
 import { hotspotFiles } from "../engines/hotspots.js";
 import { IMPACT_DEFAULTS, impactOf, testsCovering } from "../engines/impact.js";
@@ -140,6 +140,7 @@ const enrichContext = (db: IndexDb, groups: readonly RankedGroup[]): void => {
             const symbol = enclosingSymbol(db, cache, hit.path, hit.line);
             if (symbol !== undefined) {
                 hit.context = `${symbol.name} (${symbol.kind})`;
+                hit.contextLine = symbol.line;
             }
         }
     }
@@ -366,6 +367,13 @@ const isPhrase = (query: string): boolean => {
 };
 
 // Zero hits must never be a dead end, benchmarked at a 31% zero-hit rate, each one a wasted agent turn.
+// A pattern-less `iq files` is the whole workspace against a token budget, so it is ALWAYS truncated, and the
+// caller who wanted one specific file is one word away from a ranked answer instead of an alphabetical prefix.
+// Saying so matters because the habit this verb keeps meeting is `iq files | grep x`, which greps away the very
+// header that said "showing 115/5602" — the listing is honest, but the pipe throws the honesty away.
+const bareListingHint = (query: string, total: number): { hint?: string } =>
+    query === "" ? { hint: `no pattern: this is the first page of ${total} files; name one to rank them: iq files <name>` } : {};
+
 // Diagnose the probable cause in priority order: grep-dialect regex, wrong verb, over-narrow scope, rephrasing.
 const zeroHitHint = (request: QueryRequest): string | undefined => {
     if (ANCHOR_VERBS.has(request.verb)) {
@@ -396,10 +404,44 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
 const RERANK_TOP = 32;
 // RRF constant for blending the fused order with the cross-encoder order, same k as plan/fuse.ts.
 const RERANK_RRF_K = 60;
-// Below this sigmoid gap between the best and second-best passage, the field is flat enough to tell the model so.
+// Below this sigmoid gap between the best and second-best FILE, the field is flat enough to tell the model so.
 const CONFIDENCE_MARGIN = 0.05;
 
 const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
+
+// Confidence is RELATIVE, not absolute: ms-marco scores correct code low across the board, so "does the best
+// answer stand out from the field" separates a clear winner from a flat, genuinely-ambiguous set, where the raw
+// top score would flag even a correct rank-1 answer.
+//
+// The gap is measured between the top two FILES of the order the reader actually sees, and both halves of that
+// matter. Comparing the top two PASSAGES measured the wrong thing twice. A file that matched well in two nearby
+// places handed the cross-encoder the same chunk twice (chunkAt resolves adjacent lines to one chunk), which
+// scored identically and collapsed the file's own margin to ~0 — matching well TWICE was punished as ambiguity.
+// And raw logits are not the displayed order; the RRF blend is. Transcript mining (573 calls, 2026-09) found
+// 65% of answers labelled ambiguous, including ones whose rank-1 file was right and whose rank-2 was unrelated
+// prose, with 20% of calls hedging into a parallel grep.
+//
+// A runner-up with no cross-encoder score at all sat below the rerank window entirely, which is the clearest
+// form of standing out, so it reads as the widest possible gap rather than as missing data.
+export const fieldMargin = (ordered: readonly { path: string }[], scored: readonly { hit: EngineHit; logit: number }[]): number => {
+    const bestByPath = new Map<string, number>();
+    for (const entry of scored) {
+        const seen = bestByPath.get(entry.hit.path);
+        if (seen === undefined || entry.logit > seen) {
+            bestByPath.set(entry.hit.path, entry.logit);
+        }
+    }
+    const scoreOf = (index: number): number | undefined => {
+        const path = ordered[index]?.path;
+        return path === undefined ? undefined : bestByPath.get(path);
+    };
+    const top = scoreOf(0);
+    if (top === undefined) {
+        return 0;
+    }
+    const runnerUp = scoreOf(1);
+    return runnerUp === undefined ? 1 : sigmoid(top) - sigmoid(runnerUp);
+};
 
 // Cross-encoder pass over the fused top hits: score each candidate's full chunk text against the query, then
 // BLEND that ordering with the fused one via RRF, the web-trained cross-encoder is a strong reorderer but a
@@ -456,11 +498,7 @@ const rerankGroups = async (
         group.hits.sort((a, b) => a.line - b.line);
         return group;
     });
-    // Confidence is RELATIVE, not absolute: ms-marco scores correct code low across the board, so "does the best
-    // passage stand out from the field" (margin) separates a clear winner from a flat, genuinely-ambiguous set,
-    // whereas the raw top score flags even a correct rank-1 answer.
-    const sorted = scores.map(sigmoid).toSorted((a, b) => b - a);
-    return { groups: regrouped, margin: (sorted[0] ?? 0) - (sorted[1] ?? 0) };
+    return { groups: regrouped, margin: fieldMargin(regrouped, scored) };
 };
 
 // The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, a cross-encoder rerank, and
@@ -637,10 +675,16 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     }
 
     if (request.verb === "files") {
-        const hits = fileSearch(request.query, paths, request.options.globExact === true);
+        const hits = filesVerbHits(request.query, paths, request.options.globExact === true);
         // Preserve the engine's own ranking: each file is its own group, scored by rank.
         const groups = hits.map((hit, rank) => ({ path: hit.path, score: 1 / (rank + 1), hits: [{ ...hit, score: 1 / (rank + 1) }] }));
-        return { groups, unit: "files", style: "paths", showTags: true };
+        return {
+            groups,
+            unit: "files",
+            style: "paths",
+            showTags: true,
+            ...bareListingHint(request.query, groups.length),
+        };
     }
 
     if (request.verb === "def") {

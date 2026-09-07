@@ -132,6 +132,37 @@ test("normalizeArgv recovers former engine names, path-shaped repos, and glob-on
     expect(normalizeArgv(["files", "--glob", "*.ts", "--limit", "5"]).argv).toEqual(["files", "--glob", "*.ts", "--limit", "5", "*.ts", "--exact"]);
 });
 
+// Router verbs took a positional the way the bare verb does, and paid a turn for it: `No command registered
+// for '<the whole question>'` was the most frequent hard failure in the 2026-09 transcript mining.
+test("normalizeArgv absorbs router-verb dialect: a bare sessions query, and a subcommand typed as a flag", () => {
+    expect(normalizeArgv(["sessions", "limit-reset handling UI"])).toEqual({
+        argv: ["sessions", "grab", "limit-reset handling UI"],
+        notes: ['sessions "limit-reset handling UI" → sessions grab'],
+        hints: [],
+    });
+    expect(normalizeArgv(["index", "--status"]).argv).toEqual(["index", "status"]);
+    // Real subcommands, and flags that are not subcommands, are left exactly as typed.
+    expect(normalizeArgv(["sessions", "grab", "topic"]).notes).toEqual([]);
+    expect(normalizeArgv(["sessions", "list", "--days", "7"]).notes).toEqual([]);
+    expect(normalizeArgv(["sessions", "--help"]).notes).toEqual([]);
+    expect(normalizeArgv(["index", "--json"]).argv).toEqual(["index", "--json"]);
+});
+
+// `--context-lines` is nobody's first guess, and stricli's edit distance sent `--lines` to `--limit`, a
+// different knob: it caps result groups when the caller asked to see more of each one.
+test("normalizeArgv routes context-window spellings to --context-lines, and a bare context path to outline", () => {
+    expect(normalizeArgv(["context", "src/app.ts:48", "--lines", "40"]).argv).toEqual(["context", "src/app.ts:48", "--context-lines", "40"]);
+    expect(normalizeArgv(["find", "x", "--context=5"]).argv).toEqual(["find", "x", "--context-lines=5"]);
+    expect(normalizeArgv(["context", "src/app.ts"])).toEqual({
+        argv: ["outline", "src/app.ts"],
+        notes: ["context <path> (no :line) → outline"],
+        hints: [],
+    });
+    // An anchor, in either shape, is what context is for: untouched.
+    expect(normalizeArgv(["context", "src/app.ts:48"]).notes).toEqual([]);
+    expect(normalizeArgv(["context", "src/app.ts:48-60"]).notes).toEqual([]);
+});
+
 test("a glob-only file search reaches the engine with that glob as its exact pattern", async () => {
     const normalized = normalizeArgv(["files", "--glob", "**/*.ts", "--limit", "5"]);
     const result = await invoke(normalized.argv);

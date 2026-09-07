@@ -95,14 +95,23 @@ const candidateAnchor = (group: RankedGroup): string => {
 
 // The one line that answers the question: where the top-ranked evidence sits, what symbol encloses it, whether
 // it stands out, and which engines agreed. Everything else in the response elaborates on it.
+//
+// The anchor is the enclosing symbol's DECLARATION when symctx found one, not the best-scoring line: line scores
+// peak in the middle of a symbol, so the raw best line is routinely a brace or a `continue;` a hundred lines
+// below the definition the reader was asking for. The matching line follows as `match :N`, because it is the
+// evidence and a tight budget may drop the body that would otherwise carry it.
 const answerLine = (group: RankedGroup, confidence: RenderRequest["confidence"]): string | undefined => {
     const hit = bestHit(group);
     if (hit === undefined) {
         return undefined;
     }
-    const parts = [`${group.path}:${hit.line}`];
+    const anchor = hit.contextLine ?? hit.line;
+    const parts = [`${group.path}:${anchor}`];
     if (hit.context !== undefined) {
         parts.push(hit.context);
+    }
+    if (anchor !== hit.line) {
+        parts.push(`match :${hit.line}`);
     }
     if (confidence !== undefined) {
         parts.push(confidence);

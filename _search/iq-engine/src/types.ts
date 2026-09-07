@@ -103,6 +103,11 @@ export interface EngineHit {
     readonly tags: readonly WorkspaceSearchTag[];
     // Enclosing symbol ("createWidget (fn)"), filled by the symctx enrichment stage.
     context?: string;
+    // The line that symbol is DECLARED on, filled beside `context`. Line scores peak inside a symbol rather than
+    // at its head, so the best-scoring line in a long function is routinely a `continue;`, a brace or a comment:
+    // transcript mining (2026-09) found 31% of answer anchors pointing at one. The anchor a reader wants is the
+    // declaration; the hit line stays beside it as the evidence.
+    contextLine?: number;
 }
 
 export interface EngineResult {

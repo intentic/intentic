@@ -1,1 +1,3 @@
 `iq` is a pre-installed CLI in this workspace — intent-first code search returning ranked `path:line` anchors. Prefer it over grep/find chains for locating code, symbols, and natural-language questions. Use bare `iq "…"` (not `iq search`); run `iq --help` or read `.agents/skills/iq/SKILL.md` for the verb cheat-sheet.
+
+Read the capsule it opens with (`answer:`, `candidates:`, `more:`) and stop there. Size the response with `--budget <tokens>`, never `| head` — the capsule is reserved against the budget, so `head` cuts the anchors rather than the noise.

@@ -79,3 +79,62 @@ test("offset pages through groups without re-counting totals", () => {
     expect(second.shownGroups).toBe(6 - first.shownGroups);
     expect(second.truncated).toBe(false);
 });
+
+// Line scores peak inside a symbol, not at its head, so the best-scoring line in a long function is routinely a
+// brace or a `continue;` far below the definition the reader asked for: 31% of anchors in the 2026-09 mining.
+// symctx knows where the symbol starts, so that is what the anchor names, with the match line kept beside it.
+test("the answer anchors at the enclosing symbol's declaration, naming the match line separately", () => {
+    const group: RankedGroup = {
+        path: "alpha/src/scheduler.ts",
+        score: 1,
+        hits: [
+            {
+                path: "alpha/src/scheduler.ts",
+                line: 543,
+                text: "                continue;",
+                tags: [{ kind: "rerank" as const, score: 0.79 }],
+                score: 1,
+                context: "createScheduler (fn)",
+                contextLine: 119,
+            },
+        ],
+    };
+    const rendered = renderText({
+        verb: "q",
+        echo: '"scheduler wake"',
+        unit: "hits",
+        style: "hits",
+        showTags: true,
+        groups: [group],
+        offset: 0,
+        freshness: { state: "fresh", ageMs: 120 },
+        budget: 1500,
+        cursorId: "abcd1234",
+        lead: true,
+        confidence: "confident",
+    });
+    expect(rendered.text).toContain("answer: alpha/src/scheduler.ts:119 · createScheduler (fn) · match :543 · confident");
+});
+
+test("without an enclosing symbol the answer still anchors at the hit, and says nothing about a match line", () => {
+    const group: RankedGroup = {
+        path: "alpha/src/constants.ts",
+        score: 1,
+        hits: [{ path: "alpha/src/constants.ts", line: 7, text: "export const LIMIT = 40;", tags: [], score: 1 }],
+    };
+    const rendered = renderText({
+        verb: "q",
+        echo: '"limit"',
+        unit: "hits",
+        style: "hits",
+        showTags: false,
+        groups: [group],
+        offset: 0,
+        freshness: { state: "fresh", ageMs: 120 },
+        budget: 1500,
+        cursorId: "abcd1234",
+        lead: true,
+    });
+    expect(rendered.text).toContain("answer: alpha/src/constants.ts:7");
+    expect(rendered.text).not.toContain("match :");
+});
