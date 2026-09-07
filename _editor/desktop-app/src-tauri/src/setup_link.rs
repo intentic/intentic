@@ -117,6 +117,11 @@ pub enum Link {
      * not something a page in a browser should be able to do to somebody who clicked "Open Intentic?". A copy
      * that genuinely wants it from outside has the tray row, which is on the machine rather than on the web. */
     Update,
+    /* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace"
+     * stepped it aside: the page draws the install's progress off what the app announces (windows.rs
+     * `announce_setup`) and this is the button beside that bar. [`Source::App`] only, and it carries nothing:
+     * it raises a window of this app, which is the app's own window's business and no page's from outside. */
+    Launcher,
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -150,6 +155,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         }
         "signin" => Some(Link::SignIn),
         "update" => (source == Source::App).then_some(Link::Update),
+        "launcher" => (source == Source::App).then_some(Link::Launcher),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
         "sync" if source == Source::App => Some(Link::Sync(SyncArgs {
@@ -278,6 +284,16 @@ mod tests {
             Some(Link::Update)
         );
         assert_eq!(parse_link("intentic://update", Source::External), None);
+    }
+
+    /// The way back to the setup card is the app's own window's to ask for, exactly like the update.
+    #[test]
+    fn the_launcher_link_is_honoured_from_the_app_and_refused_from_outside() {
+        assert_eq!(
+            parse_link("intentic://launcher", Source::App),
+            Some(Link::Launcher)
+        );
+        assert_eq!(parse_link("intentic://launcher", Source::External), None);
     }
 
     #[test]

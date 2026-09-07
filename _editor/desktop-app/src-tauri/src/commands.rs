@@ -1012,6 +1012,40 @@ pub fn setup_alert(app: AppHandle) {
     crate::windows::alert_setup(&app);
 }
 
+/* WHERE THE INSTALL HAS GOT TO, as the setup screen draws it (App.vue `progressShown`), for the workspace
+ * page to draw the same thing once that screen has stepped aside. The screen's own figures rather than a
+ * second reading of the run: one bar, two places. Every field is display-ready text or a percentage; nothing
+ * about the machine rides along, and the name is the one the user typed for their sandbox. */
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupReport {
+    pub name: Option<String>,
+    /// `running`, `waiting` (stopped for the requirements list to be answered), `failed`, `stopped` (by the
+    /// user) or `done`.
+    pub state: String,
+    pub percent: f64,
+    /// "Step 4 of 10".
+    pub position: Option<String>,
+    /// "about 3 min left".
+    pub remaining: Option<String>,
+    /// The running step's phase id, for the page's analytics rather than its screen.
+    pub step: Option<String>,
+}
+
+/// The setup screen reporting its progress, on every change, for the workspace page (windows.rs
+/// `announce_setup`). Nothing is stored: a page that opens later hears the next tick within a second.
+#[tauri::command]
+pub fn setup_progress(app: AppHandle, report: SetupReport) {
+    crate::windows::announce_setup(&app, &report);
+}
+
+/// The calling window's page has measured its content (fitWindow.ts): size that window to it. The window is
+/// the caller's own, handed to the command by Tauri, so a page can only ever size the window it stands in.
+#[tauri::command]
+pub fn fit_to_content(app: AppHandle, window: tauri::WebviewWindow, height: f64) {
+    crate::windows::fit_to_content(&app, &window, height);
+}
+
 /// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing
 /// that retires the question, and the reason it is worth asking at all.
 ///

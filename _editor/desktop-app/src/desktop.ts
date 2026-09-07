@@ -234,6 +234,22 @@ export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace
  * looking at it — including one the user walked away from, where the workspace has the frame and this face has
  * to take it back rather than open beside it (windows.rs). */
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
+/* Where the install has got to, as this screen draws it, for the workspace page to draw the same bar once
+ * this screen has stepped aside (windows.rs `announce_setup`). Sent on every change: the page's copy of the
+ * bar is only ever as fresh as the last report. `closed` is the card being put away after a run ended, which
+ * is the page's cue to take its strip down too. */
+export interface SetupReport {
+    name?: string;
+    state: `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
+    percent: number;
+    position?: string;
+    remaining?: string;
+    step?: string;
+}
+export const setupProgress = (report: SetupReport): Promise<void> => invoke(`setup_progress`, { report });
+/* This page's content is `height` tall: size the window to it (fitWindow.ts is the caller). The window is the
+ * page's own, chosen on the Rust side from which webview invoked this, so nothing here names one. */
+export const fitToContent = (height: number): Promise<void> => invoke(`fit_to_content`, { height });
 /** End a run and everything it started. */
 export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id });
 /** Show a run's transcript in the machine's own file manager, selected. */

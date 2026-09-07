@@ -1,11 +1,12 @@
 use tauri::webview::NewWindowResponse;
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
+    AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
 use crate::state::CloseAction;
 
@@ -73,10 +74,40 @@ const BROWSER_ARGS: &str = concat!(
 /// and gone the moment it is answered.
 pub const CONFIRM_CLOSE: &str = "confirm-close";
 
-/// The frame both faces share when neither has one to inherit — a cold start, on either face. A PREFERENCE
-/// rather than a size: what a window actually opens at is this fitted to the screen, see `opening_bounds`.
+/// The workspace's frame on a cold start. A PREFERENCE rather than a size: what the window actually opens at
+/// is this fitted to the screen, see `opening_bounds`.
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (900.0, 600.0);
+
+/* THE APP'S OWN SCREENS ARE A CARD, NOT A CANVAS.
+ *
+ * The launcher used to take the workspace's whole frame: the same 1440×900 window, wearing the OS title bar,
+ * with one setup card at the top of it and a dark void under. That is the shape "one window, two faces"
+ * produced while a face was a full window, and the report of it was exact: "a standard Windows window with a
+ * large header instead of a thinner overlay, a lot of extra empty space with dark background, looks
+ * unprofessional". The setup screen has one card's worth of content and was drawn as a monitor's worth of
+ * window.
+ *
+ * So a face is now sized like what is on it. No decorations: the card draws its own header, with a drag
+ * region and a small × of its own (App.vue, CloseConfirm.vue), so there is no title bar over it. A fixed
+ * width, because a card has one. A height that follows the content, reported by the page itself as its rows
+ * arrive (`fit_to_content`): a requirements list that grows makes the window grow, up to what the screen can
+ * show, and the page scrolls inside from there. And it is placed in the middle of the workspace's frame
+ * rather than given the whole of it, so it reads as a sheet the product put up rather than a second app.
+ *
+ * STILL ONE WINDOW. The workspace steps aside while a face is up, exactly as before (`swap_in`): a card over
+ * a MAPPED workspace is two Intentic windows, two taskbar buttons and two alt-tab stops during the one flow
+ * where a new user knows least which of them is the product, which is the model both smoke tiers assert by
+ * counting. What changed is the frame a face wears, not how many there are. */
+const LAUNCHER_WIDTH: f64 = 620.0;
+/// What a launcher opens at before its page has measured anything: close to a setup card's first frame, so
+/// the window does not appear as a strip and then jump to size.
+const LAUNCHER_OPENING_HEIGHT: f64 = 440.0;
+/// The margin a content-fitted window keeps from the edge of the work area, so a card that grows to the
+/// screen's height still reads as a card on it rather than a window jammed against the taskbar.
+const CONTENT_MARGIN: f64 = 24.0;
+/// The least a face is ever fitted to: an empty manager still has its header and its one sentence.
+const CONTENT_MIN_HEIGHT: f64 = 120.0;
 
 /* WHAT THE FRAME COSTS OUTSIDE THE SIZE THAT IS ASKED FOR. Every size here is an INNER one — the client area
  * — and the title bar and border are added back OUTSIDE it. So a window asked for exactly the work area's
@@ -166,7 +197,17 @@ fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
  * The PRIMARY monitor, because a window that does not exist yet is not on any of them — which is the same
  * assumption the OS makes when it places an unplaced window, so the two agree on which screen this is about. */
 fn work_area(app: &AppHandle) -> Option<WorkArea> {
-    let monitor = app.primary_monitor().ok().flatten()?;
+    work_area_of(app.primary_monitor().ok().flatten())
+}
+
+/// The work area of the screen a window is ALREADY on, for a window being refitted in place: a card on a
+/// second monitor is clamped to that monitor, not to the primary one.
+fn window_work_area(window: &WebviewWindow) -> Option<WorkArea> {
+    work_area_of(window.current_monitor().ok().flatten())
+}
+
+fn work_area_of(monitor: Option<Monitor>) -> Option<WorkArea> {
+    let monitor = monitor?;
     let scale = monitor.scale_factor();
     if !scale.is_finite() || scale <= 0.0 {
         return None;
@@ -197,33 +238,102 @@ fn place_in_work_area(window: &WebviewWindow, work: WorkArea, inner: (f64, f64))
     ));
 }
 
-/// The dialog's frame. Fixed, because everything in it is: two choices and a line of small print — measured
-/// against the rendered content rather than guessed, with slack for a wider font. Taller on Windows, the one
-/// platform where the tray option has to say where the icon goes (CloseConfirm.vue).
-const CONFIRM_SIZE: (f64, f64) = if cfg!(target_os = "windows") {
-    (460.0, 360.0)
+/// The dialog's frame: a card like the launcher's, fixed in width and fitted to its content. It opens at a
+/// guess close to what its page measures a moment later, because it has to be on screen the instant the × is
+/// clicked, before its page has run; the fit then corrects the guess by a few pixels at most. Taller on
+/// Windows, the one platform where the tray option has to say where the icon goes (CloseConfirm.vue).
+const CONFIRM_WIDTH: f64 = 440.0;
+const CONFIRM_OPENING_HEIGHT: f64 = if cfg!(target_os = "windows") {
+    312.0
 } else {
-    (460.0, 300.0)
+    296.0
 };
 
-/// Bring `window` up in `other`'s place. Placed and sized BEFORE it is shown and `other` hidden only after, so
-/// nothing between the two frames is ever on screen. Physical units throughout: outer position with inner size
-/// is the same rectangle for two windows wearing the same decorations.
-fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
-    if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
-        if let Ok(position) = other.outer_position() {
-            let _ = window.set_position(position);
-        }
-        if let Ok(size) = other.inner_size() {
-            let _ = window.set_size(size);
-        }
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = other.hide();
+/// The height a content-fitted window gets: what its page measured, no less than a card's worth, and no more
+/// than the work area leaves it with a margin above and below. Pure, for the tests: the cases that matter are
+/// a requirements list taller than a laptop screen, and a screen smaller than any card.
+fn fitted_height(content: f64, available: Option<f64>) -> f64 {
+    let wanted = content.max(CONTENT_MIN_HEIGHT);
+    match available {
+        Some(available) => wanted.min((available - 2.0 * CONTENT_MARGIN).max(1.0)),
+        None => wanted,
+    }
+}
+
+/// Where a window that has just been refitted keeps its top edge: where it was, unless its new bottom edge
+/// would leave the work area, in which case it moves up by exactly the overhang, and never above the area's
+/// top margin. A card grows DOWNWARD from a heading that stays put, which is what makes rows arriving under
+/// it readable; one that grew off the bottom of the screen would hide the rows it grew for.
+fn kept_on_screen(top: f64, height: f64, work: WorkArea) -> f64 {
+    let lowest_top = work.origin.1 + work.size.1 - CONTENT_MARGIN - height;
+    top.min(lowest_top).max(work.origin.1 + CONTENT_MARGIN)
+}
+
+/* THE PAGE SAYS HOW TALL IT IS, AND THE WINDOW FOLLOWS. Called by both of this app's local faces (fitWindow.ts)
+ * whenever their content changes size, which is how a setup card with ten plan rows and a requirements list
+ * above them gets a window exactly that tall, and the close confirmation one exactly as tall as its two
+ * answers. The window is the CALLER's own — Tauri hands the command the webview that invoked it — so remote
+ * content, which has no IPC at all, can never size anything.
+ *
+ * The launcher keeps its top edge (see `kept_on_screen`) and the dialog is re-centred over the window it is
+ * about, being a dialog. Both are clamped to the work area of the screen they are on, and a page taller than
+ * that scrolls inside its window. */
+pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f64) {
+    let width = match window.label() {
+        LAUNCHER => LAUNCHER_WIDTH,
+        CONFIRM_CLOSE => CONFIRM_WIDTH,
+        _ => return,
+    };
+    if !content_height.is_finite() {
         return;
     }
+    let work = window_work_area(window).or_else(|| work_area(app));
+    let size = LogicalSize::new(
+        width,
+        fitted_height(content_height, work.map(|work| work.size.1)),
+    );
+    let _ = window.set_size(size);
+    if window.label() == CONFIRM_CLOSE {
+        center_over(window, app.get_webview_window(WORKSPACE).as_ref(), size);
+        return;
+    }
+    if let (Some(work), Ok(at)) = (work, window.outer_position()) {
+        let top = f64::from(at.y) / work.scale;
+        let kept = kept_on_screen(top, size.height, work);
+        if (kept - top).abs() >= 1.0 {
+            let _ = window.set_position(PhysicalPosition::new(
+                at.x,
+                (kept * work.scale).round() as i32,
+            ));
+        }
+    }
+}
+
+/// Bring `window` up and step `other` aside: shown first and hidden after, so nothing between the two is
+/// ever on screen. Each keeps its own frame. The workspace's is the one it was last seen at (hidden, not
+/// destroyed, so the platform remembers it), and a face's is the card its content fitted; where a face goes
+/// relative to the workspace is `over_workspace`'s decision, made before this is called.
+fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
     let _ = window.show();
     let _ = window.set_focus();
+    if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
+        let _ = other.hide();
+    }
+}
+
+/// Put the launcher in the middle of the workspace's frame, at the launcher's own size: a card placed against
+/// the window it is standing in for, never given that window's frame. Only when the workspace is on screen to
+/// be placed against; a cold start has already put the card in the middle of the work area (`launcher`).
+fn over_workspace(window: &WebviewWindow, workspace: Option<&WebviewWindow>) {
+    let Some(over) = workspace.filter(|workspace| workspace.is_visible().unwrap_or(false)) else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let size = window
+        .inner_size()
+        .map(|size| size.to_logical::<f64>(scale))
+        .unwrap_or_else(|_| LogicalSize::new(LAUNCHER_WIDTH, LAUNCHER_OPENING_HEIGHT));
+    center_over(window, Some(over), size);
 }
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
@@ -451,8 +561,13 @@ fn ask_before_closing(app: &AppHandle) {
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
             .title("Close Intentic?")
-            .inner_size(CONFIRM_SIZE.0, CONFIRM_SIZE.1)
-            .resizable(false)
+            .inner_size(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT)
+            // A card, not a window: the page draws its own header and ×, and there is nothing in a two-answer
+            // question for an OS title bar to add. Its shadow is what separates it from the workspace under
+            // it once the frame is gone. Resizable so `fit_to_content` can size it to its rendered content:
+            // GTK pins a non-resizable window to its child's requisition and ignores a resize.
+            .decorations(false)
+            .shadow(true)
             .maximizable(false)
             .minimizable(false)
             // No second taskbar entry and no second alt-tab stop: this app is one window, and a dialog is
@@ -480,7 +595,7 @@ fn ask_before_closing(app: &AppHandle) {
             center_over(
                 &window,
                 parent.as_ref(),
-                LogicalSize::new(CONFIRM_SIZE.0, CONFIRM_SIZE.1),
+                LogicalSize::new(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT),
             );
             let _ = window.show();
             let _ = window.set_focus();
@@ -555,11 +670,20 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         return Some(window);
     }
     let screen = work_area(app);
-    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
+    let size = (
+        LAUNCHER_WIDTH,
+        fitted_height(LAUNCHER_OPENING_HEIGHT, screen.map(|screen| screen.size.1)),
+    );
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("Intentic")
         .inner_size(size.0, size.1)
-        .min_inner_size(min.0, min.1)
+        // The card's frame: no title bar (the page draws its own header, App.vue), a shadow to lift it off
+        // whatever is behind, and nothing to maximise because its size is its content's (`fit_to_content`).
+        // Resizable for GTK's sake: a non-resizable window there is pinned to its child's requisition and
+        // ignores the resize the fit asks for.
+        .decorations(false)
+        .shadow(true)
+        .maximizable(false)
         /* The frame between "window mapped" and "webview painted", which is white by default and reads as a
          * flash on a dark screen — and this window maps at the exact moment the workspace steps aside, so a
          * white frame here is a white flash in the middle of somebody's app. Mirrors `--color-canvas` in dark
@@ -583,8 +707,8 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
             });
             // The same cold-start placement the workspace gets, and needed for the same reason: this face can
             // be the FIRST window an install ever shows (a link from the browser, nothing else running), and
-            // the platform's cascade puts a work-area-tall window's bottom edge under the taskbar. A swap with
-            // a workspace frame to inherit overrides it a moment later, so this only decides where a window
+            // the platform's cascade would put it wherever the last window went. A workspace on screen to be
+            // placed against overrides it a moment later (`over_workspace`), so this only decides where a card
             // nothing else has an opinion about goes.
             if let Some(screen) = screen {
                 place_in_work_area(&window, screen, size);
@@ -611,7 +735,9 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
  * A screen of this app is a screen of this app. */
 pub fn show_launcher(app: &AppHandle) {
     if let Some(window) = launcher(app) {
-        swap_in(&window, app.get_webview_window(WORKSPACE));
+        let workspace = app.get_webview_window(WORKSPACE);
+        over_workspace(&window, workspace.as_ref());
+        swap_in(&window, workspace);
     }
 }
 
@@ -643,12 +769,43 @@ pub fn alert_setup(app: &AppHandle) {
         .get_webview_window(WORKSPACE)
         .filter(|workspace| workspace.is_visible().unwrap_or(false))
     {
-        Some(workspace) => swap_in(&window, Some(workspace)),
+        Some(workspace) => {
+            over_workspace(&window, Some(&workspace));
+            swap_in(&window, Some(workspace));
+        }
         None => {
             let _ = window.show();
         }
     }
     let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+}
+
+/* THE INSTALL'S PROGRESS, TOLD TO THE WORKSPACE IT WAS STARTED FROM.
+ *
+ * "Back to your workspace" hands the frame back to the SPA's setup page, and that page used to know nothing
+ * from then on: it sat on "Handed to the app. Follow it in the Intentic window" about a window that had just
+ * stepped aside, so the user could not tell whether leaving had stopped the install or how far it had got.
+ * So the launcher reports every change of its own progress bar here, and this dispatches it into the
+ * workspace page the way the update announcement travels (update.rs `announce_to_workspace`): one way, an
+ * event and nothing callable, carrying an object serde wrote rather than strings this file interpolated. The
+ * page draws the same bar and offers the way back (`intentic://launcher`).
+ *
+ * Every tick, because the estimate moves every second and a strip that reads "about 3 min left" for four
+ * minutes is the frozen screen this exists to replace. A workspace webview that is not there costs nothing. */
+pub fn announce_setup(app: &AppHandle, report: &SetupReport) {
+    let Some(window) = app.get_webview_window(WORKSPACE) else {
+        return;
+    };
+    let _ = window.eval(setup_announcement(report));
+}
+
+/// The event as the page receives it. JSON is a JavaScript object literal since ES2019 (the two line
+/// separators included), and serde escapes the quotes, so a sandbox named `"</script>` arrives as a name.
+fn setup_announcement(report: &SetupReport) -> String {
+    let detail = serde_json::to_string(report).unwrap_or_else(|_| "null".to_string());
+    format!(
+        "window.dispatchEvent(new CustomEvent('intentic-desktop-setup', {{ detail: {detail} }}));"
+    )
 }
 
 /// Links land here from three directions: the workspace webview's intercepted navigation, the second-instance
@@ -695,6 +852,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // (update.rs), so this either installs and comes back, or opens the download page for a copy that
         // cannot install anything.
         Some(Link::Update) => crate::update::act(app),
+        // The setup page's way back to a card that stepped aside: the same face, holding the same run.
+        Some(Link::Launcher) => show_launcher(app),
         None => {}
     }
 }
@@ -921,6 +1080,68 @@ mod frame_tests {
         let (size, _) = opening_bounds(Some((4.0, 4.0)));
 
         assert!(size.0 >= 1.0 && size.1 >= 1.0, "opened {size:?}");
+    }
+
+    /// A face is as tall as its content, and no taller than the screen it is on leaves it a margin: the
+    /// requirements list of a PC that needs everything is taller than a laptop's work area, and the card
+    /// scrolls inside from there rather than growing under the taskbar.
+    #[test]
+    fn a_face_is_fitted_to_its_content_within_the_screen() {
+        assert_eq!(fitted_height(500.0, Some(883.0)), 500.0);
+        assert_eq!(
+            fitted_height(1400.0, Some(883.0)),
+            883.0 - 2.0 * CONTENT_MARGIN
+        );
+        // A page that measured nothing yet is still a card, never a strip.
+        assert_eq!(fitted_height(0.0, Some(883.0)), CONTENT_MIN_HEIGHT);
+        // No screen to ask is no reason to clamp.
+        assert_eq!(fitted_height(1400.0, None), 1400.0);
+        // A screen smaller than the margins still asks for a window somebody can see.
+        assert!(fitted_height(300.0, Some(20.0)) >= 1.0);
+    }
+
+    /// A card grows downward under a heading that stays put — until its bottom edge would leave the work
+    /// area, and then it moves up by exactly the overhang, never above the top margin.
+    #[test]
+    fn a_growing_card_keeps_its_heading_still_and_its_bottom_on_screen() {
+        let work = screen((1531.0, 883.0));
+        assert_eq!(kept_on_screen(200.0, 400.0, work), 200.0);
+        // 200 + 700 = 900 > 883 - 24: pushed up to end exactly at the margin.
+        assert_eq!(
+            kept_on_screen(200.0, 700.0, work),
+            883.0 - CONTENT_MARGIN - 700.0
+        );
+        // Taller than the screen leaves it: the top margin wins, and the fit above is what keeps this rare.
+        assert_eq!(kept_on_screen(200.0, 2000.0, work), CONTENT_MARGIN);
+        // On a second monitor the area's own origin is where "the top" is.
+        let second = WorkArea {
+            origin: (1920.0, 0.0),
+            size: (1400.0, 1080.0),
+            scale: 1.0,
+        };
+        assert_eq!(
+            kept_on_screen(1000.0, 200.0, second),
+            1080.0 - CONTENT_MARGIN - 200.0
+        );
+    }
+
+    /// What the workspace page receives: the event it listens for, carrying the report as one object. The
+    /// name is the one value a user typed, and it arrives as a string however it was spelled.
+    #[test]
+    fn the_setup_announcement_is_one_event_carrying_the_report() {
+        let script = setup_announcement(&SetupReport {
+            name: Some("my \"site\" </script>".into()),
+            state: "running".into(),
+            percent: 42.5,
+            position: Some("Step 4 of 10".into()),
+            remaining: Some("about 3 min left".into()),
+            step: Some("pulling-image".into()),
+        });
+        assert!(script.starts_with("window.dispatchEvent(new CustomEvent('intentic-desktop-setup'"));
+        assert!(script.contains("\"percent\":42.5"), "{script}");
+        assert!(script.contains("\"state\":\"running\""), "{script}");
+        // The quotes inside the name are escaped, so the script is still one statement.
+        assert!(script.contains("my \\\"site\\\" </script>"), "{script}");
     }
 
     /// The close confirmation opens in the MIDDLE of the window it is asking about, not on its corner — which

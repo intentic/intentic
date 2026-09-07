@@ -13,8 +13,10 @@ import {
     type StatusVariant,
     ui,
 } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
+import type { PanelLaunch } from "@intentic/api-contract";
 import { frameSandbox, pickTarget, type PreviewTarget } from "./previewModel";
 import { usePreviewTargets } from "./usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "./previewSurface";
@@ -283,27 +285,75 @@ const startHint = computed<string | undefined>(() => {
     return `Runs ${what} in the sandbox. It appears in the terminal ${startSession.value}. ${cost}`;
 });
 
+/* HOW LONG THIS WAIT HAS BEEN GOING, because the screen below is a promise ("the preview opens the moment it
+ * answers") and a promise with no clock on it is what the reported spinner was: "Its dev server is starting"
+ * over a start that had been going for ten minutes reads exactly like one that has been going for ten
+ * seconds. Stamped when the wait begins (the same condition the fallback poll runs on, below) and cleared
+ * when it ends, so a target that comes up and goes down again starts a fresh clock. */
+const waitingSince = ref<number | undefined>(undefined);
+const now = useNow(() => waitingSince.value !== undefined);
+const waitedMs = computed(() => (waitingSince.value === undefined ? 0 : now.value - waitingSince.value));
+// Past this, a start is no longer "starting": something in its terminal is waiting or stuck, and the honest
+// screen says so and offers the way out. A dev server that is going to come up has come up long before this;
+// the starter site takes seconds on an installed tree.
+const STARTING_SLOW_MS = 60_000;
+const waitingLong = computed(() => waitedMs.value > STARTING_SLOW_MS);
+const waitedFor = computed(() => {
+    const minutes = Math.floor(waitedMs.value / 60_000);
+    return minutes < 1 ? `${Math.floor(waitedMs.value / 1000)}s` : `${minutes} min`;
+});
+
 /* WHAT THE STARTING SCREEN SAYS, off the daemon's own account of where the start has got to (PanelLaunch)
  * rather than a fixed sentence about installs. `exited` is the one that matters most: a dev command that died
- * on its first line used to sit behind "Preparing the preview…" for as long as anyone cared to wait. */
+ * on its first line used to sit behind "Preparing the preview…" for as long as anyone cared to wait. Each
+ * state has two sentences, the wait and the verdict, because a start that has outlived any reasonable start
+ * is no longer a wait: the screen stops promising an iframe and starts pointing at the terminal. */
+const LAUNCH_HINTS: Record<PanelLaunch, { readonly waiting: string; readonly overdue: (waited: string) => string }> = {
+    launching: {
+        waiting: `Opening its terminal.`,
+        overdue: (waited) =>
+            `Its terminal has been opening for ${waited}, which is far longer than it should: the sandbox may be out of memory or CPU. Restart it below.`,
+    },
+    installing: {
+        waiting: `Installing its dependencies first, which can take a few minutes: its terminal shows the install live.`,
+        overdue: (waited) =>
+            `Still installing its dependencies after ${waited}. Its terminal shows the install live: a slow registry is normal, an error there is not.`,
+    },
+    starting: {
+        waiting: `Its dev server is starting; the preview opens the moment it answers.`,
+        overdue: (waited) =>
+            `Its dev server has been starting for ${waited} without answering, which a working start never takes. Its terminal shows what it is waiting on; restarting it is the usual fix.`,
+    },
+    exited: {
+        waiting: `Its dev server exited before it served anything. Its terminal has the reason.`,
+        overdue: () => `Its dev server exited before it served anything. Its terminal has the reason.`,
+    },
+};
 const launchHint = computed<string | undefined>(() => {
     const entry = target.value;
     if (entry === undefined) {
         return undefined;
     }
-    switch (entry.launch) {
-        case `launching`:
-            return `Opening its terminal.`;
-        case `installing`:
-            return `Installing its dependencies first, which can take a few minutes: its terminal shows the install live.`;
-        case `starting`:
-            return `Its dev server is starting; the preview opens the moment it answers.`;
-        case `exited`:
-            return `Its dev server exited before it served anything. Its terminal has the reason.`;
-        default:
-            return probeSlow.value ? `The address is taking a while to answer: its terminal shows the dev server live.` : undefined;
+    if (entry.launch !== undefined) {
+        const hint = LAUNCH_HINTS[entry.launch];
+        return waitingLong.value ? hint.overdue(waitedFor.value) : hint.waiting;
     }
+    // No launch state: the daemon sees it serving (or does not run it), and it is the ADDRESS that has not
+    // answered. Past the minute that is a routing problem to name, not a start to wait out.
+    if (waitingLong.value) {
+        return `Its dev server is up, but its preview address has not answered in ${waitedFor.value}: this sandbox's public address may not be routing yet. Its terminal shows the server live.`;
+    }
+    return probeSlow.value ? `The address is taking a while to answer: its terminal shows the dev server live.` : undefined;
 });
+
+/* THE WAY OUT OF A STUCK START: end the pane and start it again, which is what a person does in the terminal
+ * once they have looked. One press rather than Stop then Start, because by the time this button is drawn the
+ * screen has already told them the start is stuck, and two presses to act on that is one too many. */
+const restart = (): Promise<void> =>
+    act(async (entry) => {
+        await stop(entry);
+        await start(entry);
+    });
 
 /* THE WAIT'S OWN FALLBACK. The daemon pushes the flip from starting to serving, and this panel re-probes when
  * the pushed list carries the address; a frame dropped across a reconnect left both waiting for ever. While a
@@ -319,6 +369,7 @@ watch(
     () => target.value?.running === true && previewSrc.value === undefined && reach.value?.outcome !== `unreachable`,
     (waiting) => {
         stopStartingPoll();
+        waitingSince.value = waiting ? Date.now() : undefined;
         if (waiting) {
             startingPoll = setInterval(() => void refresh().catch(() => undefined), STARTING_POLL_MS);
         }
@@ -567,18 +618,35 @@ onUnmounted(stopStartingPoll);
 
             <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one
                  place that says which. Also covers the wait on a freshly minted name. -->
-            <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                <Icon v-if="target.launch === `exited`" name="exclamation-triangle" class="text-2xl text-subtle" />
+            <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                <Icon v-if="target.launch === `exited` || waitingLong" name="exclamation-triangle" class="text-2xl text-subtle" />
                 <Icon v-else name="spinner" class="text-muted" spin />
-                <p class="text-sm text-muted">{{ target.launch === `exited` ? `Its dev server stopped.` : `Preparing the preview…` }}</p>
+                <!-- Three headings for three states: a verdict, a wait that has gone on too long to still be
+                     called one, and the wait itself. -->
+                <p class="text-sm text-muted">
+                    {{ target.launch === `exited` ? `Its dev server stopped.` : waitingLong ? `This is taking too long.` : `Preparing the preview…` }}
+                </p>
                 <p v-if="launchHint" class="max-w-sm text-2xs text-subtle">{{ launchHint }}</p>
-                <Button
-                    v-if="target.session"
-                    label="Open its terminal"
-                    size="small"
-                    severity="secondary"
-                    @click="terminal.openFocused(target.session!)"
-                />
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    <Button
+                        v-if="target.session"
+                        label="Open its terminal"
+                        size="small"
+                        severity="secondary"
+                        @click="terminal.openFocused(target.session!)"
+                    />
+                    <!-- Offered only once the wait has become a verdict: a Restart beside a ten-second spinner
+                         invites the click that turns a slow start into a slower one. -->
+                    <Button
+                        v-if="target.startable && (waitingLong || target.launch === `exited`)"
+                        label="Restart"
+                        size="small"
+                        :disabled="busy"
+                        @click="restart"
+                    >
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                </div>
             </div>
 
             <!-- NOT RUNNING, and the one screen where a button is about to do something substantial: it says

@@ -68,9 +68,9 @@ is not one webview but one **window**: and the first version of this app did not
 on this computer* in the SPA opened a second, differently-titled window ("Sandbox Manager") on top of the one
 being read, which is where first-time users stopped.
 
-So `windows.rs` keeps exactly one of them on screen: whichever screen is being shown first takes the other's
-position and size, then the other hides. The title follows the content (`App.vue` sets it), the frame does
-not, and clicking a handoff reads as the window changing screens.
+So `windows.rs` keeps exactly one of them on screen: the screen being shown comes up, then the other hides.
+The title follows the content (`App.vue` sets it), and clicking a handoff reads as the window changing
+screens.
 
 **The setup screen was exempted from that for three releases, and the exemption is what this section is now
 mostly about.** The argument was good on paper: an install is not somewhere the user *went*, it is something
@@ -82,19 +82,47 @@ taskbar buttons and two alt-tab stops, during onboarding.** Onboarding is precis
 cannot yet tell which of two windows is the product. The reported complaint was exactly that.
 
 An install is a **screen** of this app now, and it arrives the way every other screen does: `show_launcher`
-takes the workspace's frame, the workspace hides, the title says which screen is up. There is one entry point
-because there is one gesture, and no `SETUP_SIZE`, no `set_setup_frame`, no `fit_setup` and no
-"is this window wearing the setup frame" flag in `state.rs` — all of that existed only to manage a second
-frame, and a second frame is the thing that was wrong.
+brings the app's face up in the middle of the workspace's frame, the workspace hides, the title says which
+screen is up. There is one entry point because there is one gesture, and no "is this window wearing the setup
+frame" flag in `state.rs` — that existed only to manage a second frame, and a second frame is the thing that
+was wrong.
 
-Two consequences fall straight out of the collapse. The screen is **top-anchored and wider** (`max-w-3xl`)
-rather than a card floating in a small dialog, because it now has a full window's height to use: the failure
-that produced `fit_setup` — a Windows PC reporting four things wrong with itself, with every one of them plus
-the button that fixes them below the fold of a 620×640 window — is answered by the room, not by resizing the
-frame under the reader. And the card's **×** is a labelled *Back to your workspace* instead: a bare × on a
-window-filling screen reads as "close Intentic", which is the one thing it does not do. Either way out steps
-back to the workspace and stops nothing, the script being a process on this machine rather than something the
-window is holding up.
+### The app's own screens are cards
+
+For one release the face that took the workspace's place also took its **frame**: the same 1440×900 window,
+under the OS title bar, with one setup card at the top of it and a dark void the size of a monitor beneath.
+The report of that was exact — "a standard Windows window with a large header instead of a thinner overlay,
+a lot of extra empty space, looks unprofessional" — and it was the frame that was wrong, not the count.
+
+So the face is sized like what is on it. `launcher` builds it **without decorations**: the page draws its
+own header row (`App.vue`), which is the drag region (`data-tauri-drag-region`, with `start-dragging` in the
+capability) and carries a small × of its own. It has a **fixed width** (`LAUNCHER_WIDTH`) and a **height that
+follows its content**: the page watches its own content box and reports every change (`fitWindow.ts` →
+`fit_to_content`), so a requirements list arriving above ten plan rows makes the window exactly that tall,
+and a two-line manager is not a screenful of nothing. The fit is clamped to the work area of the screen the
+window is on with a margin (`fitted_height`), and the card grows **downward from a heading that stays put**
+(`kept_on_screen`), moving up only when its bottom edge would leave the screen; a page taller than the screen
+scrolls inside. `over_workspace` puts it in the middle of the workspace's frame, at its own size, before the
+swap; a cold start with no workspace to be placed against centres it on the work area instead. The window is
+`resizable` on purpose even though nobody is meant to resize it: GTK pins a non-resizable window to its
+child's requisition and ignores the resize the fit asks for.
+
+The card's **×** is *Back to your workspace*, and while a run is live its label says the rest: *the install
+keeps running, and your workspace shows its progress*. A bare × on the app's own screen reads as "close
+Intentic", which is the one thing it does not do — it steps back to the workspace and stops nothing, the
+script being a process on this machine rather than something the window is holding up. Escape does the same.
+Walking away from a **live** run leaves the screen a setup (`setupOpen` stays), so a failure while nobody is
+looking brings the window back to the card holding the reason rather than to the manager's list; only a card
+whose run has ended is closed for good.
+
+**What the workspace shows after that is the same bar.** `App.vue` reports every change of its progress view
+(`setup_progress` → `announce_setup`), which dispatches an `intentic-desktop-setup` event into the workspace
+webview exactly the way the update announcement travels: one way, nothing callable, an object serde wrote.
+The SPA's setup page draws it beside its wait line (`web/src/features/setup/DesktopSetupProgress.vue`) — the
+percentage, "Step 4 of 10", the estimate, whether the run is waiting for an answer, stopped or failed — with
+*Show the setup* beside it, which is `intentic://launcher`: app-window only, like `update`, and it raises the
+same face holding the same run. That page used to say "follow it in the Intentic window" about a window that
+had just stepped aside, which is how "does Back to your workspace stop the setup?" became a question.
 
 **A window that fits the screen still has to be put on it, and for a while only the first half was done.**
 `fit_to_screen` stopped the app asking for a window taller than the display; nothing then chose where that
@@ -156,6 +184,11 @@ than one button. Three things follow from it:
 - **It is a dialog, not a third face.** Off the taskbar, owned by the frame it is about, centred over it, and
   destroyed on answer: so it is one thing on screen for the same reason the setup window is. It is titled
   `Close Intentic?`, which deliberately does not start with the workspace title those assertions match on.
+- **It is a card, like the app's other screens.** No decorations — its title bar used to repeat the heading
+  under it — so the page draws the header, draggable and with its own × meaning cancel, and reports its height
+  (`fitWindow.ts`) so the window is exactly as tall as its two answers. It opens at a guess close to that
+  (`CONFIRM_OPENING_HEIGHT`), because it has to be on screen the instant the × is clicked, before its page has
+  run; the fit then corrects the guess by a few pixels and re-centres it.
 - **Two answers, and remembering one retires the question.** *Keep it in the tray* and *Quit Intentic*, with
   **always do this** storing the choice in `close-action.json`: outside `Settings`, which the launcher UI
   overwrites wholesale, so changing an origin there cannot put the question back. Escape, Cancel and the

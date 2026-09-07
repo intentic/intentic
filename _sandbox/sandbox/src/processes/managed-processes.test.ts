@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { afterEach, expect, test, vi } from "vitest";
-import { createManagedProcesses, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
+import { createManagedProcesses, launchEnv, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
 
 // A runner that records launches (with the manager-assigned port) and lets the test drive each session's pane
 // foreground command, mirroring what tmux would report. An absent entry models a destroyed session; a launch
@@ -234,4 +234,19 @@ test("launchOf narrates a start: launching until the command is seen, starting w
     await panels.start("job", { ...SPEC, oneShot: true });
     expect(panels.launchOf("job")).toBeUndefined();
     panels.stopAll();
+});
+
+/* THE PANE'S ENVIRONMENT, which is where a start's cost is decided before its first line prints. The pnpm switch
+ * is the one a fresh sandbox's first screen hung on: without it `pnpm --filter <app> dev` over the image's
+ * copied node_modules re-runs a whole install before the dev server, which the launch state can only report
+ * as "starting" for however long that takes. Spelled with dashes because that is the spelling pnpm reads. */
+test("the launch env carries the assigned port, the run dir's bin, its own history and pnpm's pre-run install switched off", () => {
+    const env = launchEnv({ ...SPEC, port: 4321, portEnv: ["API_PORT"], env: { INTENTIC_DAEMON: "http://127.0.0.1:8787" } }, "/usr/bin");
+    expect(env["PORT"]).toBe("4321");
+    expect(env["API_PORT"]).toBe("4321");
+    expect(env["PATH"]).toBe("/work/app/operator/node_modules/.bin:/usr/bin");
+    expect(env["HISTFILE"]).toBe("/tmp/intentic-panel-4321.zsh_history");
+    expect(env["INTENTIC_DAEMON"]).toBe("http://127.0.0.1:8787");
+    expect(env["npm_config_verify-deps-before-run"]).toBe("false");
+    expect(env["npm_config_verify_deps_before_run"]).toBeUndefined();
 });

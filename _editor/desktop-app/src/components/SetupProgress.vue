@@ -139,8 +139,10 @@ watch(
 
         <div class="flex items-center gap-2 text-2xs">
             <!-- True, and the reason the × on this card is not a trap: the script is a process on this
-                 machine, not something this window is holding up. -->
-            <span v-if="running" class="flex-1 text-subtle">You can close this: the install keeps going.</span>
+                 machine, not something this window is holding up. It also says what the reader will find on
+                 the other side of that ×, because "keeps going" alone left the question of HOW it is going
+                 to a page that used to have no answer (App.vue `report`). -->
+            <span v-if="running" class="flex-1 text-subtle">Closing this doesn't stop the install: your workspace shows its progress.</span>
             <span v-else class="flex-1" />
             <button type="button" class="shrink-0 text-link hover:underline" @click="open = !open">
                 {{ open ? `Hide detail` : `Show detail` }}

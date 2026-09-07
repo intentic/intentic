@@ -1,7 +1,7 @@
 {
     "$schema": "../gen/schemas/desktop-schema.json",
     "identifier": "confirm-close",
-    "description": "The dialog the × raises before the window goes anywhere (windows.rs). Local content, and narrower than the launcher's: it answers with one command and it closes itself, so `close` is the only window permission it needs, cancelling this dialog is its own window closing and nothing else.",
+    "description": "The dialog the × raises before the window goes anywhere (windows.rs). Local content, and narrower than the launcher's: it answers with one command and it closes itself, so `close` is the only window permission it needs, cancelling this dialog is its own window closing and nothing else. `start-dragging` is for its header: a chromeless card is moved by the page, not by a title bar.",
     "windows": ["confirm-close"],
-    "permissions": ["core:default", "core:window:allow-close"]
+    "permissions": ["core:default", "core:window:allow-close", "core:window:allow-start-dragging"]
 }

@@ -73,6 +73,8 @@ pub fn run() {
             commands::machine_report,
             commands::workspace_open,
             commands::setup_alert,
+            commands::setup_progress,
+            commands::fit_to_content,
             commands::close_workspace,
             commands::settings_get,
             commands::settings_set,

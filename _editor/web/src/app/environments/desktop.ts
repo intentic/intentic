@@ -64,6 +64,65 @@ export interface DesktopUpdateEvent {
  * and run an installer (setup_link.rs). */
 export const DESKTOP_UPDATE_LINK = `intentic://update`;
 
+/* THE APP ANNOUNCING WHERE THE INSTALL IT IS RUNNING HAS GOT TO (desktop-app's windows.rs `announce_setup`),
+ * for the setup page to draw once the app's own card has stepped aside. The same channel as the update, for
+ * the same reasons: a DOM event, nothing exposed to the page, and a browser with no app around it simply
+ * never hears one. Every tick of the app's own bar arrives here, so the page's copy is as live as the card's.
+ *
+ * `closed` is not a state of the install but of the card: the user put a finished one away, and the page
+ * takes its strip down with it. */
+export const DESKTOP_SETUP_EVENT = `intentic-desktop-setup`;
+
+export type DesktopSetupState = `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
+
+export interface DesktopSetupReport {
+    /// The sandbox's name, as the user typed it.
+    readonly name?: string;
+    readonly state: DesktopSetupState;
+    /// 0–100, the app's own weighted bar.
+    readonly percent: number;
+    /// "Step 4 of 10".
+    readonly position?: string;
+    /// "about 3 min left".
+    readonly remaining?: string;
+    /// The running step's phase id, for analytics rather than the screen.
+    readonly step?: string;
+}
+
+const SETUP_STATES: readonly DesktopSetupState[] = [`running`, `waiting`, `failed`, `stopped`, `done`, `closed`];
+
+/* The event's detail read back as a report, or nothing. It crossed a process boundary as an object the app
+ * serialised, and a page must not draw a bar off a shape it never checked: an older or newer app that spells
+ * the state differently is a report this page has no screen for, and says nothing rather than something wrong. */
+export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | undefined => {
+    if (detail === null || typeof detail !== `object`) {
+        return undefined;
+    }
+    const raw = detail as Record<string, unknown>;
+    const state = SETUP_STATES.find((known) => known === raw[`state`]);
+    if (state === undefined || typeof raw[`percent`] !== `number` || !Number.isFinite(raw[`percent`])) {
+        return undefined;
+    }
+    const text = (key: string): string | undefined => (typeof raw[key] === `string` && raw[key] !== `` ? (raw[key] as string) : undefined);
+    const name = text(`name`);
+    const position = text(`position`);
+    const remaining = text(`remaining`);
+    const step = text(`step`);
+    return {
+        state,
+        percent: Math.min(100, Math.max(0, raw[`percent`])),
+        ...(name === undefined ? {} : { name }),
+        ...(position === undefined ? {} : { position }),
+        ...(remaining === undefined ? {} : { remaining }),
+        ...(step === undefined ? {} : { step }),
+    };
+};
+
+/* The way back to the app's setup card once "Back to your workspace" has stepped it aside: the same face,
+ * holding the same run. App-window only on the Rust side, like the update: it raises a window of the app,
+ * which is the app's own page's business and no outside page's. */
+export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
+
 export interface DesktopSetupArgs {
     code: string;
     name?: string;

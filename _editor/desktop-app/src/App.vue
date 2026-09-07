@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
     Button,
-    Card,
     DeviceDetail,
     DeviceRunLog,
     type DeviceSandboxGroup,
@@ -13,6 +12,7 @@ import {
     type SandboxVerb,
     SandboxVerbs,
     sandboxVerbPrompt,
+    ui,
     VERB_LABEL,
     vAction,
 } from "@intentic/ui";
@@ -22,6 +22,7 @@ import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
 import SetupProgress from "./components/SetupProgress.vue";
+import { useFitToContent } from "./fitWindow";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
     desktopInfo,
@@ -51,6 +52,7 @@ import {
     sandboxRemove,
     sandboxReshape,
     setupAlert,
+    setupProgress,
     setupRun,
     signOutForSetup,
     syncRun,
@@ -68,6 +70,7 @@ import {
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
+    type SetupReport,
     type SyncArgs,
     type UpdateStage,
 } from "./desktop";
@@ -81,11 +84,18 @@ import {
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
  *   • manage the containers on THIS machine afterwards: the sandbox rows and their verbs
  *
- * They are two SCREENS of one window, and they arrive the same way: this face takes the frame the workspace
- * was filling and that one steps aside (windows.rs). The setup screen used to be the exception — a small
+ * They are two SCREENS of one window, and they arrive the same way: this face comes up in the middle of the
+ * workspace's frame and that one steps aside (windows.rs). The setup screen used to be the exception — a small
  * window in FRONT of the workspace, with that window left mapped behind it — and what it produced was two
  * Intentic windows during onboarding, which is the one flow where a new user has no idea which of them is the
  * product. An install is a screen of this app, so it looks like one.
+ *
+ * AND THE WINDOW IS THE CARD. This face used to be drawn as a card at the top of the workspace's whole frame,
+ * under an OS title bar, over a dark void the size of a monitor; what is on screen now is the card and
+ * nothing else. The window has no decorations, its header is the page's own (draggable, with a small × that
+ * says where it goes), and its height follows the content below (`useFitToContent`), so ten plan rows and a
+ * requirements list above them are exactly what the window is tall enough for and a two-line manager is not
+ * a screenful of nothing.
  *
  * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
  * button would be a set of decisions to make about a machine whose sandbox is still being built.
@@ -104,6 +114,10 @@ import {
  * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
 
 const info = ref<DesktopInfo | undefined>(undefined);
+/* The box the window is fitted to: whichever face is up, measured (fitWindow.ts). One ref for both faces
+ * because the root around them is one element, and the window follows whatever it holds. */
+const content = ref<HTMLElement | undefined>(undefined);
+useFitToContent(content);
 /* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has
  * and used to pretend it did not.
  *
@@ -435,6 +449,10 @@ const planFor = (args: SetupArgs): readonly PlanStep[] =>
         os: info.value?.os ?? ``,
     });
 
+/* The sandbox's name as the user typed it, for every report that carries one (the workspace's strip says
+ * "Installing work on this device"), absent rather than empty when there is none. */
+const nameOf = (args: SetupArgs | undefined): { name?: string } => (args?.name === undefined ? {} : { name: args.name });
+
 const runSetup = async (): Promise<void> => {
     const args = pending.value;
     if (args === undefined || running.value) {
@@ -470,6 +488,12 @@ const runSetup = async (): Promise<void> => {
         resumed: resuming.value,
     });
     const failure = await start(`setup`, () => setupRun(args, consented.value));
+    await settleSetup(args, failure, startedAt);
+};
+
+/* HOW A RUN THAT HAS ENDED IS READ, apart from the run so each half stays readable. `failure` is what `start`
+ * answered: nothing for a run that finished, the script's own words otherwise. */
+const settleSetup = async (args: SetupArgs, failure: string | undefined, startedAt: number): Promise<void> => {
     const ok = failure === undefined;
     // Nothing was reported this time, so the list on screen is the last run's and is now a lie: this run got
     // past the examination, and whatever stopped it is somewhere else entirely.
@@ -504,6 +528,10 @@ const runSetup = async (): Promise<void> => {
         ...(requirements.value.length === 0 ? {} : { requirements: requirements.value.map((requirement) => requirement.id) }),
     });
     if (ok) {
+        // The last word the workspace page hears about this run, sent while there is still a setup to report
+        // on: the page draws nothing for it (the workspace is about to open), and a strip left saying "97%"
+        // is what a later setup in the same window would open on for its first second.
+        void setupProgress({ ...nameOf(args), state: `done`, percent: 100 });
         pending.value = undefined;
         setupOpen.value = false;
         /* AND THE WINDOW LANDS IN THE WORKSPACE, not on the page that was waiting for it.
@@ -583,10 +611,68 @@ const dismissSetup = async (): Promise<void> => {
         ...(state === undefined ? {} : { percent: Math.round(state.percent), elapsedMs: Date.now() - state.startedAt }),
         ...(step === undefined ? {} : { step }),
     });
-    // The one thing that closes this screen other than a setup finishing: see `setupOpen`.
-    setupOpen.value = false;
+    /* WALKING AWAY FROM A LIVE RUN KEEPS THIS A SETUP. The run is still going, and if it stops while nobody is
+     * looking `setupAlert` brings this window back — to THIS screen, holding the failure, which it could not
+     * do while the dismissal cleared `setupOpen` on the way out: the alert then raised the manager's list of
+     * containers, with the reason the install died nowhere on it. Only a card whose run has ended is closed
+     * for good here, which is also the one case the workspace's own strip should come down. */
+    if (!running.value) {
+        setupOpen.value = false;
+        void setupProgress({ ...nameOf(pending.value), state: `closed`, percent: 0 });
+    }
     await workspaceOpen();
 };
+
+/* WHAT THE × SAYS IT DOES, because it was the reported question: "clicking Back to your workspace while the
+ * sandbox is going through setup gives no clear way of understanding if that stops setup". It does not, and
+ * the label says so while there is a run to say it about. The workspace then draws the run's progress for
+ * itself, off `reportProgress` below, so the answer is on the next screen as well as on this button. */
+const dismissLabel = computed(() =>
+    running.value ? `Back to your workspace. The install keeps running, and your workspace shows its progress.` : `Back to your workspace`,
+);
+
+/* THE BAR, TOLD TO THE WORKSPACE PAGE on every change (desktop.ts `setupProgress`, windows.rs
+ * `announce_setup`), so the page a dismissed install lands on shows the same figures this card does instead
+ * of "follow it in the Intentic window" about a window that just stepped aside. The state is the card's own
+ * reading of the run, the same one its heading and its bar colour come from. Only while this is a setup: the
+ * manager has nothing to report. */
+const reportState = computed<SetupReport[`state`]>(() => {
+    if (running.value) {
+        return `running`;
+    }
+    if (awaitingConsent.value) {
+        return `waiting`;
+    }
+    if (wasStopped.value) {
+        return `stopped`;
+    }
+    return progress.value?.ended === `ok` ? `done` : `failed`;
+});
+const report = computed<SetupReport | undefined>(() => {
+    const view = progressShown.value;
+    const state = progress.value;
+    if (!setupMode.value || view === undefined || state === undefined) {
+        return undefined;
+    }
+    const step = state.plan[state.index]?.phase;
+    return {
+        ...nameOf(pending.value),
+        state: reportState.value,
+        percent: Math.round(view.percent),
+        ...(view.position === undefined ? {} : { position: view.position }),
+        ...(view.remaining === undefined ? {} : { remaining: view.remaining }),
+        ...(step === undefined ? {} : { step }),
+    };
+});
+watch(
+    () => JSON.stringify(report.value),
+    (next) => {
+        if (next !== undefined && report.value !== undefined) {
+            void setupProgress(report.value);
+        }
+    },
+);
+
 
 /* THE WAY OUT THAT IS NOT "GIVE UP".
  *
@@ -750,6 +836,15 @@ const reshape = async (slug: string, ask: ResourcesAsk): Promise<void> => {
  * asking (the caps against this engine's rails, the switches, the restart it costs); what comes back is only
  * what changed, and the row then narrates the restart the way it narrates an update. */
 const reshaping = ref<DeviceSandboxGroup | undefined>(undefined);
+
+/* ESCAPE IS THE ×: this window has no title bar to find one on, and a card that can be dismissed by a key is
+ * a card that reads as a card. Not while a dialog of this screen's own is open, whose Escape is its own. */
+const onKey = (event: KeyboardEvent): void => {
+    if (event.key !== `Escape` || reshaping.value !== undefined) {
+        return;
+    }
+    void (setupMode.value ? dismissSetup() : workspaceOpen());
+};
 // The form rather than a run: nothing happens until it is applied. A container docker did not describe (its
 // inspect failed) has nothing to open the form on, and says so where every other refusal on this row lands.
 const openResources = (group: DeviceSandboxGroup, slug: string): void => {
@@ -937,6 +1032,7 @@ const paneLines = (group: DeviceSandboxGroup): string[] => {
 
 let stop: Array<() => void> = [];
 onMounted(async () => {
+    window.addEventListener(`keydown`, onKey);
     // Awaited, and safe to await, because it asks this process what it is and nothing else — see desktop.ts.
     // The question about the MACHINE used to be answered in the same breath, and that is what made this line
     // the one everything below queued behind.
@@ -1042,42 +1138,53 @@ onMounted(async () => {
     }
 });
 onUnmounted(() => {
+    window.removeEventListener(`keydown`, onKey);
     clearInterval(ticker);
     stop.forEach((unlisten) => unlisten());
 });
 </script>
 
 <template>
-    <!-- SETUP: a SCREEN of this window, in the frame the workspace was filling (windows.rs), not a second
-         window standing in front of it. It has been all three shapes now — a chromeless sheet across the
-         screen, a small dialog window over the workspace, and this — and the two it replaced share one fault:
-         they made the app be in two places at once during the flow that has to be the easiest one there is.
-
-         A column anchored to the TOP rather than a card floating in the middle: the thing this screen has to
-         draw on the machines it exists for is long (a ten-step plan, and above it everything wrong with this
-         PC), and a full window's height is now the room it gets rather than a frame that had to grow to fit
-         it. Top-anchored also means the heading does not move as rows arrive. -->
-    <div v-if="setupMode" class="h-dvh overflow-auto bg-canvas text-content">
-        <div class="mx-auto w-full max-w-3xl p-5">
-            <Card class="flex w-full flex-col gap-3">
-                <div class="flex items-start gap-2.5">
-                    <Icon name="bolt" class="mt-0.5 text-primary-400" />
-                    <div class="min-w-0 flex-1">
+    <!-- ONE ROOT, TWO FACES, AND THE WINDOW IS THE CARD. Both screens share this scroll container and the
+         measured column inside it (`content`): the window is fitted to the column's height (fitWindow.ts) and
+         the container is what scrolls once the screen has run out of room. There is no card drawn inside,
+         because the window's own edge is the card's edge now: this face has been all three shapes — a
+         chromeless sheet across the screen, a small dialog window over the workspace, and a card at the top of
+         the workspace's whole frame — and the last of those was a monitor's worth of dark canvas around one
+         card's worth of content, under an OS title bar. -->
+    <div class="h-dvh overflow-auto bg-canvas text-content">
+        <div ref="content" class="flex w-full flex-col gap-3 p-4">
+            <!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs),
+                 not a second window standing in front of it. Anchored to the TOP of its window rather than
+                 floating: the heading does not move as rows arrive under it, and the window grows downward. -->
+            <template v-if="setupMode">
+                <!-- THE HEADER IS THE TITLE BAR. There is no OS one to drag the card by or to close it with, so
+                     this row is the drag region and carries the ×. The text inside is inert to the pointer so
+                     a press anywhere on the row is a press on the row. -->
+                <header data-tauri-drag-region class="flex items-start gap-2.5 select-none">
+                    <Icon name="bolt" class="pointer-events-none mt-0.5 text-primary-400" />
+                    <div class="pointer-events-none min-w-0 flex-1">
                         <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this device</h1>
                         <p class="text-2xs text-subtle">
                             Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
                             workspace once it answers.
                         </p>
                     </div>
-                    <!-- SAYS WHERE IT GOES, because this is a screen and not a dialog any more. As a bare ×
-                     on a window-filling screen it reads as "close Intentic", which is the one thing it does
-                     not do: it steps back to the workspace and nothing else, and the install carries on,
-                     being a process on this machine rather than something this window is holding up. -->
-                    <Button size="small" severity="secondary" :text="true" class="-my-1 shrink-0" @click="dismissSetup">
-                        <Icon name="arrow-up-right" />
-                        <span>Back to your workspace</span>
-                    </Button>
-                </div>
+                    <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window
+                         reads as "close Intentic", which is the one thing it does not do: it steps back to the
+                         workspace and nothing else, and the install carries on, being a process on this
+                         machine rather than something this window is holding up. The label says that too,
+                         while there is a run to say it about. -->
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`-my-0.5 h-7 w-7`)"
+                        :aria-label="dismissLabel"
+                        v-tooltip.left="dismissLabel"
+                        @click="dismissSetup"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </header>
                 <!-- The code this window came back to is older than the platform will accept. Said plainly, with
                  the one thing that fixes it, instead of letting the run fail at the claim with something that
                  reads like a bad code. -->
@@ -1162,22 +1269,27 @@ onUnmounted(() => {
                     <button v-if="setupLog" type="button" class="text-link hover:underline" v-action="openLogFolder">Open log folder</button>
                     <span v-if="setupLog" class="ml-auto truncate font-mono text-subtle">{{ setupLog }}</span>
                 </div>
-            </Card>
-        </div>
-    </div>
+            </template>
 
-    <div v-else class="h-dvh overflow-auto bg-surface text-content">
-        <!-- A column, not a stretched form: this face inherits the workspace's frame (windows.rs), which is a
-             wide window, and everything on this screen is a short list of short things. -->
-        <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
-        <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5">
-            <header class="flex items-center gap-3">
-                <h1 class="flex-1 text-base font-semibold">This device</h1>
-                <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
-                <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
-                    <template #icon><Icon name="refresh" /></template>
-                </Button>
-            </header>
+            <!-- THE MANAGER: what this machine is running, once nothing is being handed over. The same card,
+                 the same header row doing the title bar's job, and a × that is the way back to the workspace. -->
+            <template v-else>
+                <header data-tauri-drag-region class="flex items-center gap-3 select-none">
+                    <h1 class="pointer-events-none flex-1 text-base font-semibold">This device</h1>
+                    <span v-if="info" class="pointer-events-none font-mono text-2xs text-subtle">v{{ info.version }}</span>
+                    <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`h-7 w-7`)"
+                        aria-label="Back to your workspace"
+                        v-tooltip.left="'Back to your workspace'"
+                        @click="openWorkspace()"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </header>
 
             <!-- WHAT THIS APP IS DOING ABOUT ITS OWN VERSION, and never a gate.
                  The rule is that the sentence describes what is TRUE right now rather than what is meant to
@@ -1302,7 +1414,7 @@ onUnmounted(() => {
                 </DeviceDetail>
             </section>
 
-            <footer class="mt-auto flex flex-wrap items-center gap-2 pt-2">
+            <footer class="flex flex-wrap items-center gap-2 pt-1">
                 <Button size="small" severity="secondary" label="Open workspace" @click="openWorkspace()">
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
@@ -1328,6 +1440,7 @@ onUnmounted(() => {
                 @cancel="reshaping = undefined"
                 @apply="applyReshape"
             />
+            </template>
         </div>
     </div>
 </template>

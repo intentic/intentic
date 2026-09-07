@@ -70,29 +70,47 @@ export interface ManagedProcessesOptions {
     readonly onPromptWatch?: (onSignal: () => void) => () => void;
 }
 
+/* THE ENVIRONMENT A MANAGED COMMAND IS TYPED INTO, as one pure function so the switches below can be asserted
+ * without a tmux binary. `-e` sets each of these on the session (the tmux server's global env, inherited from
+ * this daemon, supplies the rest).
+ *
+ * PATH: a bare `sh -c` does NOT add node_modules/.bin to PATH (only pnpm/npm/npx do), so a workspace-local bin
+ * like `turbo`/`vite`/`astro` would fail with "not found" (exit 127). The run dir's bin is prepended so any dev
+ * command resolves its local tools; the panel's own `env` rides underneath.
+ *
+ * HISTFILE: a panel's own zsh history, not the owner's. The command is typed into an interactive shell on
+ * purpose (see the send-keys comment in `launch`), and the image's zsh shares one history file on the /history
+ * volume so terminal autosuggestions survive a rebuild, which would make every dev-server command the DAEMON
+ * typed a permanent suggestion in the owner's own tabs. Overriding HISTFILE (the image's .zshrc assigns it only
+ * if unset) keeps the durable store to what a human typed, while ↑ still re-runs the command in this pane.
+ * Keyed by port, not session name: it is unique per launch, filename-safe without sanitizing, and
+ * container-local, this history is meant to die with the pane.
+ *
+ * npm_config_verify-deps-before-run: pnpm's own pre-run install, switched off, because the daemon already
+ * decided whether to install. Every dev command here runs behind a `test -d node_modules || pnpm install`
+ * guard, and the baked starter site arrives with its node_modules copied out of the image so that guard is
+ * satisfied on a fresh box. pnpm 11 then re-examines the workspace on its own before `pnpm --filter <app> dev`
+ * (a copied tree never passes its up-to-date check) and runs a full install first: a lockfile walk, a
+ * supply-chain verification that can go to the registry, every lifecycle script. Measured on a warm box that
+ * is a second; on the throttled first boot of a hosted machine, or behind a slow network, it is minutes of a
+ * pane whose foreground command is `node`, which the launch state below can only call "starting", and a
+ * verification that fails leaves the shell at its prompt, which reads as the dev server having crashed. Either
+ * way the site the sandbox exists to show sat behind "Preparing the preview…". The DASHED spelling is the one
+ * pnpm reads from the environment (`npm_config_verify_deps_before_run` is ignored), and a dashed name is
+ * legal in a process environment even though no shell can name it as a variable: tmux `-e` sets it and zsh
+ * passes it through to every child. Inert for anything that is not pnpm. */
+export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): Record<string, string> => ({
+    ...spec.env,
+    ...Object.fromEntries((spec.portEnv ?? []).map((name) => [name, String(spec.port)])),
+    PATH: `${join(spec.cwd, "node_modules", ".bin")}:${path}`,
+    PORT: String(spec.port),
+    HISTFILE: `/tmp/intentic-panel-${spec.port}.zsh_history`,
+    "npm_config_verify-deps-before-run": "false",
+});
+
 const defaultRunner: ProcessRunner = {
     launch: async (session, spec) => {
-        // A bare `sh -c` does NOT add node_modules/.bin to PATH (only pnpm/npm/npx do), so a workspace-local bin
-        // like `turbo`/`vite`/`astro` would fail with "not found" (exit 127). Prepend the run dir's bin so any dev
-        // command resolves its local tools; the panel's own `env` rides underneath. `-e` sets the vars on the
-        // session (the tmux server's global env, inherited from this daemon, supplies the rest).
-        // A panel's own zsh history, not the owner's. The command below is typed into an interactive shell on
-        // purpose (see the send-keys comment), and the image's zsh now shares one history file on the /history
-        // volume so terminal autosuggestions survive a rebuild, which would make every dev-server command the
-        // DAEMON typed a permanent suggestion in the owner's own tabs. Overriding HISTFILE here (the image's
-        // .zshrc assigns it only if unset) keeps the durable store to what a human typed, while ↑ still re-runs
-        // the command in this pane. Keyed by port, not session name: it is unique per launch, filename-safe
-        // without sanitizing, and container-local, this history is meant to die with the pane.
-        const binDir = join(spec.cwd, "node_modules", ".bin");
-        const portVars = Object.fromEntries((spec.portEnv ?? []).map((name) => [name, String(spec.port)]));
-        const env = {
-            ...spec.env,
-            ...portVars,
-            PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
-            PORT: String(spec.port),
-            HISTFILE: `/tmp/intentic-panel-${spec.port}.zsh_history`,
-        };
-        const envFlags = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
+        const envFlags = Object.entries(launchEnv(spec, process.env["PATH"] ?? "")).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
         // A lingering same-name session is a previous run's leftover, clear it before creating fresh.
         // `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
         await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);

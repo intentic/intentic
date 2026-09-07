@@ -34,6 +34,8 @@ import { useSandbox } from "../sandbox/client/useSandbox";
 import { desktopInstaller, desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../../app/environments/scriptCommand";
+import DesktopSetupProgress from "./DesktopSetupProgress.vue";
+import { useDesktopSetup } from "./desktopSetup";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
@@ -727,6 +729,10 @@ const copied = ref(false);
 // can observe before the machine takes over. Without it, pressing the one button on the card left the footer
 // still reading "Nothing is running yet" for as long as it takes the app to claim.
 const launched = ref(false);
+/* …and what the app says about that setup afterwards (desktopSetup.ts): the bar its own card draws, reported
+ * here on every change, so the page a dismissed card hands the window back to can show how the install is
+ * going rather than pointing at a window that has just stepped aside. */
+const { report: desktopReport, heardAt: desktopHeardAt } = useDesktopSetup();
 // A link back to this screen is in the user's inbox (the phone's handoff: SetupHandoff.vue). Deliberately NOT
 // part of `handoff` below: that state machine tracks the COMMAND's journey to a machine, and posting yourself a
 // bookmark does not advance it by a step. What it does change is what the stuck-wait nudge should say, because
@@ -839,7 +845,9 @@ const waitedMs = computed(() => (waitedFrom.value === undefined ? 0 : now.value 
 // card names the real problem (nudging beside it would say "you haven't run it" about a command that
 // demonstrably ran and died), and live stage narration IS the answer slowBuild's "check that terminal" was
 // groping for. The fuses stay for machines running an ic too old to report.
-const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value);
+// …and never over a live report from the app: "still nothing" beside a bar that is visibly moving would be the
+// page contradicting the app it handed the work to.
+const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value && desktopReport.value === undefined);
 const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
 /* WHICH READER THE CORRECTION IS ADDRESSED TO (SetupNudge renders the prose). The decision lives here because
  * the state does: a phone that mailed itself the link needs the mail opened on the other computer, not a
@@ -2928,7 +2936,13 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         a few minutes.
                                     </template>
                                     <!-- Handed off two ways, and the next move differs: a copied command still has to be
-                                         pasted, where the app already has everything and is opening its own window. -->
+                                         pasted, where the app already has everything and is opening its own window.
+                                         Once the app is reporting, the strip under this line is the answer and this
+                                         line only names what is happening. -->
+                                    <template v-else-if="handoff === `handed` && launched && desktopReport">
+                                        <span class="font-medium text-content">The app is setting it up.</span> This page opens your workspace
+                                        the moment it answers.
+                                    </template>
                                     <template v-else-if="handoff === `handed` && launched">
                                         <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window. This page
                                         opens your workspace the moment it answers.
@@ -2956,6 +2970,16 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     </template>
                                 </span>
                             </p>
+
+                            <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. Only
+                                 while this page handed the setup to the app (a report from a run some other tab
+                                 started belongs to that tab's card), and only until the machine has reported in
+                                 for itself, from which point the sandbox's own words above outrank the installer's. -->
+                            <DesktopSetupProgress
+                                v-if="launched && desktopReport && handoff !== `claimed`"
+                                :report="desktopReport"
+                                :heard-at="desktopHeardAt"
+                            />
 
                             <!-- The machine said exactly what broke: render it verbatim, problem and fix per check,
                                  and the one instruction that is always true. This is the card the whole report

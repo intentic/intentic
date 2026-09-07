@@ -39,3 +39,25 @@ test("flags ride only when set, and a folder never does", async () => {
     expect(full.searchParams.get(`takeover`)).toBe(`1`);
     expect(full.searchParams.get(`mirror`)).toBe(`1`);
 });
+
+/* The app's progress announcement, read back off a detail that crossed a process boundary: the fields the strip
+ * draws survive, anything the page did not ask for is dropped, and a shape it has no screen for is nothing. */
+test("a setup report is read back with its figures and without anything unexpected", async () => {
+    const { readDesktopSetupReport } = await load();
+    expect(
+        readDesktopSetupReport({ name: `work`, state: `running`, percent: 42, position: `Step 4 of 10`, remaining: `about 3 min left`, step: `pulling-image`, extra: 1 }),
+    ).toEqual({ name: `work`, state: `running`, percent: 42, position: `Step 4 of 10`, remaining: `about 3 min left`, step: `pulling-image` });
+    // The optional fields are absent when empty, never empty strings the strip would draw as blanks.
+    expect(readDesktopSetupReport({ state: `failed`, percent: 100, name: ``, position: null })).toEqual({ state: `failed`, percent: 100 });
+    // A percentage is kept on the bar.
+    expect(readDesktopSetupReport({ state: `running`, percent: 140 })?.percent).toBe(100);
+});
+
+test("a report in a shape this page has no screen for is nothing", async () => {
+    const { readDesktopSetupReport } = await load();
+    expect(readDesktopSetupReport(undefined)).toBeUndefined();
+    expect(readDesktopSetupReport(`running`)).toBeUndefined();
+    expect(readDesktopSetupReport({ state: `exploding`, percent: 10 })).toBeUndefined();
+    expect(readDesktopSetupReport({ state: `running`, percent: `10` })).toBeUndefined();
+    expect(readDesktopSetupReport({ state: `running`, percent: Number.NaN })).toBeUndefined();
+});
