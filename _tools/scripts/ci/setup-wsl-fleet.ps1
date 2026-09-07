@@ -28,7 +28,8 @@
   pipeline after the recovery above did, in 90 seconds, on a commit that was fine. And Docker Desktop STARTS
   BY RESTARTING THE WSL VM, so bringing it up second kills the runners mid-job and leaves their sessions
   stranded on GitHub's side ("A session for this runner already exists"). The reconciler waits for the engine
-  to answer before it touches the distro, every time, for both reasons.
+  to answer before it touches the distro, every time, for both reasons. Necessary and not sufficient: an engine
+  that answers on WINDOWS is not a `docker` the runners can reach, which is the fifth way below.
 
   AND THE DISK IS THE THIRD WAY, the one the two above cannot see. On 30 August the host volume reached 2.04 GB
   free of 1 TB -- Docker Desktop's docker_data.vhdx at 456 GB and the distro's ext4.vhdx at 188 GB, neither
@@ -53,6 +54,19 @@
   down while a job is executing; the reconciler was doing exactly that every three minutes without asking. It
   asks now -- and defers rather than vetoes, because a job wedged on a genuinely dead engine would otherwise
   hold the repair off for the length of its own timeout.
+
+  AND THE FIFTH WAY WAS THE PROBE THIS FILE DID NOT HAVE. Every docker question above is asked on WINDOWS, and
+  Windows is not where the jobs run: `docker.exe version` answering says the engine is alive and says nothing
+  about whether the six runner processes, inside the distro, can find a `docker` to talk to it with. That binary
+  and the socket beside it are Docker Desktop's WSL integration, present exactly while it is applied to this
+  distro. On 7 September the engine answered on Windows all day, every pass logged a healthy machine, and three
+  pipelines failed in FIVE SECONDS each -- both DAG roots dying in "Set up job" on `docker: command not found`,
+  eighteen jobs skipped behind them, four of the six workers, five and a half hours, no failed assertion
+  anywhere. The pass now asks the question the runner asks: a non-login `sh` in the distro, because these are
+  systemd services and a login shell's PATH is not theirs. The repair costs nothing -- the integration's CLI and
+  the engine's socket sit under /mnt/wsl, the utility VM's shared mount, which every distro in that VM can see
+  whether or not Docker Desktop was told to integrate with it, so a symlink into /usr/local/bin restores what a
+  dropped integration took away, with nothing restarted and no job lost.
 
   WHAT IT REGISTERS. A logon task with a repeating trigger, the same shape setup-windows-runner.ps1 uses for
   the Windows runner and for the same reasons: at logon for the reboot, every few minutes for everything that
@@ -487,6 +501,103 @@ if (`$running -notcontains `$Distro) {
     Start-Sleep -Seconds 10
 }
 
+# -- 3b. the docker CLI INSIDE the distro, which is what a job actually reaches for -------------------------------
+# EVERY PROBE ABOVE THIS ONE ASKED WINDOWS, and Windows is not where the jobs run. docker.exe answering on the
+# host proves the engine is alive; it says nothing about whether the six runner processes -- Linux processes,
+# inside this distro -- can find a docker to talk to it with. That binary is not the distro's own: Docker
+# Desktop injects it, and the socket beside it, through its WSL INTEGRATION, so both are present exactly while
+# that integration is applied to THIS distro and gone the moment it is not -- after its docker-desktop distro is
+# terminated, after an update or a reset drops this distro from the integration list, or on a fleet started into
+# a VM where the integration was never re-established.
+#
+# WHAT THAT COSTS, and it is the whole reason this section exists: on 7 September the engine answered on Windows
+# all day, every pass logged a healthy machine, and every job the fleet took died in FIVE SECONDS in Set up job
+# on
+#
+#     ##[error]docker: command not found
+#
+# Three pipelines went that way -- runs 34108789062, 34116132200 and 34138843648, across four of the six workers
+# -- and each took eighteen skipped jobs down with its two failed DAG roots, because both roots run in a
+# container. The runner resolves docker off its own PATH BEFORE it creates that container, so this is not a step
+# failing: it is the job never starting, with no failed assertion anywhere and nothing on the machine reporting
+# a fault. Ordering the engine ahead of the fleet (section 1) does not cover it: the engine was up.
+#
+# THE PROBE RUNS IN A NON-LOGIN SHELL, deliberately. The runners are systemd services, so nothing sources
+# /etc/profile.d for them: a docker that exists only on an interactive PATH is a docker the fleet cannot use,
+# and sh -lc would read that machine as healthy. The repair links into /usr/local/bin for the same reason -- on
+# the service's PATH, not on a profile's.
+#
+# AND THE REPAIR NEEDS NOTHING RESTARTED, which is what makes it safe to run every pass. The integration's
+# binaries and the engine's socket live under /mnt/wsl, the shared mount of the utility VM, which EVERY distro
+# in that VM can see whether or not Docker Desktop has been told to integrate with it. So a symlink is the whole
+# fix for the case where they are there and this distro's PATH is not, and it cannot take the VM out from under
+# a running job the way section 1's last resort can.
+function DistroSh(`$script) { return RunBounded 'wsl.exe' "-d `$Distro -e /bin/sh -c ""`$script""" $EngineProbeSeconds }
+function DistroShRoot(`$script) { return RunBounded 'wsl.exe' "-d `$Distro -u root -e /bin/sh -c ""`$script""" $EngineProbeSeconds }
+# STDERR IS REDIRECTED AND NEVER READ (see RunBounded), so a command noisy on it fills a pipe nobody drains and
+# the probe TIMES OUT instead of answering. Both searches below therefore run as root and discard stderr:
+# /mnt/wsl carries directories the fleet's own user cannot enter.
+function DistroLines(`$result) {
+    if (`$null -eq `$result) { return @() }
+    return @((`$result.Out -replace "``0", '') -split "``n" | ForEach-Object { `$_.Trim() } | Where-Object { `$_ })
+}
+
+# CLIENT ONLY. docker --version talks to no daemon, so it separates "the fleet cannot find docker" from "docker
+# is there and the engine is down" -- which section 1 has already reported, and which this section must not
+# report a second time as a fault of its own.
+`$cli = DistroSh 'docker --version'
+`$cliAnswered = `$null -ne `$cli
+`$cliOk = `$cliAnswered -and `$cli.Code -eq 0
+if (`$cliAnswered -and -not `$cliOk) {
+    `$found = @(DistroLines (DistroShRoot 'find /mnt/wsl -maxdepth 6 -type f -name docker -perm -u+x 2>/dev/null')) |
+        Select-Object -First 1
+    if (`$found) {
+        Say "the fleet's PATH in `$Distro has no docker, but the integration's copy is at `$found -- linking it into /usr/local/bin"
+        DistroShRoot "ln -sfn `$found /usr/local/bin/docker" | Out-Null
+        `$cli = DistroSh 'docker --version'
+        `$cliOk = (`$null -ne `$cli -and `$cli.Code -eq 0)
+    }
+}
+
+# THE SOCKET IS THE OTHER HALF, and it is the half that does not survive a boot: /var/run is a tmpfs, so the
+# link the integration puts there is gone on every distro start and re-made only by an integration still
+# applied. Re-checked every pass rather than repaired once, for that reason. A CLI that runs with no socket
+# under it is "Cannot connect to the Docker daemon" in Initialize containers -- a different line in the log and
+# the same dead pipeline.
+`$sock = DistroSh 'test -S /var/run/docker.sock'
+`$sockAnswered = `$null -ne `$sock
+`$sockOk = `$sockAnswered -and `$sock.Code -eq 0
+if (`$sockAnswered -and -not `$sockOk) {
+    `$shared = @(DistroLines (DistroShRoot 'find /mnt/wsl -maxdepth 6 -name docker.sock 2>/dev/null'))
+    # guest-services is the engine's own socket in the shared mount. Preferred BY NAME rather than by position:
+    # a machine carrying several docker.sock under /mnt/wsl offers no order worth trusting.
+    `$pick = @(`$shared | Where-Object { `$_ -match 'guest-services' }) | Select-Object -First 1
+    if (-not `$pick) { `$pick = @(`$shared) | Select-Object -First 1 }
+    if (`$pick) {
+        Say "/var/run/docker.sock is absent in `$Distro and the engine's socket in the shared mount is `$pick -- linking it"
+        DistroShRoot "ln -sfn `$pick /var/run/docker.sock" | Out-Null
+        `$sock = DistroSh 'test -S /var/run/docker.sock'
+        `$sockOk = (`$null -ne `$sock -and `$sock.Code -eq 0)
+    }
+}
+
+# ONE LINE EVERY PASS, healthy or not, for the same reason the disk gets one: this is the state a person reads
+# the log to find, and the pass that says nothing is the pass that made a five-hour outage look like a quiet
+# machine.
+if (-not `$cliAnswered -or -not `$sockAnswered) {
+    Say "docker in `${Distro}: the probe TIMED OUT, so whether this fleet can run a container job is UNKNOWN -- the distro is not answering, which is not the same as a healthy one"
+} elseif (`$cliOk -and `$sockOk) {
+    `$server = @(DistroLines (DistroSh 'docker version --format {{.Server.Version}}')) | Select-Object -First 1
+    if (`$server) { Say "docker in `${Distro}: server `$server -- a container job can start here" }
+    else { Say "docker in `${Distro}: the CLI runs and /var/run/docker.sock is there, but no daemon answered through it as the fleet's own user -- so this is the engine (section 1) or the socket's permissions, not a missing integration" }
+} else {
+    # THE FLEET IS STARTED ANYWAY, below, and its jobs will fail. That is deliberate and it is the same choice
+    # section 1 makes: a red pipeline names the machine and this file's oldest lesson is that a queue against a
+    # label nothing answers went unnoticed for three and a half days. Stopping the listeners would trade a
+    # failure that reports itself for a silence that does not.
+    Say "docker in `$Distro is NOT USABLE BY THE FLEET (cli=`$cliOk socket=`$sockOk) and nothing under /mnt/wsl could be linked in its place, so Docker Desktop's WSL integration is not applied to this machine at all. EVERY container job this fleet takes will fail in Set up job on 'docker: command not found'. Switch the integration on for `$Distro under Docker Desktop, Settings, Resources, WSL integration: a -Restart re-applies an integration that is enabled and merely absent, and cannot turn on one that is off."
+}
+
 # -- 4. the units ------------------------------------------------------------------------------------------------
 # The runner units carry no Restart= directive, so systemd does not bring one back that exited -- a crash, a
 # network drop the listener gave up on, a self-update that failed halfway, or an operator's "svc.sh stop" all
@@ -523,6 +634,13 @@ if ($Check) {
     Step 'check only -- nothing was registered or changed.'
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($task) { Step "the '$TaskName' task is registered." } else { Warn "the '$TaskName' task is NOT registered -- nothing starts this fleet after a reboot." }
+    # THE QUESTION A RED PIPELINE ASKS, and the only one here that is about the work rather than the listeners:
+    # can a container job start at all. Read-only, so it belongs in -Check; the repair for a no is a run without
+    # it.
+    $server = (& wsl.exe -d $Distro -e /bin/sh -c 'docker version --format {{.Server.Version}}' 2>$null |
+        ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }) -join ''
+    if ($server) { Step "the fleet's own docker answers in ${Distro}: server $server." }
+    else { Warn "the fleet CANNOT RUN A CONTAINER JOB: no daemon answered 'docker version' inside $Distro, as the user the runners run as. Every job it takes fails in Set up job before a step runs. Re-run without -Check: the pass links the shared mount's CLI and socket back in when Docker Desktop's WSL integration has dropped them." }
     exit 0
 }
 
@@ -694,8 +812,37 @@ foreach ($unit in $units) {
 }
 if ($inactive) { Die "these runner units are not active after a pass: $($inactive -join ', '). Read $LogPath and the unit's journal in $Distro." }
 
+# A FLEET THAT IS UP AND CANNOT RUN A CONTAINER IS NOT READY. Until this block existed the script printed
+# "ready" for exactly that machine: a distro that answers, six active units, and no docker on their PATH --
+# which is the state that failed three pipelines on 7 September, each job dying in five seconds in Set up job
+# before a single step ran. Every property above is about whether the fleet is LISTENING; this is the first one
+# about whether the work it takes can start.
+#
+# ASKED THE WAY THE RUNNER ASKS IT: a non-login shell, because the runners are systemd services and a login
+# shell's PATH is not theirs. And retried rather than asked once -- the pass above may have just started Docker
+# Desktop, and an engine thirty seconds from answering is not a broken fleet.
+$cliDeadline = (Get-Date).AddSeconds(90)
+$server = ''
+while ($true) {
+    $server = (& wsl.exe -d $Distro -e /bin/sh -c 'docker version --format {{.Server.Version}}' 2>$null |
+        ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }) -join ''
+    if ($server) { break }
+    if ((Get-Date) -ge $cliDeadline) { break }
+    Start-Sleep -Seconds 10
+}
+if (-not $server) {
+    $where = (& wsl.exe -d $Distro -e /bin/sh -c 'command -v docker' 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() }) -join ''
+    Die (@(
+        "$Distro is up with $($units.Count) runner units active and CANNOT RUN A CONTAINER JOB, so this fleet would fail every job it takes in Set up job -- not at a step, before one.",
+        $(if ($where) { "The fleet's docker is $where but no daemon answered through it, so read this as the ENGINE: is Docker Desktop running, and does 'docker version' answer on Windows?" }
+          else { "There is no docker on the fleet's PATH at all. Docker Desktop injects it, and /var/run/docker.sock, through its WSL integration: switch that on for $Distro under Docker Desktop, Settings, Resources, WSL integration. The pass links the shared mount's copy in when it can find one, so this message means it found none -- Docker Desktop's own docker-desktop distro is down, or the integration has never been applied on this machine." }),
+        "Read $LogPath for what the pass found and tried."
+    ) -join ' ')
+}
+
 Write-Host ''
 Step "ready: $Distro is up with $($units.Count) runner units active."
+Step "the fleet's own docker answers in $Distro (server $server), so a container job can start. That is the property nothing checked on 7 September, when the engine answered on Windows all day and every job died on 'docker: command not found'; the pass now asks it too, and links the shared mount's CLI and socket back in when the integration has dropped them."
 Step "it is reconciled at every sign-in and every $WatchdogMinutes minutes ($repetition, read back off the registered task) -- nothing to keep open, nothing to babysit."
 Step "every probe is bounded ($EngineProbeSeconds s for the engine), so a wedged docker can no longer park a pass and take the supervision down with it."
 Step "free space on this host is read and logged every pass, and rebuildable docker state is reclaimed under $LowDiskGb GB. Nothing tagged and no volume is ever pruned -- this daemon also runs your sandboxes."

@@ -204,7 +204,7 @@ the pipeline.
 ### Staying up, on a host where the fleet lives in WSL
 
 The Linux fleet runs inside a WSL2 distribution on the same Windows box that carries the Windows runner. That
-is one sentence of hosting detail and **three** ways for the fleet to be out of service with nothing reporting
+is one sentence of hosting detail and **four** ways for the fleet to be out of service with nothing reporting
 an error, all of which this host hit.
 
 **1. WSL2 starts no distribution at boot.** A distro runs because something invoked `wsl.exe`, and stops when
@@ -257,6 +257,55 @@ one red tier and 900 log lines with no statement of cause; the tell is that *eve
 ones nothing in the repository touches. `ic` itself behaved correctly throughout — it refused the update and
 said `the sandbox is untouched`. Read `EROFS` on a runner as this, not as the tier under it.
 
+**4. Docker Desktop's WSL integration is not applied to the distro, and the fleet fails every job it takes in
+five seconds.** The `docker` the runners use is not the distro's own: Docker Desktop injects it, and
+`/var/run/docker.sock` beside it, through its **WSL integration**, so both are present exactly while that
+integration is applied to this distro — and gone after its `docker-desktop` distro is terminated, after an
+update or a reset drops this distro from the integration list, or on a fleet started into a VM where the
+integration was never re-established. On **7 September** the engine answered on Windows all day while the distro
+had no CLI, and three pipelines went the same way (runs 34108789062, 34116132200, 34138843648): both DAG roots —
+`changes` and `preflight`, the two jobs everything else needs — died in **`Set up job`** after five seconds on
+
+```
+##[error]docker: command not found
+```
+
+taking the other eighteen jobs with them as `skipped`, across four of the six workers, for five and a half
+hours. The runner resolves `docker` off its own PATH **before** it creates the job container, so nothing in the
+workflow ran: no failed assertion, no failing step of the repository's own, and every GitHub-hosted job in
+those same runs green.
+
+**It is not mode 3 and it is not the ordering rule below.** Mode 3 hangs in `Initialize containers` — normally
+3–4 seconds — until the job is killed at its `timeout-minutes` and recorded as `cancelled`; this one fails the
+runner's own first step in seconds. And "Docker comes up first" does not cover it, because the engine *was* up:
+every docker probe the reconciler had was `docker.exe version` **on Windows**, which answers whether the engine
+is alive and cannot answer whether six Linux processes in a distro can find a client for it. So every pass
+logged a healthy machine. **Two red DAG roots that fail before any step of the workflow, on more than one
+worker, are this.**
+
+The pass now asks the question the runner asks — a **non-login** `sh` in the distro, because the runners are
+systemd services and `/etc/profile.d` is never sourced for them, so a `docker` that exists only on an
+interactive PATH would read as fine. The repair costs nothing and is safe on a busy fleet: the integration's CLI
+and the engine's socket live under `/mnt/wsl`, the utility VM's shared mount, which **every** distro in that VM
+can see whether or not Docker Desktop was told to integrate with it, so a symlink restores what a dropped
+integration took away with nothing restarted. By hand, on the host:
+
+```powershell
+# what the fleet sees, asked as the fleet sees it
+wsl -d archlinux -e /bin/sh -c 'command -v docker; docker version --format {{.Server.Version}}'
+# the repair the pass performs, if that found no docker
+wsl -d archlinux -u root -e /bin/sh -c 'ln -sfn /mnt/wsl/docker-desktop/cli-tools/usr/bin/docker /usr/local/bin/docker'
+```
+
+`/var/run` is a tmpfs, so the socket half is gone on every distro start and re-made only by an integration still
+applied — which is why the pass re-checks it rather than repairing it once. An integration switched **off** for
+this distro is the one case a symlink cannot cover: that is Docker Desktop → Settings → Resources → WSL
+integration, and the pass says so in one line rather than restarting anything in the hope of it.
+
+**The listeners are deliberately left online for this.** A fleet that fails every job is loud and names the
+machine in the run that failed; a fleet taken offline queues silently, which is mode 1 — three and a half days
+of a label nothing was answering, unnoticed.
+
 The second failure mode is why the fix is a **setting** and not only a watchdog. A three-minute reconcile
 against a sixty-second timeout leaves the fleet down most of the time; `vmIdleTimeout=-1` removes the cause.
 WSL reads `.wslconfig` only when the VM starts, so the setting is inert until the next `wsl --shutdown`.
@@ -282,7 +331,8 @@ restarting the WSL VM**, so bringing it up second kills the runners mid-job and 
 GitHub's side (`A session for this runner already exists`, and the runner shows as `offline` while GitHub still
 believes it is `busy`). The reconciler waits for `docker version` to answer before it touches the distro, every
 pass. The script also turns on Docker Desktop's own `AutoStart`, so the engine is already coming up at logon
-rather than up to three minutes later.
+rather than up to three minutes later. **Necessary, not sufficient**: this order buys an engine that is up, and
+mode 4 above is the case where it is up and the distro still has no client to reach it with.
 
 **And "Docker Desktop is running" is not "the engine works".** `wsl --shutdown` — which a WSL update does on
 its own, and which the `-Restart` above does deliberately — takes the `docker-desktop` distro out from under
@@ -478,6 +528,11 @@ docker run --rm --entrypoint chown -v /home/<user>/<work-dir>:/w ghcr.io/intenti
 
 Only Docker and the runner itself. Everything else: node, pnpm, ripgrep, bun, the docker CLI, the Rust and
 Tauri toolchains: is baked into `ci-base` and `ci-desktop`.
+
+The `docker` in that list is the one a job's own steps run **inside** the container. The runner needs a second
+one, in the distro, to create that container in the first place — and that copy is not installed by anything
+here: it is Docker Desktop's WSL integration reaching in. "Staying up" mode 4 above is what its absence looks
+like, and `wsl -d archlinux -e /bin/sh -c 'docker version'` is how to ask for it the way the runner does.
 
 ### Keeping it bounded
 
