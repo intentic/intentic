@@ -1,6 +1,6 @@
 import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { fireAutomation, type WakeFn } from "./scheduler.js";
+import { fireAutomation, firedBy, type WakeFn } from "./scheduler.js";
 
 // Workspace-triggered wakes, the CHORES. The daemon emits a WorkspaceEvent as the fleet works (an isolated
 // turn settled, an agent's work landed) and every enabled automation naming that event wakes with the event as
@@ -15,9 +15,17 @@ import { fireAutomation, type WakeFn } from "./scheduler.js";
 // twice to be told the later answer), and past QUEUE_MAX distinct agents the oldest is dropped and LOGGED: a
 // chore this far behind will not catch up, and a silent cap would read as "everything got reviewed".
 //
-// Across chores, one shared chain: a chore's turn runs on /work (only fleet agents get their own worktree), so
-// two at once would be two agents editing and testing the same tree, the constraint webchat's queue exists
-// for. Background work has no reason to race the user for the tree or the CPU, so it waits its turn.
+// Across chores, one shared chain. This used to be a correctness constraint — a chore's turn ran on /work, so
+// two at once were two agents editing and testing the same tree — and it is not any more: every wake works in a
+// worktree of its own (scheduler.ts). What survives is the reason that was always underneath it. A chore is
+// background work nobody asked for at this minute, and each one is a whole agent turn's worth of spend, CPU and
+// installed-dependency traffic; letting a burst of them run at once would have the fleet's unattended half
+// competing with the person actually sitting there. So they still wait their turn.
+//
+// A chore never fires on an event its OWN turn raised. Now that a chore settles like any other agent, it emits
+// `turn.settled` at the end, and a chore triggered on that event would otherwise answer its own echo forever
+// (scheduler.ts `firedBy`). Another chore's turn, and every ordinary agent's, is still fair game: reviewing
+// unattended work is most of what these are for.
 
 // Distinct agents that may wait on one chore. Small on purpose: each entry is a whole agent turn's worth of
 // spend, and a backlog deeper than this is a signal to narrow the chore's trigger, not to queue harder.
@@ -40,8 +48,11 @@ interface Queue {
 // Per-automation queues, a module singleton like the scheduler's inFlight, every emitter shares one.
 const queues = new Map<string, Queue>();
 
-const matches = (trigger: Extract<Trigger, { kind: "workspace" }>, event: WorkspaceEvent): boolean =>
-    trigger.event === event.event && (trigger.repo === undefined || event.repos.some(({ repo }) => repo === trigger.repo));
+const matches = (id: string, trigger: Extract<Trigger, { kind: "workspace" }>, event: WorkspaceEvent): boolean =>
+    trigger.event === event.event &&
+    (trigger.repo === undefined || event.repos.some(({ repo }) => repo === trigger.repo)) &&
+    // Not its own echo, see the note at the top of this file.
+    !firedBy(id, event.agentId);
 
 // Drain one automation's queue. Re-reads the manifest per event so an edit, a disable or a delete while the
 // backlog waits is honored, the same freshness rule listeners' batcher follows.
@@ -97,7 +108,7 @@ const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: Wa
 export const dispatchWorkspaceEvent = async (services: Services, event: WorkspaceEvent, wake: WakeFn): Promise<string[]> => {
     const matched: string[] = [];
     for (const automation of await services.automations.list()) {
-        if (!automation.enabled || automation.trigger.kind !== "workspace" || !matches(automation.trigger, event)) {
+        if (!automation.enabled || automation.trigger.kind !== "workspace" || !matches(automation.id, automation.trigger, event)) {
             continue;
         }
         matched.push(automation.id);

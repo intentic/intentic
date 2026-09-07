@@ -79,10 +79,10 @@ export const automationsContract = {
         .input(AutomationIdParamSchema)
         .output(DoorTokenSchema),
     /* Fire one automation NOW, by hand, the answer to "I wrote a 3 a.m. cron and I have no way to try it".
-     * It runs the SAME path the real trigger runs: a schedule stays a headless main-tree wake, because a
-     * test-fire that proves an isolated worktree works proves nothing about the fire it is standing in for. The
-     * guard runs too ("skipped by guard" is the most useful thing this can report); only the approval gate is
-     * skipped, since pressing the button IS the owner's approval.
+     * It runs the SAME path the real trigger runs, down to the worktree the wake works in, because a test-fire
+     * that stands somewhere else proves nothing about the fire it is standing in for. The guard runs too
+     * ("skipped by guard" is the most useful thing this can report); only the approval gate is skipped, since
+     * pressing the button IS the owner's approval.
      *
      * Owner-explicit, so a DISABLED automation fires as well, trying a prompt before switching it on is the
      * main reason to press this, and unlike the /automations/{id}/fire webhook there is no outside sender here to

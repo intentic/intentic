@@ -181,8 +181,8 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
 
 /* Fire one by hand. The daemon acks the moment the fire starts and runs the turn detached, so what lands here is
  * whether it STARTED: the outcome shows up in the row's run history, which the mutation refetches. A schedule
- * fires exactly as its cron would (headless, main tree): a test that proved something else ran would prove
- * nothing about the 3 a.m. one it stands in for. */
+ * fires exactly as its cron would, unattended and in a worktree of its own: a test that proved something else
+ * ran would prove nothing about the 3 a.m. one it stands in for. */
 const runNow = async (automation: AutomationSummary): Promise<void> => {
     actionError.value = undefined;
     // Open the row, so the run appears where the user is already looking instead of behind a disclosure.

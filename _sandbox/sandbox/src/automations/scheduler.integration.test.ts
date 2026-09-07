@@ -266,7 +266,7 @@ test("the automation's own ladder resolves onto the wake, tier and all, with no 
     expect(inputs.every((turn) => turn.unattended === true)).toBe(true);
 });
 
-test("outside and scheduled fires both open surfaced conversations with placement kept separate", async () => {
+test("outside and scheduled fires both open isolated conversations, and only provenance differs", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automation("support"));
     const inputs: AgentTurn[] = [];
@@ -277,7 +277,8 @@ test("outside and scheduled fires both open surfaced conversations with placemen
     const record = (await services.automations.get("support")) as AutomationRecord;
     const origin = { automationId: "support", provider: "discord", channelId: "c1", author: "ada" };
     await fireAutomation(services, record, capture, { payload: "hi", origin, title: "ada: hi" });
-    // A schedule fire of the SAME automation carries no origin, so it is a workspace conversation.
+    // A schedule fire of the SAME automation carries no origin. It still works in a worktree of its own:
+    // placement is uniform across the fleet, and origin says who spoke, not where the turn stands.
     await fireAutomation(services, record, capture);
 
     const surfaced = inputs[0] as AgentTurn;
@@ -287,8 +288,11 @@ test("outside and scheduled fires both open surfaced conversations with placemen
     // The id is a legal conversation id (it becomes a branch name and a worktree dir) and names its automation.
     expect(surfaced.conversationId).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
     expect(surfaced.conversationId).toContain("support");
-    expect(inputs[1]).toMatchObject({ prompt: "wake:support", conversationId: expect.any(String) });
-    expect(inputs[1]).not.toHaveProperty("isolated");
+    const scheduled = inputs[1] as AgentTurn;
+    expect(scheduled).toMatchObject({ prompt: "wake:support", conversationId: expect.any(String), isolated: true });
+    // The one difference: nobody outside spoke, so there is no provenance to stamp and no inbound line to title it.
+    expect(scheduled.origin).toBeUndefined();
+    expect(scheduled.title).toBeUndefined();
 
     // One conversation per FIRE: a second message is a second agent, never a resumed one.
     await fireAutomation(services, record, capture, { payload: "again", origin, title: "ada: again" });

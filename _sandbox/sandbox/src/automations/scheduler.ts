@@ -126,6 +126,20 @@ let fireSeq = 0;
 export const mintConversationId = (automationId: string, now: number): string =>
     `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
 
+/* Did THIS automation mint that conversation? The id above is the only mark a fire leaves in the registry, so
+ * reading it back is how a row recognises its own work. The minted suffix is base36, so a remaining "-" means a
+ * row whose id merely begins with this one's ("dream" must not read "dream-2"'s nights as its own).
+ *
+ * Two callers, and they want it for opposite reasons. The sessions gate measures "since I last woke" and must
+ * not count itself as fleet activity. The chore dispatcher (workspace-events.ts) must not let a chore fire on
+ * the workspace event its own turn just raised: now that every wake works in a worktree, a chore's turn settles
+ * like any other agent's and emits `turn.settled`, so a chore triggered on that event would answer its own
+ * echo, forever, one whole agent turn at a time. */
+export const firedBy = (automationId: string, conversationId: string): boolean => {
+    const mine = `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-`;
+    return conversationId.startsWith(mine) && !conversationId.slice(mine.length).includes("-");
+};
+
 /* THE SESSIONS GATE (a schedule trigger's afterSessions): a due occurrence fires only once enough NEW sessions
  * have been run since this automation last woke an agent. Both halves are read from the fleet registry.
  *
@@ -150,14 +164,11 @@ interface SessionsSinceWake {
 }
 
 const sessionsSinceLastWake = (services: Services, automationId: string): SessionsSinceWake => {
-    const mine = `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-`;
     const entries = services.agents.ids().flatMap((id) => {
         const entry = services.agents.entry(id);
         return entry === undefined ? [] : [entry];
     });
-    // Exactly this row's fires: the minted suffix is base36, so a remaining "-" means a row whose id merely
-    // begins with this one's ("dream" must not read "dream-2"'s nights as its own).
-    const ownWakes = entries.filter((entry) => entry.id.startsWith(mine) && !entry.id.slice(mine.length).includes("-"));
+    const ownWakes = entries.filter((entry) => firedBy(automationId, entry.id));
     const since = Math.max(0, ...ownWakes.map((entry) => entry.createdAt));
     const sessions = entries
         .filter(
@@ -249,10 +260,10 @@ export interface FireOptions {
     readonly allowedTools?: readonly string[];
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
-    // Set by dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
-    // webhook). Every fire is a first-class surfaced conversation; origin changes only its placement and
-    // provenance. Present ⇒ an isolated worktree conversation. Absent (schedules, chores) ⇒ a shared-workspace
-    // conversation.
+    /* Set by dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
+     * webhook). PROVENANCE ONLY: it says who spoke, so the card is placed on the board as a Discord or Front
+     * Desk agent and the guard layer knows a stranger's words started the turn. It no longer decides WHERE the
+     * turn runs — every fire gets its own worktree (see the turn literal in runFire). */
     readonly origin?: AgentOrigin;
     // The card/tab title for a surfaced wake, the inbound message's first line, which is the only thing that
     // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
@@ -548,13 +559,10 @@ const runFire = async (
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- ${heading} ---\n${sealed}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
-        // Every fire lands in a CONVERSATION and therefore on a fleet card. Outside messages are isolated so the
-        // user can open, follow live, and keep talking in after the wake ends. WHICH conversation is the
-        // dispatcher's call: a listener channel and a Front Desk visitor each own one for as long as they stay
-        // active (thread-sessions.ts), so a run of messages is one reviewable agent; a schedule or chore wake
-        // has no thread and mints a fresh one below. Schedule and chore wakes work in the shared workspace but
-        // keep the same registry, transcript and restart lifecycle; placement no longer decides whether a
-        // conversation exists.
+        /* Every fire lands in a CONVERSATION and therefore on a fleet card. WHICH conversation is the
+         * dispatcher's call: a listener channel and a Front Desk visitor each own one for as long as they stay
+         * active (thread-sessions.ts), so a run of messages is one reviewable agent; a schedule or chore wake
+         * has no thread and mints a fresh one above. */
         const turn: AgentTurn & { conversationId: string } = {
             // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
             // the journal entry above. A re-fire has no live sink to write into, the Discord message the deltas
@@ -584,9 +592,25 @@ const runFire = async (
             // meeting the visitor again. Absent on a first turn and on every one-off wake.
             ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
             ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
+            /* IN A WORKTREE OF ITS OWN, like every other agent this daemon starts, and unconditionally.
+             *
+             * This used to key off `origin`: an outside message got a checkout so the owner could open it, follow
+             * it live and keep talking in, while a schedule or a chore ran directly on /work. Nothing about the
+             * WAKE justified that split — it was a fact about who sent the message being read as a fact about
+             * where the work belongs — and the shared-tree half was the worse half of it in every way that
+             * matters. A nightly sweep edited the tree the owner and every live conversation were reading, with
+             * no branch to diff, nothing to hold back when its verdict was wrong, and no `land` step to record
+             * who did it, so its edits turned up in the Changes panel with no agent attribution at all
+             * (agents/origins.ts). It also made one chore mean two different things: the same maintenance job
+             * run from the panel is isolated (_extensions/maintenance), run from its cron it was not.
+             *
+             * So placement is now uniform, and every wake arrives the way the rest of the fleet does — its own
+             * branch, its own diff, provenance through `land`, and whatever the owner's landing rules say about
+             * unattended work (rules/rules.ts). The one thing that genuinely differs between fires stays where
+             * it was: `origin` says who spoke, not where the turn stands. */
+            isolated: true,
             ...(origin !== undefined
                 ? {
-                      isolated: true,
                       origin,
                       title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
                   }
