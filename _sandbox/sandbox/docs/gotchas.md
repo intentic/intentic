@@ -77,6 +77,18 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   harness's own non-success result is classified too, `turn-cap` for a loop out of iterations and
   `harness-incomplete` for the rest, where both used to land as an uncoded failure — the one shape nothing
   downstream knows how to handle.
+- **A resumed turn's checklist is seeded from the CLI's own task store, not rebuilt from the verbs it sees**
+  ([src/agent/run/task-store.ts](../src/agent/run/task-store.ts), read by `runAgent` before the CLI starts and
+  adopted at the first frame that names the session). The fold in `task-checklist.ts` learns a task's id only
+  from the result of the `TaskCreate` that made it, and a `TaskUpdate` naming an id it never saw is ignored
+  rather than invented. That is right within one turn and wrong across two: the next turn of the same
+  conversation started with an empty fold, every update to last turn's tasks was dropped, no `todos` frame went
+  out, and the registry's finish carried the previous turn's `unfinished` count forward (its carry rule reads
+  silence as "not observed", correctly). A conversation that finished all nine of its steps across a usage-limit
+  resume wore "Unfinished, 6 of 9" for it, while the CLI's `tasks/<session>/` directory said all nine were done.
+  Seeding off that directory makes the daemon's list the CLI's list from the turn's first moment, so the mark is
+  measured on every turn's ending rather than on the last turn that happened to call `TaskList`. The seed is
+  dropped when the stream names a different session (a CLI that could not resume mints fresh ids from 1).
 - **A turn that ends with nothing to show for it is a failure, not a finish** (`silentEnding` in
   [src/agent/routes/agent.routes.ts](../src/agent/routes/agent.routes.ts)). A Gemini turn on the OpenCode runtime read and
   grepped 59 times, changed no file, wrote not one word, and was ended by an ordinary `session.idle`: no error

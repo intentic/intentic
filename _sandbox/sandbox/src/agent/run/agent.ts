@@ -73,6 +73,7 @@ import { opt } from "./opt.js";
 import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
+import { checklistSeedOf } from "./task-store.js";
 import { sdkSystemPrompt } from "../prompt/system-prompt.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
@@ -1270,6 +1271,10 @@ export async function* runAgent(
     // input reads. An unsteerable turn has no road back, so the empty result then ends the turn as before.
     const steering = request.steering;
     let redelivered = false;
+    /* The checklist the session already holds, read off the CLI's own store BEFORE the CLI starts writing to it
+     * (task-store.ts): the rows this turn's TaskUpdates will name, which the fold below has otherwise never seen
+     * and would ignore. Nothing on a first turn, or where no store exists to read. */
+    const checklistSeed = await checklistSeedOf(request);
     const redeliver =
         steering === undefined
             ? undefined
@@ -1300,6 +1305,7 @@ export async function* runAgent(
                 routed: routedEndpointOf(request),
                 trial: request.trial === true,
                 subagents,
+                checklistSeed,
             })) {
                 // The turn's shell lives under the id this frame carries (agent-terminals.ts names the tmux
                 // session after it), so the cards learn it here rather than from a second seam into the stream.

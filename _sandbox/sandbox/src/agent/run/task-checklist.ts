@@ -1,4 +1,5 @@
 import type { TodoItem } from "@intentic/sandbox-contract";
+import type { StoredTask } from "./task-store.js";
 
 /* The agent's working checklist, reconstructed from the Task tool family.
  *
@@ -21,7 +22,10 @@ import type { TodoItem } from "@intentic/sandbox-contract";
  *
  * A create only learns its id from its RESULT, so creates are applied there; an update names its id in its
  * INPUT, so those apply at call time and the list moves the instant the agent says so. TaskList is the
- * authoritative resync, it heals any drift (a resumed session whose earlier tasks this process never saw). */
+ * authoritative resync, it heals any drift. A resumed session's earlier tasks, which this process never saw
+ * created, arrive by `seed` off the CLI's own store before the turn's first update can name one
+ * (task-store.ts): an update to a row the fold has never seen is ignored, and a turn that only ever updated
+ * used to move nothing here while the CLI's list moved. */
 
 const CREATED = /^Task #(\d+) created successfully/;
 const LISTED = /^#(\d+) \[(pending|in_progress|completed)] (.+)$/;
@@ -100,6 +104,25 @@ export class TaskChecklist {
             status: isStatus(status) ? status : task.status,
             ...(activeForm !== undefined ? { activeForm } : {}),
         });
+        return this.snapshot();
+    }
+
+    /* The rows the session already holds, off the CLI's own store (task-store.ts), for a turn that resumes a
+     * session. Replaces everything, like `listed`, and for the same reason: it is the authoritative set as of
+     * the moment this turn starts, keyed by the ids this turn's updates will name. Nothing to adopt renders
+     * nothing, and leaves the fold as empty as it was. */
+    seed(rows: readonly StoredTask[]): TodoItem[] | undefined {
+        if (rows.length === 0) {
+            return undefined;
+        }
+        this.tasks.clear();
+        for (const row of rows) {
+            this.tasks.set(row.id, {
+                content: row.subject,
+                status: row.status,
+                ...(row.activeForm !== undefined ? { activeForm: row.activeForm } : {}),
+            });
+        }
         return this.snapshot();
     }
 

@@ -16,6 +16,7 @@ import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "./opt.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { TaskChecklist } from "./task-checklist.js";
+import type { ChecklistSeed } from "./task-store.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../tools/tool-calls.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. The real `query`
@@ -281,6 +282,10 @@ export interface StreamSdkArgs {
     readonly trial: boolean;
     // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
     readonly subagents: SubagentTurn | undefined;
+    /* The checklist the resumed session already holds, off the CLI's own store (task-store.ts), adopted by the
+     * fold at the first frame that names the session (adoptChecklist). Absent on a conversation's first turn,
+     * and on a session that kept no list. */
+    readonly checklistSeed: ChecklistSeed | undefined;
 }
 
 type SdkOf<T extends SDKMessage["type"]> = Extract<SDKMessage, { type: T }>;
@@ -381,6 +386,7 @@ class TurnFold {
         if (!this.sessionSent && typeof sessionId === "string" && sessionId !== "") {
             this.sessionSent = true;
             yield { kind: "session", sessionId };
+            yield* this.adoptChecklist(sessionId);
         }
         // The session a child's transcript is filed under, onto the handle the hooks close over, see SubagentTurn.
         const subagents = this.args.subagents;
@@ -509,6 +515,27 @@ class TurnFold {
             yield* this.onBrowserCall(block, sessionId);
         }
         yield this.toolCallFrame(block, parent);
+    }
+
+    /* THE LIST THIS TURN INHERITS, and when it is safe to say so. The seed was read for the session the turn
+     * asked to resume; the CLI's first frame says which session it is actually running, and a CLI that could
+     * not resume starts a fresh one whose ids begin again at 1. Adopted under that session the seed would
+     * render last session's rows and let this session's first create overwrite one of them, so a seed for any
+     * other session is dropped unread, and the fold stays as empty as a first turn's.
+     *
+     * Emitted as a frame, not only folded into the reducer: the chat shows the list from the turn's first
+     * moment rather than from its first update, and the registry's copy of the same frame is what the finish
+     * measures (agents-registry's unfinishedOf), so a turn that never touches its list still ends on the list
+     * as it stands rather than on the count some earlier turn wrote down. */
+    private *adoptChecklist(sessionId: string): Generator<AgentEvent> {
+        const seed = this.args.checklistSeed;
+        if (seed === undefined || seed.sessionId !== sessionId) {
+            return;
+        }
+        const items = this.checklist.seed(seed.tasks);
+        if (items !== undefined) {
+            yield { kind: "todos", items };
+        }
     }
 
     // A create can only render from its RESULT (that is where it learns its task id); an update names the id

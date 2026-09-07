@@ -79,3 +79,27 @@ test("a create whose result did not parse renders nothing rather than a task wit
     expect(list.resolved("t1", "Task creation failed")).toBeUndefined();
     expect(list.updated({ taskId: "1", status: "completed" })).toBeUndefined();
 });
+
+test("a seed adopts the session's rows, so an update naming a task from an earlier turn applies", () => {
+    const list = new TaskChecklist();
+    expect(
+        list.seed([
+            { id: "1", subject: "Plan", status: "completed" },
+            { id: "2", subject: "Build", status: "in_progress", activeForm: "Building" },
+            { id: "3", subject: "Verify", status: "pending" },
+        ]),
+    ).toEqual([
+        { content: "Plan", status: "completed" },
+        { content: "Build", status: "in_progress", activeForm: "Building" },
+        { content: "Verify", status: "pending" },
+    ]);
+    expect(list.updated({ taskId: "2", status: "completed" })?.map((task) => task.status)).toEqual(["completed", "completed", "pending"]);
+    // And a create in the resumed turn continues the list rather than starting one.
+    expect(create(list, "t4", "Ship", "4")?.map((task) => task.content)).toEqual(["Plan", "Build", "Verify", "Ship"]);
+});
+
+test("an empty seed is no seed: nothing renders and nothing is adoptable", () => {
+    const list = new TaskChecklist();
+    expect(list.seed([])).toBeUndefined();
+    expect(list.updated({ taskId: "1", status: "completed" })).toBeUndefined();
+});
