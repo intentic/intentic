@@ -10,7 +10,7 @@
  * iframes (the preview, the extension host), so deriving the viewport from the ANCHOR remains the only reading
  * that cannot be wrong.
  *
- * So the view is an argument. Every reader of it (AnchoredOverlay, the tooltip directive) passes the one it
+ * So the view is an argument. Every reader of it (AnchoredOverlay, InfoHint, the tooltip directive) passes the one it
  * measured from `el.ownerDocument.defaultView`, and being right in either window stops being a thing anyone
  * has to remember. */
 

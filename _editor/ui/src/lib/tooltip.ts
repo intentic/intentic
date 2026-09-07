@@ -1,4 +1,5 @@
 import type { Directive, DirectiveBinding } from "vue";
+import { placeAnchored, type Side } from "./anchorPlacement.js";
 
 /* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive.
  *
@@ -13,6 +14,8 @@ import type { Directive, DirectiveBinding } from "vue";
  *
  * Positioning is `fixed` against that window, which is also why there is no scroll math: a scroll moves the
  * anchor out from under the box, so the box is dismissed instead of chased (the pointer has left it anyway).
+ * WHERE THE BOX GOES IS `placeAnchored`'S ANSWER (anchorPlacement.ts), the same geometry AnchoredOverlay and
+ * InfoHint use, fed the anchor's own window; this file only rounds it onto the pixel grid and draws the arrow.
  *
  * Sizing is capped in CSS, not here, see --ui-tooltip-max-width / --ui-tooltip-max-lines in tokens.css. The
  * cap is deliberately wide: a tooltip is read in one glance, and a narrow box turns a long line of prose into
@@ -55,14 +58,11 @@ const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side
 const ARROW = 4; // px: half the arrow's width, mirrored by the border-width in tooltip.css
 
-type Placement = "top" | "bottom" | "left" | "right";
-type Modifier = Placement | "overflow";
-
-const OPPOSITE: Record<Placement, Placement> = { top: `bottom`, bottom: `top`, left: `right`, right: `left` };
+type Modifier = Side | "overflow";
 
 interface TooltipState {
     label: string | undefined;
-    placement: Placement;
+    side: Side;
     // `.overflow`: the anchor's text is the label, so it only earns a box while that text is actually cut off.
     overflowOnly: boolean;
     box: HTMLElement | undefined;
@@ -74,9 +74,9 @@ interface TooltipState {
 
 const states = new WeakMap<HTMLElement, TooltipState>();
 
-const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "placement" | "overflowOnly"> => ({
+const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "side" | "overflowOnly"> => ({
     label: typeof binding.value === `string` && binding.value.trim() !== `` ? binding.value : undefined,
-    placement:
+    side:
         binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
     overflowOnly: binding.modifiers.overflow === true,
 });
@@ -85,42 +85,26 @@ const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<Too
 const isClipped = (el: HTMLElement): boolean =>
     Math.round(el.scrollWidth) > Math.round(el.clientWidth) || Math.round(el.scrollHeight) > Math.round(el.clientHeight);
 
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), Math.max(min, max));
-
-// Where the box goes, given the room this window actually has. The preferred side wins unless it does not
-// fit AND its opposite does, flipping into an equally cramped side would only move the clipping.
-const place = (box: HTMLElement, anchor: DOMRect, wanted: Placement, view: Window): Placement => {
+// Where the box goes, in the anchor's own window: centred across the anchor on the wanted side, flipped only
+// when that helps (placeAnchored's rule). The arrow tracks the anchor's centre rather than the box's, so a box
+// shoved off-centre to stay on screen still points at what it describes; it is kept a corner's width in from
+// either end so it stays on the box's straight edge.
+const place = (box: HTMLElement, anchor: DOMRect, wanted: Side, view: Window): Side => {
     const { width, height } = box.getBoundingClientRect();
-    const room: Record<Placement, boolean> = {
-        top: anchor.top - GAP - height >= EDGE,
-        bottom: anchor.bottom + GAP + height <= view.innerHeight - EDGE,
-        left: anchor.left - GAP - width >= EDGE,
-        right: anchor.right + GAP + width <= view.innerWidth - EDGE,
-    };
-    const placement = room[wanted] || !room[OPPOSITE[wanted]] ? wanted : OPPOSITE[wanted];
-    const vertical = placement === `top` || placement === `bottom`;
-
-    // Along the anchor's axis the box is pinned; across it, centred and then pulled inside the viewport.
-    const left = vertical
-        ? clamp(anchor.left + anchor.width / 2 - width / 2, EDGE, view.innerWidth - width - EDGE)
-        : placement === `left`
-          ? anchor.left - GAP - width
-          : anchor.right + GAP;
-    const top = vertical
-        ? placement === `top`
-            ? anchor.top - GAP - height
-            : anchor.bottom + GAP
-        : clamp(anchor.top + anchor.height / 2 - height / 2, EDGE, view.innerHeight - height - EDGE);
-
-    // The arrow tracks the anchor's centre rather than the box's, so a box shoved off-centre by the clamp
-    // above still points at what it describes. Kept a corner's width in from either end so it stays on the
-    // box's straight edge.
-    const centre = vertical ? anchor.left + anchor.width / 2 - left : anchor.top + anchor.height / 2 - top;
-    const span = vertical ? width : height;
-    box.style.setProperty(`--ui-tooltip-arrow`, `${Math.round(clamp(centre, ARROW * 3, span - ARROW * 3))}px`);
-    box.style.left = `${Math.round(left)}px`;
-    box.style.top = `${Math.round(top)}px`;
-    return placement;
+    const placed = placeAnchored({
+        anchor,
+        box: { width, height },
+        view: { width: view.innerWidth, height: view.innerHeight },
+        side: wanted,
+        cross: `center`,
+        gap: GAP,
+        edge: EDGE,
+    });
+    const span = placed.side === `top` || placed.side === `bottom` ? width : height;
+    box.style.setProperty(`--ui-tooltip-arrow`, `${Math.round(Math.max(ARROW * 3, Math.min(placed.arrow, span - ARROW * 3)))}px`);
+    box.style.left = `${Math.round(placed.left)}px`;
+    box.style.top = `${Math.round(placed.top)}px`;
+    return placed.side;
 };
 
 export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
@@ -149,7 +133,7 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                 body.textContent = state.label; // a text node, so a label can never inject markup
                 box.appendChild(body);
                 doc.body.appendChild(box);
-                box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.placement, view)}`);
+                box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.side, view)}`);
                 box.style.visibility = ``;
                 state.box = box;
                 // A scroll or resize moves the anchor out from under a fixed box; capture catches the
@@ -197,7 +181,7 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
         // `updated` fires on every re-render of the owning component, not just when the label changes, and a
         // chat mid-stream re-renders constantly. Rebuild the box only when it would actually say something
         // different, or a tooltip held open over a streaming panel would restart its fade on every frame.
-        const changed = next.label !== state.label || next.placement !== state.placement || next.overflowOnly !== state.overflowOnly;
+        const changed = next.label !== state.label || next.side !== state.side || next.overflowOnly !== state.overflowOnly;
         Object.assign(state, next);
         if (changed && state.box !== undefined) {
             state.show();
