@@ -45,11 +45,12 @@ const autoRunLabel = computed(() => {
         <div class="flex items-center gap-2.5">
             <!--
                 Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running
-                yet. Two boxes for the same reason the workflow run's mark has two — an 18px mark centred in the
-                26px slot the agent tile's context ring occupies, so the titles in this lane start on one axis.
+                yet. Two boxes for the same reason the workflow run's mark has two — a 20px disc centred in the 28px
+                slot the agent tile's context ring occupies, so the titles in this lane start on one axis and every
+                mark in the lane is the same shape.
             -->
-            <span class="flex h-6.5 w-6.5 shrink-0 items-center justify-center">
-                <span class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md bg-warning/15">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15">
                     <Icon name="pause" class="text-2xs text-warning" />
                 </span>
             </span>

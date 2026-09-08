@@ -414,17 +414,18 @@ const grab = (event: PointerEvent): void => {
                 window this session has spent (see `ringTone`).
                 Tooltip is the legend for both; an unreadable title falls back to the provider mark on neutral chrome.
 
-                The box is a fixed 26px whether or not a ring is drawn in it, so a lane of cards keeps its titles on
+                The box is a fixed 28px whether or not a ring is drawn in it, so a lane of cards keeps its titles on
                 one axis rather than shifting left on every card the daemon hasn't reported context for yet.
-                THE GEOMETRY IS TIGHT ON PURPOSE and the two numbers are a pair: an 18px rounded square reaches
-                10.2px from its centre at the corners, and a 26px ring with a 2px stroke has its inner edge at 11.
-                Drawn any looser (it started at a 28px ring round a 20px tile) the arc stops reading as this tile's
-                rim and starts reading as a stray flourish beside it. Same size in every lane: lane weight is carried
-                by the padding and the title, which have room to say it.
+                TWO CONCENTRIC CIRCLES, which is the whole reason IdentityTile is round: a 20px disc inside a 28px
+                ring (2px stroke, inner edge at 12) leaves an even 2px all the way round. The square this replaced
+                could not — its gap ran from 4px at the flats to under 1px at the corners, so the arc read as a
+                flourish beside the tile instead of its rim, and it had to shrink to 18px with an 11px glyph just to
+                keep its corners off the stroke. The disc gives the glyph its 12px back.
+                Same size in every lane: lane weight is carried by the padding and the title, which have room for it.
             -->
-            <span v-tooltip.top="tileHint" class="relative flex h-6.5 w-6.5 shrink-0 items-center justify-center">
-                <ProgressRing v-if="context !== undefined" :value="context" :size="26" class="absolute inset-0" :class="ringTone" />
-                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-4.5 w-4.5 text-2xs" />
+            <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                <ProgressRing v-if="context !== undefined" :value="context" :size="28" class="absolute inset-0" :class="ringTone" />
+                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5 w-5 text-xs" />
             </span>
             <input
                 v-if="edit.editing"
@@ -578,12 +579,6 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!--
-                Leads the body, above provenance: this is the reader's own unfinished business, not the agent's.
-                Shape and wording live in UnsentMark, shared with the rail row.
-            -->
-            <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
-
-            <!--
                 `failure` is present only while the card reads as failed, so no extra status check is needed here.
                 Leads above provenance and the model line: on a failed card, nothing else here is what the reader came
                 for.
@@ -602,10 +597,22 @@ const grab = (event: PointerEvent): void => {
             <StartedByMark :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
+            <!--
+                WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. Unsent
+                used to lead the body as a row of its own, and on the cards that actually carry it — a chat you
+                typed into and left — the two rows below the title were a lone chip and a lone model name, both
+                mostly empty. Here it costs a row only on a card whose line is genuinely full (sandbox, model,
+                runner, branch and account all present), and nothing on the rest.
+                It still LEADS this line: the reader's own unfinished business comes before what the agent is
+                running on. The provenance marks above it render nothing for a user-started agent, which is nearly
+                every card that has an unsent message in it.
+            -->
             <div
-                v-if="box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
-                class="flex min-w-0 items-center gap-2 text-2xs text-subtle"
+                v-if="agent.unsent || box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
+                class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
+                <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
+                <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
                 <!--
                     Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it
                     changes what every other number means.

@@ -69,12 +69,13 @@ const TONE: Record<WorkflowRun["state"], string> = {
         <div class="flex items-center gap-2.5">
             <!--
                 Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a
-                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: an 18px mark centred
-                in the 26px slot the tile's context ring occupies (AgentCard). A run has no context of its own to
-                ring, but its title still has to start on the same axis as the titles under it.
+                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: a 20px disc centred in
+                the 28px slot the tile's context ring occupies (AgentCard). A run has no context of its own to ring,
+                but its title still has to start on the same axis as the titles under it, and its mark has to be the
+                same shape as theirs or the lane draws two vocabularies.
             -->
-            <span class="flex h-6.5 w-6.5 shrink-0 items-center justify-center">
-                <span class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md bg-primary-600/15">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                     <Icon name="sitemap" class="text-2xs text-link" />
                 </span>
             </span>

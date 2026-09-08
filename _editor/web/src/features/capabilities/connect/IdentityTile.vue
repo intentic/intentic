@@ -14,8 +14,16 @@ const category = computed(() => sessionCategory(props.title));
 </script>
 
 <template>
+    <!--
+        ROUND, because this mark is worn inside a ring. The board draws the context arc around it (AgentCard), and a
+        rounded SQUARE inside a circle is the shape pair that never resolves: the gap between the two is widest at the
+        flats and nearly closed at the corners, so the arc reads as a stray flourish beside the tile rather than as
+        its rim, and a card with no context to draw shows a small square adrift in a box sized for a circle.
+        Round also lifts the constraint the square imposed: a disc has no corners to clear, so the tile can fill the
+        ring at a legible glyph size instead of shrinking to keep its corners off the arc.
+    -->
     <span
-        class="flex shrink-0 items-center justify-center rounded-md"
+        class="flex shrink-0 items-center justify-center rounded-full"
         :class="category === undefined ? `border border-line bg-content/5 text-muted` : `category-tile`"
         :style="category === undefined ? undefined : { '--tile-hue': category.hue }"
     >
