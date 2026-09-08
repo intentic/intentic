@@ -79,7 +79,13 @@ vi.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasCo
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
 const { modelLabelFor, providerModels } = await import("../accounts/providerCatalog");
+const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultRunSettings } = await import("./pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
+
+/* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. The panel has no "leave it to the
+ * model" stop, so it seeds whatever the caller left out and every answer names all three; read from the source
+ * rather than transcribed, minus the effort each test sets for itself. */
+const { effort: _seededEffort, ...SEEDED_KNOBS } = defaultRunSettings();
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -200,12 +206,33 @@ it(`carries the tier into the answer`, async () => {
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         effort: `xhigh`,
+        ...SEEDED_KNOBS,
     });
 });
 
-// The top rung is reachable here because a run started from a red pipeline has no composer beside it to
-// switch thinking on.
-it(`offers the model's top tier to a run that pinned no thinking to refuse it`, async () => {
+/* THE PANEL OPENS ON A STATE, NEVER ON AN ABSENCE. A caller may hand over a bare pair — a run button, an
+ * automation rung, an extension calling `api.models.pick()` — and there is no "leave it to the model" stop for
+ * the panel to draw that with. So the defaults fill the selection in as it opens, every control shows one, and
+ * an untouched press answers with what was on screen rather than with three missing fields. */
+it(`opens a run's settings on the defaults and answers with them untouched`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
+    const element = mount();
+
+    expect(modelRequest.value).toMatchObject(defaultRunSettings());
+
+    button(element, `Fix with agent`)!.click();
+    await expect(result).resolves.toEqual({
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        label: modelLabelFor(`claude`, `claude-opus-4-6`),
+        ...defaultRunSettings(),
+    });
+});
+
+// The top rung is reachable because the seed leaves thinking ON: Claude refuses `max` only beside a thinking
+// flag explicitly set to false, which is now the one way that can happen.
+it(`offers the model's top tier to a run whose thinking the reader never switched off`, async () => {
     providerModels.value = {
         ...providerModels.value,
         claude: [{ label: modelLabelFor(`claude`, `claude-opus-4-6`), value: `claude-opus-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
@@ -223,6 +250,7 @@ it(`offers the model's top tier to a run that pinned no thinking to refuse it`, 
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         effort: `max`,
+        ...SEEDED_KNOBS,
     });
 });
 
@@ -245,7 +273,8 @@ it(`repairs a top-tier pick when thinking is switched off under it`, async () =>
     });
     const element = mount();
 
-    button(element, `Off`)!.click();
+    // The chip opens lit (the seed leaves thinking on), so one press is what switches it off.
+    button(element, `Extended thinking`)!.click();
     await nextTick();
     button(element, `Fix with agent`)!.click();
 
@@ -255,6 +284,7 @@ it(`repairs a top-tier pick when thinking is switched off under it`, async () =>
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         effort: `high`,
         thinking: false,
+        fast: false,
     });
 });
 
@@ -275,7 +305,7 @@ it(`carries fast speed into the answer`, async () => {
     });
     const element = mount();
 
-    button(element, `Fast`)!.click();
+    button(element, `Fast speed`)!.click();
     await nextTick();
     button(element, `Fix with agent`)!.click();
 
@@ -284,15 +314,35 @@ it(`carries fast speed into the answer`, async () => {
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         harness: `claude-code`,
+        ...defaultRunSettings(),
         fast: true,
     });
 });
 
-// The way back to the model's own default, which is a state rather than a rung: the answer then names no tier at
-// all and the turn goes out without one.
-it(`drops the tier again when the run is set back to the model's own default`, async () => {
+/* NO ANSWER LEAVES A RUN SETTING UNSET, which is the invariant that replaced the × and the `Default` stop, and
+ * it is this test rather than a type that holds it: `exactOptionalPropertyTypes` is off for Vue programs, so
+ * `{ effort: undefined }` type-checks here no matter how `StagedPatch` is annotated. Driven the way the defect
+ * would arrive — a caller handing over a bare pair, a reader pressing nothing — because that is the path on
+ * which the old panel answered with three missing fields. */
+it(`answers with all three run settings even when the caller named none and the reader pressed nothing`, async () => {
     const anchor = document.createElement(`button`);
-    const result = requestModelPick({
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
+    const element = mount();
+
+    button(element, `Fix with agent`)!.click();
+
+    const answer = (await result)!;
+    expect(Object.keys(answer)).toEqual(expect.arrayContaining([`effort`, `thinking`, `fast`]));
+    expect([answer.effort, answer.thinking, answer.fast]).toEqual([DEFAULT_EFFORT, DEFAULT_THINKING, false]);
+});
+
+/* AND THERE IS NO WAY BACK TO "THE MODEL'S OWN DEFAULT" ON SCREEN EITHER, because the panel never offers that
+ * state in the first place. It used to: an × beside the meter cleared the tier and the answer then named none,
+ * which meant a reader could arrive at a press whose cost they had no way to read. Every control here now
+ * stands on a value somebody can see, so there is nothing to clear and nothing to clear it with. */
+it(`offers no way to unset a run setting once the panel has shown one`, () => {
+    const anchor = document.createElement(`button`);
+    void requestModelPick({
         anchor,
         provider: `claude`,
         model: `claude-opus-4-6`,
@@ -302,13 +352,11 @@ it(`drops the tier again when the run is set back to the model's own default`, a
     });
     const element = mount();
 
-    [...element.querySelectorAll<HTMLButtonElement>(`button`)]
-        .find((candidate) => candidate.getAttribute(`aria-label`) === `Take this model's own default effort`)!
-        .click();
-    await nextTick();
-    button(element, `Fix with agent`)!.click();
-
-    await expect(result).resolves.toEqual({ provider: `claude`, model: `claude-opus-4-6`, label: modelLabelFor(`claude`, `claude-opus-4-6`) });
+    // The two switches are chips and nothing else in the panel is pressable except the list and the bar.
+    expect([...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => chip.textContent)).toEqual([`Extended thinking`]);
+    expect([...element.querySelectorAll(`button`)].map((candidate) => candidate.getAttribute(`aria-label`))).not.toContain(
+        `Take this model's own default effort`,
+    );
 });
 
 /* LEAVING IS A CANCEL, WHOLE, and this is the behaviour that flipped. It used to answer with whatever had been

@@ -1,5 +1,6 @@
 import { type AgentHarness, type AgentProvider, sendableEffort } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
+import { defaultRunSettings, type RunSettingsPatch } from "./pickerRunSettings";
 import { modelLabelFor } from "../accounts/providerCatalog";
 
 /* THE SHELL'S MODEL PICKER, OPENED BY SOMETHING THAT IS NOT THE COMPOSER: a run button about to start an agent
@@ -40,7 +41,10 @@ export interface ModelChoice {
     /* HOW THE MODEL ITSELF IS RUN: the tier it thinks at, whether it reasons first, and whether the work is
      * bought at the faster rate. All three are properties of the MODEL rather than of the provider, so they
      * survive a re-point across providers exactly as they do in the settings page's own picker
-     * (ModelPinPickerBody), while the account and harness do not. Absent ⇒ the model's own default. */
+     * (ModelPinPickerBody), while the account and harness do not.
+     * A panel that CARRIED them (`chooseRun`) always answers with all three, because it seeded whatever the
+     * caller left out and showed the reader the result. They stay optional for the caller that asked for no
+     * run settings at all, whose answer is a pair and an account. */
     readonly effort?: string;
     readonly thinking?: boolean;
     readonly fast?: boolean;
@@ -50,19 +54,39 @@ export interface ModelChoice {
  * bar hands it back. The model pair starts as whatever the caller opened on, so a panel dismissed without a
  * single click has changed nothing.
  *
- * Every optional field is `| undefined` rather than merely absent, and that is load-bearing under this repo's
- * `exactOptionalPropertyTypes`: CLEARING one is a patch that names it (`{ effort: undefined }` is the × beside
- * the meter, `{ account: undefined }` is a provider switch dropping a credential the new provider has never
- * heard of), and without the annotation there would be no way to spell the clear at all. */
+ * The account and harness are `| undefined` rather than merely absent, and that is load-bearing under this
+ * repo's `exactOptionalPropertyTypes`: CLEARING one is a patch that names it (`{ account: undefined }` is a
+ * provider switch dropping a credential the new provider has never heard of), and without the annotation there
+ * would be no way to spell the clear at all. The run settings need no such spelling — no control in the panel
+ * can unset one. */
 interface StagedPick {
     readonly provider: AgentProvider;
     readonly model: string;
     readonly account?: string | undefined;
     readonly harness?: AgentHarness | undefined;
-    readonly effort?: string | undefined;
-    readonly thinking?: boolean | undefined;
-    readonly fast?: boolean | undefined;
+    readonly effort?: string;
+    readonly thinking?: boolean;
+    readonly fast?: boolean;
 }
+
+/* WHAT A ROW MAY STAGE, and the shape that carries the difference between the two halves of the panel. The
+ * account and harness may be CLEARED by naming them: `{ account: undefined }` is a provider switch dropping a
+ * credential the new provider has never heard of. The run settings may not, and take `RunSettingsPatch` — the
+ * type the control itself emits — so the two halves cannot drift.
+ *
+ * SAYING IT IS ALL THIS CAN DO. `exactOptionalPropertyTypes` is off for Vue programs (tsconfig.vue.json), so
+ * `{ effort: undefined }` type-checks here whatever the annotation says; the file this replaced claimed the
+ * flag was enforcing it, and it never was. What actually holds the line is that no control emits an undefined
+ * run setting and that a `chooseRun` answer is asserted to name all three (HostPickerBody.test.ts).
+ *
+ * Spelled out rather than `Partial<StagedPick>` because `Partial` would also make `provider` and `model`
+ * optional-and-undefined, and a staged pick with no provider is not a thing any row can mean. */
+type StagedPatch = {
+    readonly provider?: AgentProvider;
+    readonly model?: string;
+    readonly account?: string | undefined;
+    readonly harness?: AgentHarness | undefined;
+} & RunSettingsPatch;
 
 interface ModelRequest extends StagedPick {
     // The element the picker hangs off, and the window it opens in, see AnchoredOverlay.
@@ -91,7 +115,7 @@ export const modelRequest = shallowRef<ModelRequest | undefined>(undefined);
  * An explicit `undefined` is a real value (the × beside the effort meter, "take the model's own default"; a
  * provider switch clearing an account that belongs to the old one), which is why the patch is spread rather
  * than filtered. */
-export const stageModelPick = (patch: Partial<StagedPick>): void => {
+export const stageModelPick = (patch: StagedPatch): void => {
     const pending = modelRequest.value;
     if (pending === undefined) {
         return;
@@ -101,8 +125,8 @@ export const stageModelPick = (patch: Partial<StagedPick>): void => {
 
 /* THE PRESS. Hand back everything staged, as the caller will send it and as the daemon will read it:
  * `sendableEffort` against this selection's own thinking, so a panel showing Max beside thinking-off answers
- * with the High it will actually run at rather than a rung nothing will honour. An empty tier is absent, not
- * empty — absent is what "the model's own default" is spelled as everywhere else. */
+ * with the High it will actually run at rather than a rung nothing will honour. An empty tier is dropped
+ * rather than sent as `""`, which no scale has a rung for; a panel carrying run settings never produces one. */
 export const commitModelPick = (): void => {
     const pending = modelRequest.value;
     if (pending === undefined) {
@@ -149,9 +173,20 @@ export const requestModelPick = (
         return Promise.resolve(undefined);
     }
     return new Promise((resolve) => {
-        // The floor for a caller with no verb of its own: a form storing a selection rather than spending it.
-        // It names the only thing such a press can be said to do, which is better than "OK" and honest for all
-        // of them.
-        modelRequest.value = { ...request, action: request.action ?? `Use this model`, settle: resolve };
+        /* THE ONE PLACE THE HARNESS'S OWN ANSWERS ARE READ, and only for a panel that CARRIES run settings.
+         * A caller may open this holding no tier and no thinking flag — a run button, an extension calling
+         * `api.models.pick()` — and the panel has no "leave it to the model" stop to draw that with, on
+         * purpose: a reader has to be able to see what their press will spend. So the defaults fill the
+         * selection in as it opens, the controls show them, and the answer carries whatever is on screen.
+         * Only the fields the caller left out; anything it named is its own. */
+        const seeded = request.chooseRun === true ? defaultRunSettings() : undefined;
+        modelRequest.value = {
+            ...request,
+            ...(seeded === undefined
+                ? {}
+                : { effort: request.effort ?? seeded.effort, thinking: request.thinking ?? seeded.thinking, fast: request.fast ?? seeded.fast }),
+            action: request.action ?? `Use this model`,
+            settle: resolve,
+        };
     });
 };

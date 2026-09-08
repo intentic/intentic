@@ -37,5 +37,6 @@ export const CHECKS = [
     { id: "rows", file: "row-tiers.mjs", needs: "checkout", gate: "tidy", about: "every list draws at its RowGroup's tier" },
     { id: "buttons", file: "button-tiers.mjs", needs: "checkout", gate: "tidy", about: "every action button is <Button>" },
     { id: "inputs", file: "input-tiers.mjs", needs: "checkout", gate: "tidy", about: "every field is ui-field-box" },
+    { id: "run-settings", file: "run-settings-tier.mjs", needs: "checkout", gate: "tidy", about: "effort, extended thinking and speed are one control" },
     { id: "vue-templates", file: "vue-templates.mjs", needs: "node_modules", gate: "code", about: "every .vue template compiles (attempted where vue is installed)" },
 ];

@@ -181,6 +181,51 @@ but no general one. Left alone: the three round differently on purpose and no tw
 
 ---
 
+## 8. Three pickers asking how the model is run, in two vocabularies
+
+**What it was.** Effort, extended thinking and speed are three questions about a selection, and three panels ask
+them: the shell's own picker (`HostPickerBody`, what every "Fix with agent" caret opens), the settings page's
+(`ModelPinPickerBody`, one entry of a pinned list) and the chat composer's (`ChatModelPicker`, this
+conversation's next turn).
+
+The first two had the rows written out twice, verbatim — the effort meter with its `×` reset, each with its own
+copy of the clamp rule and its own answer to "is this row offered at all". The third asked the same two Claude
+questions **in a different instrument**: two ghost chips (`.composer-toggle`) where the others had labelled
+segmented rows carrying a third stop, `Default`, meaning "say nothing and let the harness answer". One chevron
+and one caret an inch apart on the same screen asked one question with two different controls, which is how it
+was noticed — from a screenshot of both panels.
+
+**Which one was right mattered more than picking one.** The first attempt unified onto the segmented rows,
+because the third stop looked load-bearing: absent thinking is not thinking-off, and Claude refuses `max` beside
+a disabled thinking flag. That reasoning was sound and the conclusion was still wrong. A chip that carries its
+own name says in one line what a labelled row says in two, and the state it cannot express is one no reader
+should be offered in the first place: a control whose value is "whatever the model decides" is a control whose
+reader cannot tell what their run will cost.
+
+**Now.** `chat/models/pickerRunSettings.ts` derives all of it once and `PickerRunSettings.vue` is its markup;
+all three pickers mount it. A scale is a row and a switch is a chip — effort keeps its label and its meter,
+thinking and speed are the composer's own chips. `Conversation` kept a fourth copy of the same `fastAllowed`
+triple for the picker to read, so `fastOffered` came off the view facade and now survives only where the turn is
+assembled.
+
+**And no setting is ever unset.** The `Default` stop is gone, and so is the `×` that cleared the tier. The
+harness's own answers are read exactly once, by `defaultRunSettings`, at the two places a selection is born
+(`requestModelPick` opening a panel that carries run settings, and the settings page minting a pin), so every
+control opens on a value somebody can see and every answer names all three. `turnDefaults` imports the same two
+constants for its stored keys' fallbacks, rather than spelling them a second time.
+
+The component is left with one switch, and it is a fact about a surface rather than a preference: `effort-row`,
+off in the composer, which keeps a meter beside its model pill an inch from the chevron that opens the panel.
+`hasContent` counts that omission, or a footer would draw its rule and its padding around a control that was
+withheld.
+
+**And a gate, since agreement on the day it was written is what failed the first time.**
+[`_tools/checks/run-settings-tier.mjs`](../../_tools/checks/run-settings-tier.mjs) (tidy) refuses a
+run-settings label rendered by any template but the two that own it, and an `<EffortMeter>` bound anywhere but
+the two bindings that own it. It fails on the code as it stood before this section.
+
+---
+
 ## Not duplicated (checked, and fine)
 
 - **Date/time.** One `Intl` table in `format.ts`; no strays anywhere.
@@ -192,7 +237,6 @@ but no general one. Left alone: the three round differently on purpose and no tw
 - **Model pickers.** `ModelPicker` is the one list; `ChatModelPicker`, `HostPickerBody` and `ModelPinPickerBody`
   are thin bindings of it, and `HostModelPicker` is the shell's mount for the second. The footers underneath it
   are shared too: `PickerAccounts` (who serves the turn) and `PickerRunSettings` (effort, extended thinking,
-  speed) — the latter because the shell picker and the settings page had drawn all three rows by hand, in
-  duplicate, down to the clamp rule and the `×` beside the meter.
+  speed). See §8 for what the second one cost to arrive at.
 - **Desktop app.** Uses the kit throughout; no parallel component set.
 - **Spinners, badges, avatars, icons.** Single shared implementations.

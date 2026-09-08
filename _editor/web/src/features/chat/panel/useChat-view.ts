@@ -99,7 +99,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         get: () => conversation.value.fast.value,
         set: (value) => conversation.value.setFast(value),
     }),
-    fastOffered: computed<boolean>(() => conversation.value.fastOffered.value),
     fastMode: computed(() => conversation.value.fastMode.value),
     // Account facades: this conversation's pick, plus its provider's connected accounts, for the switcher.
     account: computed<string | undefined>(() => conversation.value.account.value),

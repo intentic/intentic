@@ -7,8 +7,10 @@ import type { PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
+import PickerRunSettings from "./PickerRunSettings.vue";
 
 // Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer
 // controls (extended thinking, fast speed, this runtime's limits). Edits the given conversation, not the active tab, so
@@ -18,7 +20,7 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box } =
+const { provider, harness, model, thinking, fast, effort, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box } =
     conversation;
 
 // Sandbox-wide automatic-tier mode; decides what the tier block may show (a dead control is worse than none).
@@ -27,6 +29,30 @@ const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 
 // Whether the shared block has content for this provider; needed before the footer renders its own padding.
 const { hasContent } = usePickerAccounts(provider, harness, model);
+
+/* THE TWO CHIPS ARE THE SHARED CONTROL (PickerRunSettings): the same questions about the same model, asked
+ * under this chevron and under every "Fix with agent" caret, so they are one component rather than three
+ * drawings of one idea that agreed on the day they were written.
+ *
+ * THE TRAILING `false` IS `effortRow`, and it is a fact about this surface rather than a preference: the
+ * composer keeps a meter beside its model pill (ComposerEffort), an inch from the chevron that opens this
+ * panel, so the row would be that same control twice. `hasContent` has to know, or a provider whose only
+ * control is the meter would earn this footer a border around nothing. */
+const { hasContent: runSettingsShown } = usePickerRunSettings(provider, model, harness, thinking, effort, false);
+
+// One patch per press, straight through to the conversation: settings of the next turn, so the panel stays
+// open. Effort cannot arrive while the meter row is off, and is bound anyway so the two can never disagree.
+const applyRun = (patch: RunSettingsPatch): void => {
+    if (patch.effort !== undefined) {
+        conversation.setEffort(patch.effort);
+    }
+    if (patch.thinking !== undefined) {
+        conversation.setThinking(patch.thinking);
+    }
+    if (patch.fast !== undefined) {
+        conversation.setFast(patch.fast);
+    }
+};
 
 // Hidden, not inert: another box's account pays for nothing; the model list stays since it isn't box-scoped.
 const accountsShown = computed(() => hasContent.value && box.value === undefined);
@@ -98,7 +124,7 @@ const tierNotice = computed<string | undefined>(() => {
 
 // Whether the footer earns its own border and padding; prevents a rule drawn above an otherwise-empty footer.
 const footerVisible = computed(
-    () => accountsShown.value || provider.value === `claude` || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
+    () => accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
 );
 </script>
 
@@ -143,44 +169,27 @@ const footerVisible = computed(
                 />
 
                 <!--
-                    Fast speed appears only when fastAllowed holds (Claude Code loop, first-party route, catalog's fast
-                    badge). Chips use sentence case; the uppercase style is for section headings, not leaf controls.
+                    Extended thinking and speed: the shell picker's and the settings page's own chips, shared
+                    verbatim (PickerRunSettings), because a reader setting this turn's thinking here and a run's
+                    over there is answering the same question about the same model. Speed appears only when
+                    fastAllowed holds (Claude Code loop, first-party route, catalog's fast badge), which the
+                    shared component decides.
                 -->
-                <div v-if="provider === `claude`" class="flex flex-col gap-1">
-                    <div class="flex flex-wrap items-center gap-1.5">
-                        <button
-                            type="button"
-                            class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
-                            :class="{ 'composer-active': thinking }"
-                            @click="conversation.setThinking(!thinking)"
-                            :aria-pressed="thinking"
-                        >
-                            <span
-                                class="h-1.5 w-1.5 shrink-0 rounded-full border border-current"
-                                :class="{ 'bg-current': thinking }"
-                                aria-hidden="true"
-                            ></span>
-                            <span>Extended thinking</span>
-                        </button>
-                        <button
-                            v-if="fastOffered"
-                            type="button"
-                            class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
-                            :class="{ 'composer-active': fast }"
-                            @click="conversation.setFast(!fast)"
-                            :aria-pressed="fast"
-                        >
-                            <span
-                                class="h-1.5 w-1.5 shrink-0 rounded-full border border-current"
-                                :class="{ 'bg-current': fast }"
-                                aria-hidden="true"
-                            ></span>
-                            <span>Fast speed</span>
-                        </button>
-                    </div>
+                <div v-if="runSettingsShown" class="flex flex-col gap-1">
+                    <PickerRunSettings
+                        :provider="provider"
+                        :model="model"
+                        :harness="harness"
+                        :effort="effort"
+                        :thinking="thinking"
+                        :fast="fast"
+                        :effort-row="false"
+                        @update="applyRun($event)"
+                    />
                     <!--
                         Shown only when the harness's answer differs from the ask; a notice under a working control
-                        trains people to ignore notices.
+                        trains people to ignore notices. gap-1 inside the group, so it hangs off the chips it is
+                        about rather than standing as a fourth setting at the footer's own rhythm.
                     -->
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>

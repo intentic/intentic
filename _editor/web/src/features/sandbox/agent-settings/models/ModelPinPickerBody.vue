@@ -14,7 +14,7 @@ import PickerRunSettings from "../../../chat/models/PickerRunSettings.vue";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import type { PickerEntry } from "../../../chat/models/modelPickerState";
 import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
-import { usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
+import { defaultRunSettings, usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 
 // Full app model picker (composer's ModelPicker), pointed at one entry of a pinned list. No account control: that's a
@@ -43,9 +43,9 @@ const harness = computed<AgentHarness>(() => pin?.harness ?? `native`);
 
 const capabilities = computed(() => capabilitiesOf(provider.value, harness.value));
 
-/* THE THREE ROWS FOR HOW THIS ENTRY IS RUN — effort, extended thinking, speed — are the shell picker's own
- * (pickerRunSettings.ts), because they are the same rows asking the same questions about the same selection.
- * They were written out twice, here and in HostPickerBody, down to the clamp rule and the × beside the meter.
+/* THE THREE CONTROLS FOR HOW THIS ENTRY IS RUN — effort, extended thinking, speed — are the shell picker's own
+ * (pickerRunSettings.ts), because they ask the same questions about the same kind of selection. They were
+ * written out twice, here and in HostPickerBody, down to the clamp rule and the meter itself.
  * `hasContent` is what the footer below needs before it draws a border. */
 const { hasContent: runSettingsShown } = usePickerRunSettings(
     provider,
@@ -82,11 +82,16 @@ const configure = (patch: Partial<ModelPin>): void => {
     }
 };
 
-// A pick answers and closes, like the composer; the knob rows below write through and stay open as entry settings.
-// Effort survives a re-point; harness, thinking and fast speed don't, since they belong to the provider, not the pin.
+/* A pick answers and closes, like the composer; the controls below write through and stay open as entry
+ * settings. Effort survives a re-point; harness, thinking and fast speed don't, since they belong to the
+ * provider, not the pin.
+ *
+ * A PIN IS BORN WITH ITS RUN SETTINGS ALREADY SET (`defaultRunSettings`), because the panel that configures it
+ * has no way to say "leave it to the model" and a reader must never be shown a state the entry does not hold.
+ * They go under the pick, so anything carried across the re-point still wins. */
 const pick = (entry: PickerEntry): void => {
     const kept = pin?.provider === entry.provider ? pin : { effort: pin?.effort };
-    emit(`pick`, pruned({ ...kept, provider: entry.provider, model: entry.value }));
+    emit(`pick`, pruned({ ...defaultRunSettings(), ...kept, provider: entry.provider, model: entry.value }));
     emit(`close`);
 };
 
@@ -111,8 +116,8 @@ const unpickable = (entry: PickerEntry): boolean =>
                     </span>
                 </div>
 
-                <!-- Reasoning effort, extended thinking and speed: the shell picker's own rows, shared verbatim
-                     (PickerRunSettings), because a reader configuring a pinned entry here and a run over there
+                <!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared
+                     verbatim (PickerRunSettings), because a reader configuring a pinned entry here and a run over there
                      is answering the same three questions about the same kind of selection. -->
                 <PickerRunSettings
                     :provider="provider"

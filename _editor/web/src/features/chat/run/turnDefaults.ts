@@ -1,6 +1,7 @@
 import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
 import { accessKnown, providerReady } from "../session/access";
+import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/pickerRunSettings";
 import { defaultModelFor, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or
@@ -39,14 +40,17 @@ export const turnDefaults = {
         read: readModels,
         write: (models) => JSON.stringify(models),
     }),
+    // The two fallbacks are the pickers' own opening state (pickerRunSettings.ts), imported rather than spelled
+    // again: a conversation that starts on one tier while every picker opens on another is two answers to one
+    // question, and nothing would have caught them drifting apart.
     effort: definePreference<string>({
         key: `ui-chat-effort`,
-        read: (raw) => raw ?? `xhigh`,
+        read: (raw) => raw ?? DEFAULT_EFFORT,
         write: (effort) => effort,
     }),
     thinking: definePreference<boolean>({
         key: `ui-chat-thinking`,
-        read: (raw) => raw !== `false`,
+        read: (raw) => (raw === null ? DEFAULT_THINKING : raw !== `false`),
         write: String,
     }),
 };
