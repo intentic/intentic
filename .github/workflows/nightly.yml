@@ -34,6 +34,7 @@ on:
           - desktop-windows
           - images-public
           - install-urls
+          - demo-live
           - provider-canary
           - update-survival
           - mobile
@@ -557,6 +558,41 @@ jobs:
       # arrangement that put a 404 page into somebody's shell in the first place.
       - run: pnpm --filter @intentic/constants build
       - run: node _tools/scripts/ci/check-install-urls.mjs
+
+  # THE THIRD THING A USER REACHES WITHOUT A CREDENTIAL, and the sibling of the two jobs above: the playable demo the
+  # landing page's own call to action links to (`href="/demo/"`).
+  #
+  # Live for the same reason install-urls is, and after the same failure. The demo is a second Vite app whose build
+  # output lands in the site's GITIGNORED public/demo/, so it exists in no checkout: `astro build` copies that
+  # directory, it never produces it. Every static check passes on a tree that has never built it, and the deploy that
+  # ships an empty /demo/ looks exactly like the deploy that ships a full one. That is not hypothetical either — the
+  # site's first working deploy in eight days (2026-09-07, after 9a58216d4 fixed the Worker name) replaced a demo
+  # built by hand on somebody's machine in August with nothing at all, and the button on the front page answered with
+  # the 404 page until someone opened it.
+  #
+  # A schedule is the right trigger because this guards DEPLOYED state, which drifts long after the commit that
+  # changed it — and here the drift needs no commit at all, only a deploy from a clean tree.
+  demo-live:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'demo-live' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # For PLATFORM_SITE_ORIGIN alone — the same one small tsgo install-urls needs, for the same reason: the origin
+      # is a TypeScript export and a second copy of it here is how the two drift apart.
+      - run: pnpm --filter @intentic/constants build
+      - run: node _tools/scripts/ci/check-demo-live.mjs
 
   # THE VENDOR CANARY: the conformance tier again, but against each provider's NEWEST CLI instead of the
   # version the packs pin.

@@ -44,7 +44,7 @@ if (failed.length > 0) {
     console.error(
         `\n${failed.length} install URL(s) the product hands out do not serve a script. This is what a user's` +
             ` terminal gets. The usual cause is the site not having deployed since the scripts changed —` +
-            ` _site/site is published from Cloudflare, outside this pipeline: \`pnpm --filter @intentic/site deploy\`.`,
+            ` _site/site is published from Cloudflare, outside this pipeline: \`pnpm --filter @intentic/site run deploy\`.`,
     );
     process.exit(1);
 }

@@ -34,8 +34,17 @@
      * The deploy sequence it was reaching for is a deploy concern and lives in package.json's `deploy` script,
      * where IndexNow already runs after wrangler so the key file and the changed pages are live before Bing is
      * pinged. */
+    /* `astro build` COPIES public/ INTO dist/, IT DOES NOT PRODUCE IT. /demo/ is a second Vite app whose output lands
+     * in public/demo/, which is gitignored and therefore absent from every fresh checkout: without the build below,
+     * this command produces a dist with no demo in it and says nothing, which is how the 2026-09-07 deploy replaced
+     * the demo the landing page's own call to action links to with the 404 page.
+     *
+     * Vite is invoked directly rather than through `pnpm --filter @intentic/demo build`, which runs pnpm's
+     * injected-dependency sync after the script and fails the whole command when that sync cannot hardlink
+     * (cross-device node_modules, as in an Intentic sandbox) — a deploy refused over an output that is already
+     * correct. */
     "build": {
-        "command": "astro build",
+        "command": "pnpm -C ../demo exec vite build && astro build",
     },
     "assets": {
         "directory": "./dist",
