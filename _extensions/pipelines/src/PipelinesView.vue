@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRepo, FixResume, PipelineRun } from "@intentic/sandbox-contract";
 import type { CiFix } from "./ciFixes";
 import {
     Icon,
@@ -172,11 +172,12 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
 };
 
 // `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
-const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promise<void> => {
+// `resume` is the verb that caret's panel was ended with over an attempt that already exists (Continue / Start over).
+const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined): Promise<void> => {
     busy.value = actionKey(run);
     actionError.value = undefined;
     try {
-        const { conversationId } = await fix.mutateAsync({ run, pick });
+        const { conversationId } = await fix.mutateAsync({ run, pick, mode: resume });
         // Not awaited: navigation below is the point, so the row shows 'Agent working' without delaying it.
         void refreshFixes();
         // Opens the fleet board, not the diff view: nothing to review yet. `?focus` waits for the roster.

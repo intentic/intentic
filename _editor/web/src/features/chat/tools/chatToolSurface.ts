@@ -25,6 +25,8 @@ export interface ChatSurface {
 // Nothing to follow: no pictures, nothing clickable. Used by published pages and cards mounted outside the chat.
 const INERT_SURFACE: ChatSurface = { imageUrl: () => undefined };
 
-export const CHAT_SURFACE: InjectionKey<ChatSurface> = Symbol(`chat-surface`);
+// `Symbol.for`: survives a hot reload of this module, so a surface mounted after one still finds its provider
+// (useChat-view.ts has the incident).
+export const CHAT_SURFACE: InjectionKey<ChatSurface> = Symbol.for(`intentic.chat-surface`);
 
 export const useChatSurface = (): ChatSurface => inject(CHAT_SURFACE, INERT_SURFACE);

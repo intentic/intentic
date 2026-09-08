@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, type ModelRole, sendableEffort } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type FixResume, type ModelRole, sendableEffort } from "@intentic/sandbox-contract";
 import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
 import { effortLabelOf } from "./effortScale";
@@ -32,13 +32,16 @@ const namedChoice = (selection: {
     readonly effort?: string | undefined;
     readonly thinking?: boolean | undefined;
     readonly fast?: boolean | undefined;
+    readonly resume?: FixResume | undefined;
 }): AgentRunChoice => {
-    const { provider, model, account, harness, effort, thinking, fast } = selection;
+    const { provider, model, account, harness, effort, thinking, fast, resume } = selection;
     const label = effortLabelOf(effort, provider, model, thinking);
     return {
         provider,
         model,
         label: modelLabelFor(provider, model),
+        // The verb the panel ended with rides out with the pick; the run it starts is defined by both.
+        ...(resume !== undefined ? { resume } : {}),
         ...(account !== undefined ? { account } : {}),
         ...(harness !== undefined ? { harness } : {}),
         ...(effort === undefined || effort === `` ? {} : { effort }),
@@ -102,6 +105,7 @@ export const shellModelPicking = (): ModelPicking => ({
             ...(options.fast !== undefined ? { fast: options.fast } : {}),
             ...(options.action !== undefined ? { action: options.action } : {}),
             ...(options.chooseRun === true ? { chooseRun: true } : {}),
+            ...(options.attempt !== undefined ? { attempt: options.attempt } : {}),
         });
         return choice === undefined ? undefined : namedChoice(choice);
     },

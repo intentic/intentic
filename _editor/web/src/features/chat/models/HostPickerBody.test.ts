@@ -413,3 +413,65 @@ it(`refuses the press until a model has been chosen`, async () => {
     await nextTick();
     expect(button(element, `Use this model`)!.disabled).toBe(false);
 });
+
+/* OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT. The caller's action is gone from it, the attempt is named, and the
+ * two verbs say what the press does to it; the answer carries which one was pressed, since the run they start is
+ * not the same run. */
+it(`names the attempt and ends in Continue or Start over, and the answer says which`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({
+        anchor,
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        action: `Fix with agent`,
+        attempt: { summary: `Attempt 1 · Opus 4.6 · stopped · 3 files on its branch`, continuable: true },
+    });
+    const element = mount();
+
+    expect(button(element, `Fix with agent`)).toBeUndefined();
+    expect(element.textContent).toContain(`Attempt 1 · Opus 4.6 · stopped · 3 files on its branch`);
+    button(element, `Start over`)!.click();
+    await expect(result).resolves.toMatchObject({ provider: `claude`, model: `claude-opus-4-6`, resume: `start-over` });
+});
+
+it(`Continue is the keyboard's press over an attempt that can be continued`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({
+        anchor,
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        attempt: { summary: `Attempt 2 · Opus 4.6 · agent failed`, continuable: true },
+    });
+    const element = mount();
+
+    button(element, `Keyboard submit`)!.click();
+    await expect(result).resolves.toMatchObject({ resume: `continue` });
+});
+
+// An attempt still working or parked is steered from its own chat; from here the only decision is to start over.
+it(`an attempt still in play offers Start over alone, and the keyboard means that`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({
+        anchor,
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        attempt: { summary: `Attempt 1 · Opus 4.6 · agent working`, continuable: false },
+    });
+    const element = mount();
+
+    expect(button(element, `Continue`)).toBeUndefined();
+    expect(button(element, `Start over`)?.textContent).toBe(`Start over`);
+    button(element, `Keyboard submit`)!.click();
+    await expect(result).resolves.toMatchObject({ resume: `start-over` });
+});
+
+// Without an attempt the bar is the caller's, and the answer carries no verb to misread.
+it(`a bar with no attempt answers without a resume verb`, async () => {
+    const anchor = document.createElement(`button`);
+    const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, action: `Run chore` });
+    const element = mount();
+    button(element, `Run chore`)!.click();
+    const answer = await result;
+    expect(answer).toMatchObject({ provider: `claude`, model: `claude-opus-4-6` });
+    expect(Object.keys(answer ?? {})).not.toContain(`resume`);
+});

@@ -53,6 +53,14 @@ const runSettings = computed(() => request.value?.chooseRun === true && runSetti
 
 const footerVisible = computed(() => hasContent.value || runSettings.value);
 
+/* THE VERB THE KEYBOARD'S SUBMIT MEANS when the bar carries two: the safe one, Continue, wherever it is offered,
+ * and Start over only for an attempt that cannot be continued from here. ⌘/Ctrl-Enter must never be the press
+ * that files an attempt away when a gentler one was on the bar. */
+const defaultResume = computed(() => {
+    const attempt = request.value?.attempt;
+    return attempt === undefined ? undefined : attempt.continuable ? `continue` : `start-over`;
+});
+
 /* NOTHING IS CHOSEN YET is a real state this panel opens in: an automation rung added past the end of its
  * ladder arrives with a blank pair, and there is no such thing as half an entry. The bar refuses the press
  * until the list has been answered, which is the one thing the list is unambiguously for. */
@@ -98,7 +106,7 @@ const choose = (entry: PickerEntry): void => {
         :provider="request.provider"
         :model="request.model"
         @pick="choose"
-        @submit="commitModelPick()"
+        @submit="commitModelPick(defaultResume)"
         @close="dismissModelPick()"
     >
         <template #footer>
@@ -143,7 +151,41 @@ const choose = (entry: PickerEntry): void => {
         <template #commit>
             <div class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-1.5 border-t border-line bg-canvas px-3 py-2">
                 <span class="truncate text-2xs" :class="chosen ? `text-subtle` : `text-muted`">{{ spend }}</span>
+                <!-- OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT (hostModelPicker.ts, AttemptOnOffer): the line
+                     names it and the verbs say what the press does to it. Continue keeps its conversation and its
+                     worktree, so it is the primary press and the keyboard's; Start over files it away and opens
+                     the next attempt on a clean tree, so it is the quieter of the two and never the default. -->
+                <template v-if="request.attempt">
+                    <p class="truncate text-2xs text-muted" :title="request.attempt.summary">{{ request.attempt.summary }}</p>
+                    <div class="flex gap-1.5">
+                        <Button
+                            v-if="request.attempt.continuable"
+                            label="Continue"
+                            class="flex-1"
+                            :disabled="!chosen"
+                            v-tooltip.top="`Carries on in the same conversation, on the model above — ⌘/Ctrl + Enter`"
+                            @click="commitModelPick(`continue`)"
+                        >
+                            <template #icon><Icon name="play" /></template>
+                        </Button>
+                        <Button
+                            label="Start over"
+                            class="flex-1"
+                            :severity="request.attempt.continuable ? `secondary` : undefined"
+                            :disabled="!chosen"
+                            v-tooltip.top="
+                                request.attempt.continuable
+                                    ? `Files that attempt away and opens a fresh conversation on a clean worktree; nothing is carried over`
+                                    : `Stops and files that attempt away, then opens a fresh conversation on a clean worktree — ⌘/Ctrl + Enter`
+                            "
+                            @click="commitModelPick(`start-over`)"
+                        >
+                            <template #icon><Icon name="refresh" /></template>
+                        </Button>
+                    </div>
+                </template>
                 <Button
+                    v-else
                     :label="request.action"
                     class="w-full"
                     :disabled="!chosen"

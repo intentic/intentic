@@ -1,5 +1,16 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { CI_FIX_PREFIX, ciFixConversationId, newConversationId, PUSH_FIX_PREFIX, pushFixConversationId } from "./conversation-ids.js";
+import {
+    CI_FIX_PREFIX,
+    ciFixConversationId,
+    fixAttemptId,
+    fixAttemptOf,
+    fixAttemptsOf,
+    latestFixAttempt,
+    newConversationId,
+    nextFixAttemptId,
+    PUSH_FIX_PREFIX,
+    pushFixConversationId,
+} from "./conversation-ids.js";
 import { ConversationIdSchema } from "../schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
@@ -99,5 +110,54 @@ test("every derived push fix id passes the conversation-id guard", () => {
             expect(ConversationIdSchema.safeParse(id).success).toBe(true);
             expect(id.startsWith(PUSH_FIX_PREFIX)).toBe(true);
         }
+    }
+});
+
+// Attempt 1 is the bare derived id, so every fix conversation minted before attempts existed reads as attempt 1.
+test("the first attempt wears the failure's own id, later ones carry their number", () => {
+    const base = ciFixConversationId(`web`, 41);
+    expect(fixAttemptId(base, 1)).toBe(base);
+    expect(fixAttemptId(base, 2)).toBe(`ci-fix-web-41-attempt2`);
+    expect(fixAttemptOf(base, base)).toBe(1);
+    expect(fixAttemptOf(base, `ci-fix-web-41-attempt2`)).toBe(2);
+    expect(fixAttemptOf(base, `ci-fix-web-41-attempt12`)).toBe(12);
+});
+
+// Read base-relative on purpose: a base ends in a run id, so a neighbouring failure's id can start with this one.
+test("another failure's id is not an attempt at this one", () => {
+    const base = ciFixConversationId(`web`, 41);
+    // Repo `web-41`, run 2: starts with the base and a dash, and is nobody's attempt.
+    expect(fixAttemptOf(base, ciFixConversationId(`web-41`, 2))).toBeUndefined();
+    expect(fixAttemptOf(base, ciFixConversationId(`web`, 412))).toBeUndefined();
+    expect(fixAttemptOf(base, `swift-otter-k9m2`)).toBeUndefined();
+    // One spelling per attempt.
+    expect(fixAttemptOf(base, `ci-fix-web-41-attempt1`)).toBeUndefined();
+    expect(fixAttemptOf(base, `ci-fix-web-41-attempt02`)).toBeUndefined();
+    expect(fixAttemptOf(base, `ci-fix-web-41-attempt`)).toBeUndefined();
+});
+
+test("attempts are read off the roster, earliest first, and the newest is the live answer", () => {
+    const base = pushFixConversationId(`intentic`, `lint`);
+    const roster = [{ id: `swift-otter-k9m2` }, { id: fixAttemptId(base, 3) }, { id: base }, { id: pushFixConversationId(`intentic`, `typecheck`) }];
+    expect(fixAttemptsOf(base, roster).map((entry) => entry.attempt)).toEqual([1, 3]);
+    expect(latestFixAttempt(base, roster)?.agent.id).toBe(fixAttemptId(base, 3));
+    expect(latestFixAttempt(base, [])).toBeUndefined();
+});
+
+// The archive counts: a start-over files the last attempt away, and re-minting its number would un-archive it.
+test("the next attempt is numbered past every known one, archived included", () => {
+    const base = ciFixConversationId(`web`, 41);
+    expect(nextFixAttemptId(base, [])).toBe(base);
+    expect(nextFixAttemptId(base, [base])).toBe(`ci-fix-web-41-attempt2`);
+    expect(nextFixAttemptId(base, [`ci-fix-web-41-attempt3`, `swift-otter-k9m2`])).toBe(`ci-fix-web-41-attempt4`);
+    expect(nextFixAttemptId(base, [ciFixConversationId(`web-41`, 2)])).toBe(base);
+});
+
+test("an attempt id passes the guard and fits, even for the widest run id a forge mints", () => {
+    const widest = ciFixConversationId(`a-repository-name-of-thirty-two-chars-or-more`, 99_999_999_999);
+    for (const attempt of [1, 2, 99]) {
+        const id = fixAttemptId(widest, attempt);
+        expect(ConversationIdSchema.safeParse(id).success).toBe(true);
+        expect(id.length).toBeLessThanOrEqual(64);
     }
 });

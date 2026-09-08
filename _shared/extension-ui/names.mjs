@@ -27,6 +27,7 @@ export const extensionUiNames = [
     "DisclosureRow",
     "errorMessage",
     "FilterBar",
+    "fixStanceLook",
     "formatBytes",
     "formatDate",
     "formatDateTime",

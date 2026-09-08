@@ -149,7 +149,8 @@ export const newConversationId = (): string => `${pick(ADJECTIVES)}-${pick(NOUNS
 // Derived, not drawn, so a re-computed id says whether an agent is already on this failure and a second press continues
 // it. The repo is included (one run id per project) and slugified, not hashed, since people read it.
 export const CI_FIX_PREFIX = "ci-fix-";
-// Leaves ~24 characters for the run id within the 64-char id limit, twice the widest either forge mints.
+// Leaves ~24 characters for the run id and an attempt suffix within the 64-char id limit; the widest run id either
+// forge mints is eleven digits.
 const REPO_SLUG_MAX = 32;
 const repoSlug = (repo: string): string =>
     repo
@@ -176,3 +177,59 @@ const digest = (text: string): string => {
 };
 
 export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${digest(signature)}`;
+
+// ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The derived id above names the FAILURE; an attempt at it is a
+// conversation of its own, so starting over (another model, a clean worktree) never rewrites a record some other window
+// is showing, and every attempt keeps its own transcript, cost and URL. Attempt 1 wears the bare id, so every id minted
+// before attempts existed is attempt 1 of its failure.
+const ATTEMPT_MARK = "-attempt";
+
+export const fixAttemptId = (base: string, attempt: number): string => (attempt <= 1 ? base : `${base}${ATTEMPT_MARK}${attempt}`);
+
+// Which attempt at `base` this id is, or undefined for an id that is none of them. Read base-relative, never the other
+// way round: a base ends in a run id or a digest, so nothing about an id on its own says where an attempt marker would
+// begin, and `ci-fix-web-41-2` is repo `web-41`'s run 2, not a second go at run 41.
+export const fixAttemptOf = (base: string, id: string): number | undefined => {
+    if (id === base) {
+        return 1;
+    }
+    if (!id.startsWith(`${base}${ATTEMPT_MARK}`)) {
+        return undefined;
+    }
+    const rest = id.slice(base.length + ATTEMPT_MARK.length);
+    // One spelling per attempt: the first is the bare id, so `-attempt1` and a zero-padded number are nobody's.
+    return /^[2-9]\d*$|^[1-9]\d+$/.test(rest) ? Number(rest) : undefined;
+};
+
+export interface FixAttempt<T extends { readonly id: string }> {
+    readonly attempt: number;
+    readonly agent: T;
+}
+
+// Every attempt at `base` among `agents`, earliest first. The roster is the record: nothing else files which
+// conversations answered a failure, and none is needed, since the ids say so.
+export const fixAttemptsOf = <T extends { readonly id: string }>(base: string, agents: Iterable<T>): FixAttempt<T>[] => {
+    const attempts: FixAttempt<T>[] = [];
+    for (const agent of agents) {
+        const attempt = fixAttemptOf(base, agent.id);
+        if (attempt !== undefined) {
+            attempts.push({ attempt, agent });
+        }
+    }
+    return attempts.toSorted((left, right) => left.attempt - right.attempt);
+};
+
+// The failure's live answer: its newest attempt, since an older one was set aside by the very act of starting a newer.
+export const latestFixAttempt = <T extends { readonly id: string }>(base: string, agents: Iterable<T>): FixAttempt<T> | undefined =>
+    fixAttemptsOf(base, agents).at(-1);
+
+// The id the next attempt takes: one past every attempt KNOWN, archived ones included. A start-over files the last
+// attempt away rather than deleting it, and a message to an archived conversation un-archives it, so minting a number
+// the archive holds would quietly resurrect the attempt the reader just set aside.
+export const nextFixAttemptId = (base: string, knownIds: Iterable<string>): string => {
+    let highest = 0;
+    for (const id of knownIds) {
+        highest = Math.max(highest, fixAttemptOf(base, id) ?? 0);
+    }
+    return fixAttemptId(base, highest + 1);
+};

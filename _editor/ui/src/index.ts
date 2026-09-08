@@ -15,7 +15,8 @@ export {
 } from "./lib/portPreview.js";
 export { ui } from "./lib/ui.js";
 export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.vue";
-export { type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
+export { type AgentRunAttempt, type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
+export { type FixStanceLook, fixStanceLook } from "./composables/fixStanceLook.js";
 export { default as AnchoredOverlay } from "./components/overlays/AnchoredOverlay.vue";
 export { default as Avatar } from "./components/brand/Avatar.vue";
 export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anchorPlacement.js";

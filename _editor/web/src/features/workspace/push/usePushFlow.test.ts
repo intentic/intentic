@@ -1,8 +1,9 @@
-import { type CommandRun, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
+import { type AgentSummary, type CommandRun, fixAttemptId, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./usePushFlow";
-import { checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "../health/fixProposal";
+import { checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, pushNudgePrompt, refusalSummary } from "../health/fixProposal";
+import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 
 // No case here mounts a component: a push must finish, send, and raise its question even after the panel that
 // started it is gone. Each mock owns its state, so `vi.resetModules` gives every case a clean flow and clean seams.
@@ -110,6 +111,29 @@ vi.mock(`../../agents/fleet/sessionSuggestion`, () => ({
     startSession: vi.fn(),
 }));
 
+// The fleet as the stream keeps it and the archive as it is pulled: what a press is planned against. Shared refs,
+// like the real module's, so a case sets the roster and the flow reads that same one.
+vi.mock(`../../agents/fleet/useAgents-registry`, async () => {
+    const { shallowRef } = await import(`vue`);
+    return { registry: shallowRef<AgentSummary[]>([]), archived: shallowRef<AgentSummary[]>([]), loadArchived: vi.fn(async () => {}) };
+});
+vi.mock(`../../agents/fleet/useAgents-archive`, () => ({ archive: vi.fn(async () => {}) }));
+vi.mock(`../../agents/fleet/agentActions`, () => ({ stopAgent: vi.fn(async () => {}) }));
+vi.mock(`../../agents/fleet/useAgents-actions`, () => ({ open: vi.fn() }));
+
+const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+// A fix agent as the roster reports it; `status` is what each case is about.
+const agent = (id: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
+    id,
+    status: `running`,
+    provider: `claude`,
+    harness: `native`,
+    model: `claude-opus-4-6`,
+    attention: { ...NO_ATTENTION },
+    updatedAt: 1_000,
+    ...over,
+});
+
 const PUSH = [{ repo: `intentic`, pull: false, push: true }];
 
 const load = async () => {
@@ -119,9 +143,16 @@ const load = async () => {
     // instances of their state, so warming the registry first keeps both sides the same.
     const prepush = await import(`./usePrepush`);
     const changes = await import(`../changes/useChanges`);
-    const pushRuns = (await import(`./usePushRun`)) as unknown as { pushTerminal: (repo: string, session: string | undefined) => void; resetPushRuns: () => void };
+    const pushRuns = (await import(`./usePushRun`)) as unknown as {
+        pushTerminal: (repo: string, session: string | undefined) => void;
+        resetPushRuns: () => void;
+    };
     pushRuns.resetPushRuns();
     const suggestion = await import(`../../agents/fleet/sessionSuggestion`);
+    const fleet = await import(`../../agents/fleet/useAgents-registry`);
+    const fleetArchive = await import(`../../agents/fleet/useAgents-archive`);
+    const actions = await import(`../../agents/fleet/agentActions`);
+    const opener = await import(`../../agents/fleet/useAgents-actions`);
     const module = await import(`./usePushFlow`);
     const seam = prepush as unknown as { finish: (fields: Partial<CommandRun>) => void; reset: () => void };
     seam.reset();
@@ -129,7 +160,20 @@ const load = async () => {
     const git = changes.useChanges();
     git.actionBusy.value = false;
     git.failures.value = new Map();
-    return { finish: seam.finish, git, suggestion, pushTerminal: pushRuns.pushTerminal, flow: module.usePushFlow() };
+    // As above: the fleet mocks' refs survive `resetModules`, so each case starts from an empty roster.
+    fleet.registry.value = [];
+    fleet.archived.value = [];
+    return {
+        finish: seam.finish,
+        git,
+        suggestion,
+        fleet,
+        archive: fleetArchive.archive,
+        stopAgent: actions.stopAgent,
+        open: opener.open,
+        pushTerminal: pushRuns.pushTerminal,
+        flow: module.usePushFlow(),
+    };
 };
 
 // The seams resolve immediately, so a macrotask boundary drains however many microtasks a path takes, rather
@@ -177,12 +221,14 @@ test(`a red check raises a question that outlives the surface that asked`, async
     const settled: CommandRun = { status: `failed`, command: `pnpm check`, output: `2 tests failed`, exitCode: 1 };
     expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: outcomeSummary(settled) });
     expect(flow.question.value?.title).not.toBe(checkOutcome({ ...settled, status: `cancelled` }));
-    // Model is resolved from the sandbox's live list, not copied from settings, since a gone account can't run.
-    expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
-    expect(suggestion.composeSession).toHaveBeenCalledWith(
-        expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true }),
-    );
-    expect(flow.proposedFix.value).toEqual(expect.any(Object));
+    // Proposed, not yet composed: which conversation the press opens is decided at the press, against the fleet as
+    // it stands then, so nothing is started and no draft is written until somebody asks for it.
+    expect(flow.proposedFix.value).toEqual({
+        base: pushFixConversationId(`intentic`, fixSignature(`2 tests failed`)),
+        prompt: expect.stringContaining(`2 tests failed`),
+        nudge: expect.stringContaining(`2 tests failed`),
+    });
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
 
     const { usePushFlow } = await import(`./usePushFlow`);
     expect(usePushFlow().question.value).toEqual(flow.question.value);
@@ -278,16 +324,24 @@ test(`a pull-only sync skips the check entirely`, async () => {
 });
 
 // Accepting the proposal hands the tree to the agent instead of pushing, answering the question rather than
-// leaving it open.
+// leaving it open. With nobody on the failure yet, the press composes attempt 1 under the failure's own id.
 test(`handing the failure to an agent starts the session and drops the push`, async () => {
     const { flow, git, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
-    finish({ status: `failed`, exitCode: 1 });
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
     await flush();
     const proposal = flow.proposedFix.value;
+    expect(flow.attempt.value).toBeUndefined();
 
-    flow.startFix();
-    expect(suggestion.startSession).toHaveBeenCalledWith(proposal);
+    await flow.startFix();
+    expect(suggestion.composeSession).toHaveBeenCalledWith({
+        prompt: proposal?.prompt,
+        model: `claude:claude-sonnet-4-5`,
+        effort: `high`,
+        isolated: true,
+        conversationId: proposal?.base,
+    });
+    expect(suggestion.startSession).toHaveBeenCalledWith(vi.mocked(suggestion.composeSession).mock.results[0]?.value);
     expect(git.syncAll).not.toHaveBeenCalled();
     expect(flow.question.value).toBeUndefined();
     expect(flow.pending.value).toBeUndefined();
@@ -298,13 +352,102 @@ test(`starting a fix with a picked model re-points the session before starting`,
     flow.askSync(`Push`, `3 commits`, PUSH);
     finish({ status: `failed`, exitCode: 1 });
     await flush();
-    const proposal = flow.proposedFix.value as unknown as { selectModel: ReturnType<typeof vi.fn> };
 
-    flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
-    expect(proposal.selectModel).toHaveBeenCalledWith({ provider: `cursor`, value: `composer-2.5` });
-    expect(suggestion.startSession).toHaveBeenCalledWith(proposal);
+    await flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
+    const composed = vi.mocked(suggestion.composeSession).mock.results[0]?.value as { selectModel: ReturnType<typeof vi.fn> };
+    expect(composed.selectModel).toHaveBeenCalledWith({ provider: `cursor`, value: `composer-2.5` });
+    expect(suggestion.startSession).toHaveBeenCalledWith(composed);
     expect(flow.question.value).toBeUndefined();
     expect(flow.pending.value).toBeUndefined();
+});
+
+/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The cases below are the press against each thing the fleet can say
+ * about the failure's latest attempt; the words are the contract's (planFixAttempt), the doors are this flow's. */
+
+// The complaint this exists for: a second press used to re-send the whole opening prompt into the same session, with
+// nothing on the card saying an agent had already tried.
+test(`an attempt that ended is continued with the nudge, and the card says so before the press`, async () => {
+    const { flow, fleet, suggestion, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const { base, nudge, prompt } = flow.proposedFix.value!;
+    fleet.registry.value = [agent(base, { status: `error`, failure: `no capacity`, diff: { files: 3, insertions: 8, deletions: 1 } })];
+
+    expect(flow.attempt.value?.stance.kind).toBe(`ended`);
+    expect(flow.attemptOnOffer.value).toEqual({
+        summary: `Attempt 1 · ${modelLabelFor(`claude`, `claude-opus-4-6`)} · agent failed · 3 files on its branch`,
+        continuable: true,
+    });
+
+    await flow.startFix();
+    expect(nudge).not.toBe(prompt);
+    expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ prompt: nudge, conversationId: base }));
+});
+
+test(`start over stops a running attempt, files it away, and opens attempt 2 on the opening prompt`, async () => {
+    const { flow, fleet, suggestion, stopAgent, archive, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const { base, prompt } = flow.proposedFix.value!;
+    fleet.registry.value = [agent(base, { status: `running` })];
+    // Still in play: the slot is a chip, and the picker offers Start over alone.
+    expect(flow.attempt.value?.stance.ongoing).toBe(true);
+    expect(flow.attemptOnOffer.value?.continuable).toBe(false);
+
+    await flow.startFix(undefined, `start-over`);
+    expect(stopAgent).toHaveBeenCalledWith(base);
+    expect(archive).toHaveBeenCalledWith([base]);
+    expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ prompt, conversationId: fixAttemptId(base, 2) }));
+    expect(flow.question.value).toBeUndefined();
+});
+
+// The race the derived id exists to prevent: a plain press over a working agent opens it rather than sending again.
+test(`a plain press over an attempt still in play opens it and keeps the question`, async () => {
+    const { flow, fleet, suggestion, open, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    const base = flow.proposedFix.value!.base;
+    fleet.registry.value = [agent(base, { status: `awaiting`, attention: { ...NO_ATTENTION, question: true } })];
+
+    await flow.startFix();
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: base }));
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
+    expect(flow.question.value?.kind).toBe(`checks`);
+});
+
+// The archive counts: an attempt set aside earlier is skipped over, since a message to it would un-archive it.
+test(`an archived attempt is not resurrected, and a landed one is history`, async () => {
+    const { flow, fleet, suggestion, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    const base = flow.proposedFix.value!.base;
+    fleet.archived.value = [{ ...agent(base, { status: `stopped` }), open: false, unread: false, unsent: false }];
+    fleet.registry.value = [agent(fixAttemptId(base, 2), { status: `landed` })];
+    expect(flow.attempt.value).toBeUndefined();
+
+    await flow.startFix();
+    expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ conversationId: fixAttemptId(base, 3) }));
+});
+
+// The card must never say nothing while an attempt is being set aside: the press is reported as busy until it lands.
+test(`a press that cannot set the attempt aside says why and keeps the question`, async () => {
+    const { flow, fleet, suggestion, stopAgent, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    const base = flow.proposedFix.value!.base;
+    fleet.registry.value = [agent(base, { status: `running` })];
+    vi.mocked(stopAgent).mockRejectedValueOnce(new Error(`no running turn for that conversation`));
+
+    await flow.startFix(undefined, `start-over`);
+    expect(flow.fixError.value).toBe(`no running turn for that conversation`);
+    expect(flow.fixBusy.value).toBe(false);
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
+    expect(flow.question.value?.kind).toBe(`checks`);
 });
 
 // How long this suite usually takes, so the readout can say more than "it is running".
@@ -364,16 +507,20 @@ test(`a push the repository's own hook refused asks with the run, and proposes a
     });
     // The same terminal button a red check gets, pointed at the push's own window.
     expect(flow.terminal.value).toBe(`job-checks`);
-    expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
+    expect(flow.proposedFix.value).toEqual({
+        // Derived the same way the flow derives it, not transcribed, since spelling a name twice invites drift.
+        base: pushFixConversationId(run.repo, fixSignature(run.output)),
+        prompt: pushFixPrompt([run]),
+        nudge: pushNudgePrompt([run]),
+    });
+    await flow.startFix();
     expect(suggestion.composeSession).toHaveBeenCalledWith({
         prompt: pushFixPrompt([run]),
         model: `claude:claude-sonnet-4-5`,
         effort: `high`,
         isolated: true,
-        // Derived the same way the flow derives it, not transcribed, since spelling a name twice invites drift.
         conversationId: pushFixConversationId(run.repo, fixSignature(run.output)),
     });
-    expect(flow.proposedFix.value).toEqual(expect.any(Object));
 });
 
 // One broken tree raises this question on every press of Push; the id derived from the failure lets a second
@@ -382,11 +529,11 @@ test(`two runs of the same failure propose the same conversation, and a differen
     // Read back before the next `load()`: the suggestion module's mock survives `resetModules`, so a call read
     // after the next load would wear that load's name.
     const proposedFor = async (output: string): Promise<string | undefined> => {
-        const { flow, finish, suggestion } = await load();
+        const { flow, finish } = await load();
         flow.askSync(`Push`, `3 commits`, PUSH);
         finish({ status: `failed`, output });
         await flush();
-        return vi.mocked(suggestion.composeSession).mock.calls.at(-1)?.[0].conversationId;
+        return flow.proposedFix.value?.base;
     };
     const digest = (count: number, seconds: number, steps: string) =>
         [`verify-push: ${count} of 6 steps failed in ${seconds}s: ${steps}`, ...steps.split(`, `).map((step) => `  ✗ ${step}  exit 1`)].join(`\n`);
@@ -416,8 +563,9 @@ test(`a push the remote rejected asks with git's reason and proposes no fix`, as
         command: `git push origin main`,
         detail: `was rejected by the remote: ! [rejected] main -> main (fetch first).`,
     });
-    expect(suggestion.composeSession).not.toHaveBeenCalled();
     expect(flow.proposedFix.value).toBeUndefined();
+    await flow.startFix();
+    expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
 
 test(`a push that hit its ceiling is named as timed out, in the verb the user clicked`, async () => {
@@ -434,6 +582,8 @@ test(`a push that hit its ceiling is named as timed out, in the verb the user cl
         command: `git push origin main`,
         detail: `never finished: it hit its time limit and was killed.`,
     });
+    expect(flow.proposedFix.value).toBeUndefined();
+    await flow.startFix();
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
 
@@ -446,6 +596,7 @@ test(`a push with no check configured is still handed to an agent when the hook 
     flow.askSync(`Push`, `3 commits`, PUSH);
     finish({ status: `passed` });
     await flush();
+    await flow.startFix();
     // The rule is removed here since the mock can't vary per test; the model reaching the proposal is the assertion.
     expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high` }));
 });

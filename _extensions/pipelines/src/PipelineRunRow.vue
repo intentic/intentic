@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { isPipelineInFlight, type AgentSummary, type PipelineRun } from "@intentic/sandbox-contract";
+import {
+    type AgentSummary,
+    ciFixConversationId,
+    fixAttemptOf,
+    type FixResume,
+    fixStance,
+    isPipelineInFlight,
+    type PipelineRun,
+} from "@intentic/sandbox-contract";
 import {
     AgentRunButton,
+    type AgentRunAttempt,
     type AgentRunChoice,
     appLink,
     Avatar,
     Button,
     DiffStat,
     DisclosureRow,
+    fixStanceLook,
     formatTimestamp,
     Icon,
     Modal,
@@ -15,9 +25,8 @@ import {
     timeAgo,
     useAgentRunPick,
 } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { type ComponentPublicInstance, computed, ref } from "vue";
 import type { CiFix } from "./ciFixes";
-import { fixStance } from "./fixStance";
 import { host } from "./host";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
@@ -49,7 +58,8 @@ const props = defineProps<{
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
     cancel: [run: PipelineRun];
-    fix: [run: PipelineRun, pick: AgentRunChoice | undefined];
+    // `resume` is the verb the caret's panel was ended with over an attempt that already exists; absent is the plain press.
+    fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined];
 }>();
 
 // vue-query caches per queryKey; each row owns its own entry, so remounts are free.
@@ -73,8 +83,13 @@ const duration = computed(() => formatDuration(props.run.durationSeconds));
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
 // Per-row model choice for this failure's fix, seeded via the host so button and daemon agree on cost. Cleared once
-// started, so the next fix reopens on the standing list.
-const fixModel = useAgentRunPick(() => host().models, `pipeline-fix`);
+// started, so the next fix reopens on the standing list. The attempt already on this failure rides into the picker
+// (read at open, off the fleet as it stands then), so its bar ends in Continue / Start over.
+const fixModel = useAgentRunPick(
+    () => host().models,
+    `pipeline-fix`,
+    () => attemptOnOffer.value,
+);
 
 const api = host();
 const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => void } =>
@@ -86,16 +101,50 @@ const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => 
 // left to report.
 const fixState = computed(() => {
     const agent = props.fix;
-    return agent === undefined ? undefined : { ...fixStance(agent), link: agentLink(agent.id) };
+    if (agent === undefined) {
+        return undefined;
+    }
+    const stance = fixStance(agent);
+    return { ...stance, ...fixStanceLook(stance.kind), link: agentLink(agent.id) };
 });
 // Branch's agent for a row with none of its own, in the same slot; its stance distinguishes a running turn from one
 // parked on a question.
 const branchState = computed(() => {
     const other = props.branchFix;
-    return other === undefined ? undefined : { run: other.run, stance: fixStance(other.agent), link: agentLink(other.agent.id) };
+    if (other === undefined) {
+        return undefined;
+    }
+    const stance = fixStance(other.agent);
+    return { run: other.run, stance: { ...stance, ...fixStanceLook(stance.kind) }, link: agentLink(other.agent.id) };
 });
 // A landed fix hands the row's weight to Re-run: it's in the workspace, proving it is what's left.
 const proven = computed(() => fixState.value?.kind === `landed`);
+
+// Which attempt at this run the row's agent is (conversation-ids.ts): 1 wears the bare id, later ones their number.
+const attemptNumber = computed(() =>
+    props.fix === undefined ? undefined : fixAttemptOf(ciFixConversationId(props.run.repo, props.run.runId), props.fix.id),
+);
+// Only worth a word past the first: "attempt 1" on every chip would be noise, "attempt 3" is the story.
+const attemptWord = computed(() => (attemptNumber.value === undefined || attemptNumber.value <= 1 ? undefined : `attempt ${attemptNumber.value}`));
+/* THE ATTEMPT AS THE PICKER'S BAR NAMES IT (AgentRunAttempt): which, on what, how it stands; and whether it can be
+ * continued from there, which only an ENDED one can. A landed attempt is history rather than an attempt on offer:
+ * the run red again after it is a new failure wearing the same name. */
+const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
+    const state = fixState.value;
+    if (state === undefined || state.kind === `landed`) {
+        return undefined;
+    }
+    const files = props.fix?.diff?.files ?? 0;
+    const summary = [
+        `Attempt ${attemptNumber.value ?? 1}`,
+        props.fix?.model,
+        state.label.toLowerCase(),
+        files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`} on its branch`,
+    ]
+        .filter((part) => part !== undefined)
+        .join(` · `);
+    return { summary, continuable: state.retry };
+});
 
 // Why the button is quiet: superseded (failure is over), behind a newer open failure (not the run to fix), or a branch
 // agent already exists. The caret, not this text, says what a fix will spend.
@@ -156,7 +205,7 @@ const fixFacts = computed<string | undefined>(() => {
     }
     const files = agent.diff?.files ?? 0;
     return (
-        [fixSince.value, agent.model, spend.value, files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`}`]
+        [attemptWord.value, fixSince.value, agent.model, spend.value, files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`}`]
             .filter((part) => part !== undefined)
             .join(` · `) || undefined
     );
@@ -188,8 +237,23 @@ const startHint = computed<string | undefined>(
 );
 
 const startFix = (): void => {
-    emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined);
+    emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined, fixModel.resume.value);
     fixModel.clear();
+};
+
+// "Start over" beside a chip for an attempt still in play opens the picker rather than acting: the panel names the
+// attempt, and its own button is the press that stops and files it away. No one-click path retires a working agent.
+const startOver = ref<ComponentPublicInstance>();
+const openStartOver = (): void => {
+    const el = startOver.value?.$el as HTMLElement | undefined;
+    if (el === undefined) {
+        return;
+    }
+    void fixModel.choose(el, `Start over`).then((committed) => {
+        if (committed) {
+            startFix();
+        }
+    });
 };
 </script>
 
@@ -326,12 +390,32 @@ const startFix = (): void => {
                             />
                         </a>
                         <!--
-                            Primary only on the branch's open failure with no agent already on it; every other red row stays at Re-run's weight. 'Try
-                            again' continues the same conversation (id derives from the run) rather than starting a rival agent.
+                            Beside a chip for an attempt still in play: the one decision left from here, and it only opens the picker, whose bar
+                            is the press that stops and files the attempt away (openStartOver). Not offered once the fix has landed, which is history.
+                        -->
+                        <Button
+                            v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
+                            ref="startOver"
+                            label="Start over"
+                            size="small"
+                            severity="secondary"
+                            text
+                            icon-pos="right"
+                            :loading="busy === actionKey"
+                            :disabled="busy !== undefined"
+                            v-tooltip.top="`Set this attempt aside and start a fresh one — opens the picker first`"
+                            @click="openStartOver"
+                        >
+                            <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
+                        </Button>
+                        <!--
+                            Primary only on the branch's open failure with no agent already on it; every other red row stays at Re-run's weight.
+                            'Continue' carries on in the same conversation (id derives from the run) rather than starting a rival agent; its caret's
+                            panel is where Start over lives, since deviating from the safe press should cost a look at what it replaces.
                         -->
                         <AgentRunButton
                             v-else-if="run.status === `failed`"
-                            :label="fixState?.retry === true ? `Try again` : `Fix with agent`"
+                            :label="fixState?.retry === true ? `Continue` : `Fix with agent`"
                             :picker="fixModel"
                             :severity="loud ? undefined : `secondary`"
                             :text="!loud"

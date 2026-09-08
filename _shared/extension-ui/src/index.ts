@@ -7,10 +7,15 @@
 export {
     // `useAgentRunPick` takes `api.models` as an argument, so the kit itself stays free of the extension API.
     AgentRunButton,
+    type AgentRunAttempt,
     type AgentRunChoice,
     type AgentRunPicker,
     type ModelPicking,
     useAgentRunPick,
+    // How a fix stance (the contract's `fixStance`) is drawn, so a chip beside a red row wears the same icon and tint
+    // as the same state on the shell's own surfaces.
+    type FixStanceLook,
+    fixStanceLook,
     // Use over PrimeVue's Popover in a popped-out panel: Popover measures against the opener's window and can open
     // off-screen, unclosable.
     AnchoredOverlay,

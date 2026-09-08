@@ -26,6 +26,17 @@ export const checkFixPrompt = (run: CommandRun): string =>
         run.output,
     );
 
+/* WHAT A CONTINUED ATTEMPT IS TOLD, as against the opening prompt above: the check ran again and here is its current
+ * tail. The conversation already holds the situation and the ask; sending them a second time (which is what a second
+ * press used to do) reads to the model as a fresh assignment and to the reader as a transcript that repeats itself.
+ * A nudge says only what changed and asks it to carry on. */
+export const checkNudgePrompt = (run: CommandRun): string =>
+    proposal(
+        `\`${run.command}\` ran again and ${ending(run)} The push is still blocked on it.`,
+        `Carry on from where you left off: the tail below is the current output, and it is what has to pass. Re-run \`${run.command}\` yourself to confirm.`,
+        run.output,
+    );
+
 // The hook is the workspace's gate, so its own refusal is the one about the code. Several repos refused in
 // one push become sections of one turn; `git push --dry-run` confirms without sending, since git still runs the hook.
 export const pushFixPrompt = (runs: readonly PushRun[]): string => {
@@ -33,6 +44,17 @@ export const pushFixPrompt = (runs: readonly PushRun[]): string => {
         proposal(
             `\`${run.command}\` in ${run.repo} was refused by the repository's own pre-push hook (exit ${run.exitCode ?? `unknown`}). The hook is the workspace's gate, so this is what blocks the push, and it is what CI would have said a few minutes later.`,
             `Find the cause and fix it, then confirm the hook passes: \`git push --dry-run\` in ${run.repo} runs it without sending anything.`,
+            run.output,
+        );
+    return runs.map(one).join(`\n\n---\n\n`);
+};
+
+// The continued-attempt counterpart of pushFixPrompt: the hook refused it again, here is what it said this time.
+export const pushNudgePrompt = (runs: readonly PushRun[]): string => {
+    const one = (run: PushRun): string =>
+        proposal(
+            `\`${run.command}\` in ${run.repo} was refused by the pre-push hook again (exit ${run.exitCode ?? `unknown`}).`,
+            `Carry on from where you left off: the tail below is what the hook said this time. \`git push --dry-run\` in ${run.repo} confirms without sending anything.`,
             run.output,
         );
     return runs.map(one).join(`\n\n---\n\n`);

@@ -54,6 +54,13 @@ mismatch is a type error rather than a runtime surprise.
   daemon may REFUSE: a `credential_offer` is addressed to the named people the owner's gate lists rather than
   to whoever holds a session, so a reply that reaches this derivation at all is one the daemon already accepted
   from an approver, and who that was rides on the `credential_receipt` frame (the reply carries no sender).
+- [src/state/fix-stance.ts](src/state/fix-stance.ts) and [src/state/fix-attempt-plan.ts](src/state/fix-attempt-plan.ts):
+  what became of the agent a surface sent after a failure (working, needs you, fix ready, landed, waiting, ended),
+  and what a press on that surface does about it (open attempt 1, continue the ended attempt, start over, or wait
+  for the one in play). Read here rather than in any one surface, so the editor's push question, the pipelines
+  board and the daemon's `/ci/fix` route describe one agent one way and never race a second one beside it. The
+  attempt ids are [src/ids/conversation-ids.ts](src/ids/conversation-ids.ts): the failure's derived id for
+  attempt 1, then `-attempt2` on, so every attempt keeps its own transcript, cost and URL.
 - [src/workspace-state.ts](src/state/workspace-state.ts) and [src/runtime-state.ts](src/state/runtime-state.ts): which
   changed file, and which moved runtime thing, makes which browser view stale. The workspace table also assigns
   each daemon-owned path its export lifecycle (`carry`, `secret`, `identity`, or `derived`), including the

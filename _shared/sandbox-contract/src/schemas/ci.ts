@@ -130,6 +130,14 @@ export const CiFixParamSchema = CiRunParamSchema.extend({
     pick: AgentRunPickSchema.describe(
         "Which model to open the conversation on, when somebody chose one. Leave it out for the sandbox's own choice, which is the ordinary path.",
     ),
+    // The verb the picker's bar was ended with, when an attempt already exists (state/fix-attempt-plan.ts). Left out,
+    // an ended attempt is continued and a fresh press opens attempt 1; one still in play answers CONFLICT.
+    mode: z
+        .enum(["continue", "start-over"])
+        .optional()
+        .describe(
+            "What to do about the attempt already made at this run, when there is one. `continue` carries on in that conversation; `start-over` stops it if running, files it away, and opens the next attempt on a clean worktree. Leave it out for the plain press: an attempt that ended is continued, a fresh failure gets attempt 1, and one still in play answers CONFLICT with why.",
+        ),
     force: z
         .boolean()
         .optional()

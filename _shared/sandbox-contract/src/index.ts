@@ -100,6 +100,8 @@ export * from "./state/workspace-state.js";
 export * from "./state/runtime-state.js";
 export * from "./state/state-portability.js";
 export * from "./state/history-state.js";
+export * from "./state/fix-stance.js";
+export * from "./state/fix-attempt-plan.js";
 // Provider vocabulary bottom-up: agent-runtimes, provider-specs, agent-catalog; three modules since the dependency
 // points one way.
 export * from "./models/agent-runtimes.js";

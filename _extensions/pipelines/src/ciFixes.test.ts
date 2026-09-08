@@ -1,4 +1,4 @@
-import { type AgentSummary, ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
+import { type AgentSummary, ciFixConversationId, fixAttemptId, type PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 
@@ -34,6 +34,16 @@ test("a run finds the agent whose conversation was derived from it", () => {
     const fixes = fixesByRun([failed, other], [fixAgent(failed)]);
     expect(fixes.get(failed)?.id).toBe(`ci-fix-web-41`);
     expect(fixes.has(other)).toBe(false);
+});
+
+// A failure tried more than once is represented by its latest attempt: the one the reader started last is the one
+// they are waiting on, and the earlier ones are in the archive or on their way there.
+test("a run with several attempts is represented by the latest", () => {
+    const failed = run({ runId: 41 });
+    const first = fixAgent(failed, { status: `stopped` });
+    const second: AgentSummary = { ...fixAgent(failed), id: fixAttemptId(first.id, 2) };
+    expect(fixesByRun([failed], [first, second]).get(failed)?.id).toBe(second.id);
+    expect(fixesByRun([failed], [second, first]).get(failed)?.id).toBe(second.id);
 });
 
 // The roster is the whole fleet; an agent that is not one of this board's fixes must never be joined to a row.

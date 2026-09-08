@@ -32,7 +32,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 - [src/useCiFixes.ts](src/useCiFixes.ts): the fix agents, read off the fleet roster, quickly while one is moving
   and at the board's own pace otherwise.
 - [src/ciFixes.ts](src/ciFixes.ts): which failure each of them belongs to, and which branch already has one.
-- [src/fixStance.ts](src/fixStance.ts): what an agent's state says on a red row, in the fleet's own words.
+- [src/ciFixes.ts](src/ciFixes.ts): joins a row to the agent on its failure by re-deriving the conversation id, latest
+  attempt first; what that agent's state says on the row is the contract's `fixStance`, in the fleet's own words.
 
 ## How it fits
 
@@ -105,11 +106,22 @@ inside the view rather than gating the tile.
   which agent was started for which failure; the fleet roster is the record, and a roster is keyed by id, so an
   id nobody can re-compute is a record nobody can read. It used to carry a timestamp and a counter, so the board
   could only ever offer "Fix with agent", to every browser, forever, including while an agent was parked on a
-  question nobody would see. Deriving it also makes one failure one conversation: a second press continues that
+  question nobody would see. Deriving it also makes one failure one LIVE conversation: a second press continues that
   agent on its branch instead of racing a second one beside it.
-- ONE SLOT ON THE ROW FOR THE AGENT, whichever half of its life it is in: the button becomes a state chip
-  (`fixStance.ts`), and only an ENDED fix turns back into a press, labelled "Try again". The words are the fleet
-  board's own, a card one click away must not describe the same agent differently.
+- ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. A failure can be tried more than once — the model was wrong for it,
+  or ran out of capacity — and each attempt is a conversation of its own (`<run id>`, then `<run id>-attempt2`,
+  `-attempt3`: the contract's `fixAttemptId`), so starting over never rewrites a record some other window is
+  showing and every attempt keeps its own transcript, cost and URL. The row is represented by the LATEST attempt;
+  the ones before it are in the archive, filed there by the act of starting the next. What a press does is one
+  rule shared with the shell's push question and the daemon's own `/ci/fix` route (the contract's
+  `planFixAttempt`): nothing live opens attempt 1, an ended attempt is continued with a nudge rather than the
+  whole opening prompt, "Start over" stops the live one if running, archives it, and opens the next on a clean
+  worktree, and an attempt still in play answers CONFLICT rather than a second agent.
+- ONE SLOT ON THE ROW FOR THE AGENT, whichever half of its life it is in: the button becomes a state chip (the
+  contract's `fixStance`, drawn by the kit's `fixStanceLook`), beside a quiet "Start over" that only opens the
+  picker; an ENDED fix turns back into a press, labelled "Continue", whose caret's panel names the attempt and
+  offers Start over beside it. The words are the fleet board's own, a card one click away must not describe the
+  same agent differently, and they are in the contract so the push card in the shell reads the very same ones.
 - THE CHIP IS THE REPORT while a fix is still in play: the state, its age, the spend and the diff used to be
   repeated as a line of facts above the job graph, so every open row paid a diagram's worth of height to say a
   second time what the header had already said once. Now the chip carries the word and the age always, the money

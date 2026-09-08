@@ -201,7 +201,10 @@ export type ConversationView = ReturnType<typeof conversationView>;
 // The pane's own view, injected rather than threaded through props, so a tool card in one pane answers for its own
 // chat, not the focused one. Absent means mounted outside a pane, a wiring mistake surfaced at mount rather than
 // silently rendering the wrong chat.
-export const PANE_VIEW: InjectionKey<ConversationView> = Symbol(`chat-pane-view`);
+// `Symbol.for`, not `Symbol()`: a hot reload re-evaluates this module and would mint a fresh key, while the ChatPane
+// already mounted still provides the old one, so every row mounted after the reload threw "outside a ChatPane" until a
+// hard refresh. The global registry hands back the same symbol to every evaluation.
+export const PANE_VIEW: InjectionKey<ConversationView> = Symbol.for(`intentic.chat-pane-view`);
 export const usePaneView = (): ConversationView => {
     const view = inject(PANE_VIEW);
     if (view === undefined) {

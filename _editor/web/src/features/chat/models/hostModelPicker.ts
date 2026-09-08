@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, sendableEffort } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type FixResume, sendableEffort } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { defaultRunSettings, type RunSettingsPatch } from "./pickerRunSettings";
 import { modelLabelFor } from "../accounts/providerCatalog";
@@ -48,6 +48,23 @@ export interface ModelChoice {
     readonly effort?: string;
     readonly thinking?: boolean;
     readonly fast?: boolean;
+    /* WHICH VERB ENDED THE PANEL, for a request that carried an attempt (`attempt` below): whether the run the
+     * caller is about to start continues that attempt or starts over from it. Absent for every other request,
+     * whose one bar carries the caller's own action. */
+    readonly resume?: FixResume;
+}
+
+/* THE ATTEMPT ALREADY MADE AT THE FAILURE THIS RUN WOULD ANSWER, when there is one. The caller names it in a line
+ * and says whether it can be continued from here; the panel then ends in the verbs that say what happens to it —
+ * Continue, Start over — instead of the caller's own action. With an attempt on the table the press IS a decision
+ * about that attempt, and a bar saying "Fix with agent" over an agent that already tried would hide the one thing
+ * the reader needs to know before spending again; it is exactly how a second press used to resume a session the
+ * reader believed they were replacing. */
+export interface AttemptOnOffer {
+    // One line: which attempt, on what, how it stands — "Attempt 1 · Opus 4.6 · stopped · 3 files on its branch".
+    readonly summary: string;
+    // Continuing is offered only for an attempt that ENDED; one still working or parked is steered from its own chat.
+    readonly continuable: boolean;
 }
 
 /* Everything the panel holds while it is open: the selection, growing as the user edits it, until the commit
@@ -102,6 +119,8 @@ interface ModelRequest extends StagedPick {
      * beside it), and which model a workflow step is pinned to (a pair and an account, nothing more). A control
      * whose answer is dropped on the floor is worse than no control, so the rows are drawn on request. */
     readonly chooseRun?: boolean;
+    // The attempt the bar's verbs are about; absent, the bar carries `action` alone.
+    readonly attempt?: AttemptOnOffer | undefined;
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 
@@ -127,13 +146,15 @@ export const stageModelPick = (patch: StagedPatch): void => {
  * `sendableEffort` against this selection's own thinking, so a panel showing Max beside thinking-off answers
  * with the High it will actually run at rather than a rung nothing will honour. An empty tier is dropped
  * rather than sent as `""`, which no scale has a rung for; a panel carrying run settings never produces one. */
-export const commitModelPick = (): void => {
+export const commitModelPick = (resume?: FixResume): void => {
     const pending = modelRequest.value;
     if (pending === undefined) {
         return;
     }
     const effort = sendableEffort(pending.effort, pending.thinking);
     settleModelPick({
+        // Only a bar drawn over an attempt can name a verb; the answer says which one, or nothing, as the bar did.
+        ...(resume !== undefined && pending.attempt !== undefined ? { resume } : {}),
         provider: pending.provider,
         model: pending.model,
         label: modelLabelFor(pending.provider, pending.model),

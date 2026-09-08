@@ -62,6 +62,7 @@ export const appLink = m["appLink"];
 export const browserOwnsClick = m["browserOwnsClick"];
 export const clipboardOf = m["clipboardOf"];
 export const errorMessage = m["errorMessage"];
+export const fixStanceLook = m["fixStanceLook"];
 export const formatBytes = m["formatBytes"];
 export const formatDate = m["formatDate"];
 export const formatDateTime = m["formatDateTime"];

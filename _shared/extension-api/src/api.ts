@@ -135,6 +135,9 @@ export interface PickedModel {
     readonly effort?: string | undefined;
     // What the shell calls that tier ("X-High"); absent whenever `effort` is.
     readonly effortLabel?: string | undefined;
+    /* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start
+     * over from it. Absent when the picker was opened over no attempt, or ended by a bar that carried `action`. */
+    readonly resume?: "continue" | "start-over" | undefined;
     /* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. Three states and not two:
      * absent means nobody said, and the turn goes out with no thinking field so the model's own default decides,
      * which is NOT the same as `false`. The distinction is load-bearing — Claude refuses its top effort tier
@@ -330,6 +333,11 @@ export interface IntenticApi {
              * controls whose answers it drops, which is worse than showing none. Every <AgentRunButton> asks for
              * them through `useAgentRunPick`, so a surface using that gets them already. */
             readonly chooseRun?: boolean;
+            /* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and
+             * whether it can be continued from here. Given, the panel's bar ends in the verbs about that attempt —
+             * Continue, Start over — rather than in `action`, and the answer says which was pressed (`resume`).
+             * A run button beside a fix that already exists passes this through `useAgentRunPick`. */
+            readonly attempt?: { readonly summary: string; readonly continuable: boolean } | undefined;
         }): Promise<PickedModel | undefined>;
     };
     // Navigates the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").

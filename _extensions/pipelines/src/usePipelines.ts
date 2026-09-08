@@ -1,4 +1,4 @@
-import { type CiFixResponse, CiFixResponseSchema, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
+import { type CiFixResponse, CiFixResponseSchema, type FixResume, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -40,8 +40,18 @@ export function usePipelines() {
     });
     // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
     // own named default; effort travels with the model so a pick can't silently drop to the provider's default tier.
+    // `mode` is the verb the picker's bar was ended with over an attempt that already exists; absent is the plain
+    // press, which the daemon reads by the same rule the push card does (contract, planFixAttempt).
     const fix = useMutation({
-        mutationFn: async ({ run, pick }: { run: PipelineRun; pick?: AgentRunChoice | undefined }): Promise<CiFixResponse> =>
+        mutationFn: async ({
+            run,
+            pick,
+            mode,
+        }: {
+            run: PipelineRun;
+            pick?: AgentRunChoice | undefined;
+            mode?: FixResume | undefined;
+        }): Promise<CiFixResponse> =>
             CiFixResponseSchema.parse(
                 await api.sandbox.json(`/ci/fix`, {
                     method: `POST`,
@@ -50,6 +60,7 @@ export function usePipelines() {
                         repo: run.repo,
                         runId: run.runId,
                         ...(pick === undefined ? {} : { pick: runPickOf(pick) }),
+                        ...(mode === undefined ? {} : { mode }),
                     }),
                 }),
             ),

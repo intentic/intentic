@@ -1,6 +1,6 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { fixStance } from "./fixStance";
+import { fixStance } from "./fix-stance.js";
+import type { AgentSummary } from "../schemas/agents.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
@@ -17,7 +17,6 @@ const agent = (over: Partial<AgentSummary> = {}): AgentSummary => ({
 test("a live turn reads as work in progress, and asks nothing of the reader", () => {
     const stance = fixStance(agent({ status: `running` }));
     expect(stance.kind).toBe(`working`);
-    expect(stance.spin).toBe(true);
     expect(stance.ongoing).toBe(true);
     expect(stance.retry).toBe(false);
 });
@@ -91,10 +90,10 @@ test("a stopped turn says so, and offers the press again", () => {
     expect(stance.retry).toBe(true);
 });
 
-// An unknown status can arrive from a newer daemon; the stance must still draw rather than crash on `undefined.icon`.
-test("an unknown ending still produces a drawable stance", () => {
+// An unknown status can arrive from a newer daemon; the stance must still read rather than crash on a missing ending.
+test("an unknown ending still produces a stance", () => {
     const stance = fixStance(agent({ status: `teleported` as AgentSummary["status"] }));
     expect(stance.kind).toBe(`ended`);
     expect(stance.label).toBe(`Agent stopped`);
-    expect(stance.icon).toBe(`exclamation-triangle`);
+    expect(stance.retry).toBe(true);
 });

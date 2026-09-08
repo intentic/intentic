@@ -1,5 +1,4 @@
-import { type AgentSummary, ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
-import { fixStance } from "./fixStance";
+import { type AgentSummary, ciFixConversationId, fixStance, latestFixAttempt, type PipelineRun } from "@intentic/sandbox-contract";
 
 // Joins a fix agent to its run by re-deriving the conversation id (conversation-ids.ts); nothing else records the
 // pairing. Keyed by the run object, like other cross-run readings (ciStreaks). Also derives a branch's ongoing fix, so
@@ -13,14 +12,14 @@ export interface CiFix {
 export const branchKey = (run: PipelineRun): string => `${run.repo}\n${run.branch}`;
 
 // Fix agents filed under the runs they started from; an agent whose run has scrolled out of the board's window simply
-// has no row here.
+// has no row here. A failure may have had several ATTEMPTS (conversation-ids.ts, fixAttemptId): the latest speaks for
+// it, since every earlier one was set aside by the act of starting a later one.
 export const fixesByRun = (runs: readonly PipelineRun[], agents: readonly AgentSummary[]): Map<PipelineRun, AgentSummary> => {
-    const byId = new Map(agents.map((agent) => [agent.id, agent]));
     const fixes = new Map<PipelineRun, AgentSummary>();
     for (const run of runs) {
-        const agent = byId.get(ciFixConversationId(run.repo, run.runId));
-        if (agent !== undefined) {
-            fixes.set(run, agent);
+        const latest = latestFixAttempt(ciFixConversationId(run.repo, run.runId), agents);
+        if (latest !== undefined) {
+            fixes.set(run, latest.agent);
         }
     }
     return fixes;

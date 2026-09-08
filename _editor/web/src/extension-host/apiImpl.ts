@@ -482,17 +482,22 @@ export const createExtensionApi = (
                 }),
             pick: async (options) => {
                 const choice = await shellModelPicking().pick(options);
-                return choice === undefined
-                    ? undefined
-                    : named({
-                          provider: choice.provider as AgentProvider,
-                          model: choice.model,
-                          account: choice.account,
-                          harness: choice.harness as AgentHarness | undefined,
-                          effort: choice.effort,
-                          thinking: choice.thinking,
-                          fast: choice.fast,
-                      });
+                if (choice === undefined) {
+                    return undefined;
+                }
+                return {
+                    ...named({
+                        provider: choice.provider as AgentProvider,
+                        model: choice.model,
+                        account: choice.account,
+                        harness: choice.harness as AgentHarness | undefined,
+                        effort: choice.effort,
+                        thinking: choice.thinking,
+                        fast: choice.fast,
+                    }),
+                    // The verb the panel ended with, for a picker opened over an attempt; `named` knows nothing of it.
+                    ...(choice.resume !== undefined ? { resume: choice.resume } : {}),
+                };
             },
         },
         navigate: (path) => {

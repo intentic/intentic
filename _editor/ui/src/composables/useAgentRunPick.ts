@@ -38,6 +38,17 @@ export interface AgentRunChoice {
      * Absent ⇒ nothing chosen, and the model's own default answers, which is not the same as `false`. */
     readonly thinking?: boolean | undefined;
     readonly fast?: boolean | undefined;
+    /* WHAT THE PRESS DOES TO THE ATTEMPT ALREADY MADE, when the panel was opened over one (`attempt` on the pick):
+     * continue it, or start over from it. Absent otherwise, and absent from `sameChoice` on purpose — it is not a
+     * deviation from the standing order, it is the verb the run was started with, read off `resume` below. */
+    readonly resume?: "continue" | "start-over" | undefined;
+}
+
+/* THE ATTEMPT A RUN BUTTON STANDS BESIDE, when there is one: a line naming it, and whether it can be continued from
+ * here. Handed to the picker so its bar ends in the verbs about that attempt rather than the button's own label. */
+export interface AgentRunAttempt {
+    readonly summary: string;
+    readonly continuable: boolean;
 }
 
 /* WHETHER TWO SELECTIONS WOULD START THE SAME RUN, which is the only question `overridden` is really asking.
@@ -94,6 +105,8 @@ export interface ModelPicking {
          * answer is dropped is worse than no control, so the rows are drawn only for a caller that says it
          * carries the fields. This composable always does. */
         readonly chooseRun?: boolean;
+        // The attempt the bar's verbs are about (AgentRunAttempt); absent, the bar carries `action` alone.
+        readonly attempt?: AgentRunAttempt | undefined;
     }): Promise<AgentRunChoice | undefined>;
 }
 
@@ -113,23 +126,31 @@ export interface AgentRunPicker {
      * starting it are one act, so the press that ends the panel is the press that spends the money. False is a
      * dismissal — Escape, a click outside, the sheet's backdrop — and changes nothing at all. */
     readonly choose: (anchor: HTMLElement, action: string) => Promise<boolean>;
+    /* THE VERB THE PANEL ENDED WITH, for the run the caller is about to start: continue the attempt it was opened
+     * over, or start over from it. Undefined for a press on the primary half and for a panel opened over no
+     * attempt, which is what leaves the caller's own default in force. Cleared with the pick. */
+    readonly resume: ComputedRef<"continue" | "start-over" | undefined>;
     // Back to the standing setting, called once a run has been started with the pick, so the next one on the
     // same row does not silently inherit a choice made for a different failure.
     readonly clear: () => void;
 }
 
-// Back to the standing setting, called once a run starts, so the next press doesn't inherit this pick.
-export function useAgentRunPick(models: () => ModelPicking, role: string): AgentRunPicker {
+// Back to the standing setting, called once a run starts, so the next press doesn't inherit this pick. `attempt` is
+// read at the moment the caret opens, since the attempt beside a row changes with the fleet while the row stands.
+export function useAgentRunPick(models: () => ModelPicking, role: string, attempt?: () => AgentRunAttempt | undefined): AgentRunPicker {
     const picked = ref<AgentRunChoice | undefined>(undefined);
     const standing = computed<AgentRunChoice>(() => models().agentRun(role));
     const model = computed<AgentRunChoice>(() => picked.value ?? standing.value);
     return {
         model,
         overridden: computed(() => picked.value !== undefined && !sameChoice(picked.value, standing.value)),
+        resume: computed(() => picked.value?.resume),
         choose: async (anchor: HTMLElement, action: string): Promise<boolean> => {
+            const over = attempt?.();
             const next = await models().pick({
                 anchor,
                 action,
+                ...(over !== undefined ? { attempt: over } : {}),
                 // Every surface that presses this button sends the knobs on with the model (the daemon fills a
                 // pinned entry's own in only for a run that named neither), so the rows are always offered here.
                 chooseRun: true,

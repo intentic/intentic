@@ -109,7 +109,11 @@ survive reconnects. Its subsystems:
   **Pipelines** rail view ([\_extensions/pipelines](../../_extensions/pipelines)) polls: backfilled over the
   vendors' REST APIs when stale, so the view has history even where webhooks never registered. Row actions
   proxy rerun/cancel to the vendor, and **Fix with agent** (`POST /ci/fix`) opens an isolated conversation
-  seeded with the failed jobs' log tails: a fleet card like any other agent.
+  seeded with the failed jobs' log tails: a fleet card like any other agent. A failure can be tried more than
+  once: each attempt is its own conversation, named after the run and then numbered (`-attempt2`), and the
+  route continues an ended attempt, refuses while one is in play, or on `mode: start-over` stops and archives
+  it before opening the next ([ci/fix-attempts.ts](../../_sandbox/sandbox/src/ci/fix-attempts.ts)), by the
+  same rule the editor's push question reads (the contract's `planFixAttempt`).
 - **Push notifications**: the daemon is the sender, because it is the only tier that knows what the agent is
   doing ([push/](../../_sandbox/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
   subscribed browser, stored on the **history volume** rather than under `/work/.intentic`: the private key can

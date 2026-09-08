@@ -1,8 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type AgentTurn, ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
+import { ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { stopTurn } from "../agent/anchors/agent-steering.js";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
+import { turnRunOf } from "../agent/run/turn/turn-runs.js";
+import { archiveAgents } from "../agents/registry/archive.js";
+import { startFixAttempt } from "./fix-attempts.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
@@ -130,27 +134,57 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 `You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
-            // Derived from the run, not minted, so the board can tell an agent is on this failure via the same id.
-            const conversationId = ciFixConversationId(input.repo, input.runId);
-            const turn: AgentTurn & { conversationId: string } = {
-                prompt,
-                conversationId,
-                isolated: true,
-                // True regardless of a caret pick: it names the turn's origin, not whether a model was chosen.
-                unattended: true,
-                runRole: `pipeline-fix`,
-                // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness, effort,
-                // thinking, fast), so there is nothing to translate and nothing that can be forgotten here.
-                ...input.pick,
-                title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
-            };
-            // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired.
-            const started = await startConversationTurn(services, wake, turn);
-            if (started === undefined) {
-                // undefined means the conversation already has a live turn; report that in words, not as a bug.
-                throw new ORPCError("CONFLICT", { message: "An agent is already working on this run's failure." });
+            // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
+            const nudge = [
+                `The CI failure on "${input.repo}" ${where} is still open, and this conversation is the attempt at it. Your earlier turn ended without landing a fix.`,
+                `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
+            ].join("\n\n");
+            /* ONE FAILURE, MANY ATTEMPTS (fix-attempts.ts): the id is derived from the run, not minted, so the board
+             * can tell an agent is on this failure; a press continues an ended attempt, opens the next one, or is
+             * refused while one is in play, by the same rule the browser's push card reads. The daemon's doors: a
+             * running attempt is stopped and joined before the archive will take it. */
+            const outcome = await startFixAttempt(
+                {
+                    roster: () => services.agents.list(),
+                    archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
+                    stop: async (conversationId) => {
+                        const live = turnRunOf(conversationId);
+                        stopTurn(conversationId);
+                        services.agents.stopping(conversationId, "stopped");
+                        await live?.waitUntilFinished();
+                    },
+                    archive: async (conversationId) => {
+                        const { failed } = await archiveAgents(services, [conversationId], Date.now());
+                        const refused = failed[0];
+                        if (refused !== undefined) {
+                            throw new ORPCError("CONFLICT", { message: `The earlier attempt could not be set aside: ${refused.reason}` });
+                        }
+                    },
+                    // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired.
+                    start: (turn) => startConversationTurn(services, wake, turn),
+                },
+                {
+                    base: ciFixConversationId(input.repo, input.runId),
+                    prompt,
+                    nudge,
+                    title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
+                    turn: {
+                        isolated: true,
+                        // True regardless of a caret pick: it names the turn's origin, not whether a model was chosen.
+                        unattended: true,
+                        runRole: `pipeline-fix`,
+                        // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness,
+                        // effort, thinking, fast), so there is nothing to translate and nothing that can be forgotten.
+                        ...input.pick,
+                    },
+                    resume: input.mode,
+                },
+            );
+            if (outcome.kind === "busy") {
+                // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
+                throw new ORPCError("CONFLICT", { message: outcome.reason });
             }
-            return { conversationId };
+            return { conversationId: outcome.conversationId };
         }),
     };
 };
