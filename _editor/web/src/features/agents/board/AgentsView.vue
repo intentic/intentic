@@ -16,16 +16,7 @@ import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/a
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
 import { canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
-import {
-    boxNameOf,
-    fleetScope,
-    isRemote,
-    openInSandbox,
-    otherFleet,
-    partialAnswer,
-    readingAcross,
-    scopeOffered,
-} from "../fleet/fleetScope";
+import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../fleet/fleetScope";
 import { refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { hold } from "../../../shell/notifications/notifications";
@@ -942,8 +933,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             hundred pixels by the chat panel's drag handle.
             Field sits on equal flex-1 basis-0 flanks so it's the bar's true center, not a leftover space; below the
             lane-stacking width the field takes its own row and the flanks keep the first one.
+            `.view-header .view-header-wrap` (styles.css): this is the board's bar in the app's top row — the one line
+            across the window, the height every other bar has, and inside the desktop app the title bar itself.
         -->
-        <div class="flex min-h-[2.25rem] flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
+        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!--
                     Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look

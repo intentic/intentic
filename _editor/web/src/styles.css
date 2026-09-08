@@ -139,7 +139,8 @@
      * bar of its own — which is every browser, and an older build of the desktop app. Inside the app's
      * frameless window (desktop-app windows.rs) this row IS the title bar, so the bar that ends at the window's
      * right edge reserves this much and the buttons are drawn over it (titleBar.ts finds that bar, and it is
-     * a different one in each layout).
+     * a different one in each layout; a screen with no bar in its top row gets a strip in their place, which
+     * has nothing in it to make room for).
      *
      * Wider than the buttons on purpose: the gap is bar background, which is what the window is dragged by.
      * Without it a chat column whose switcher fills its bar would have no draggable pixel in the whole row.
@@ -153,6 +154,46 @@
 
 [data-frameless] {
     --window-controls-width: calc(var(--window-controls-buttons) + 0.75rem);
+}
+
+/* THE TITLE FILL — what makes the top row READ as the top of a window once the platform's own bar is gone.
+ *
+ * With the frame off, the columns' bars were the title bar in function and nothing else: the explorer's on
+ * canvas, the editor's on card, the chat's on canvas again, and on a screen with no bar at all (the login
+ * page) three buttons floating over artwork. A title bar is the one surface in a window that is allowed to be
+ * darker than everything under it, and that is the whole treatment here: a fill mixed DOWN from the canvas
+ * toward black, so it keeps the scheme's warmth rather than going to a flat #000, and a soft shadow onto the
+ * content below, which is what says "this sits on top of that" without a second line.
+ *
+ * Two mixes because the two schemes want different distances. Dark canvas is already near black, so a title
+ * bar that reads darker has to go most of the way there; a light canvas only needs to be taken down a step,
+ * the way every light desktop's title bars are a shade greyer than the document under them.
+ *
+ * WHO WEARS IT IS DECIDED AT RUNTIME (shell/window/WindowControls.vue): the bars standing in the window's top
+ * row get `data-title-bar` — never the terminal panel's bar at the bottom or a detail row halfway down, which
+ * wear `.view-header` too — and a screen with no such bar gets a strip drawn in their place. Both paint from
+ * these two properties, which is what keeps the strip on the login page and the row in the workspace the same
+ * object. The skin sets the shadow in its own key (skins/sanctum.css). */
+:root {
+    --title-bar-fill: color-mix(in srgb, var(--color-canvas) 88%, black);
+    --title-bar-shadow: 0 4px 12px -4px rgb(0 0 0 / 0.28);
+}
+[data-mode="dark"] {
+    --title-bar-fill: color-mix(in srgb, var(--color-canvas) 55%, black);
+    --title-bar-shadow: 0 4px 14px -4px rgb(0 0 0 / 0.7);
+}
+
+/* Unlayered on purpose: the bars pick their own background with a utility (`bg-card` on the editor's tab
+ * row), and utilities live in a layer, so the fill has to sit outside every layer to win. `background-image:
+ * none` for the same reason — the skin textures `.bg-card` with an image, and a weave on a near-black bar reads
+ * as dirt. `position: relative` + `z-index: 1` are what let the shadow fall ONTO the content below: without
+ * them the column's body, painted later, would cover it. */
+[data-frameless] .view-header[data-title-bar] {
+    position: relative;
+    z-index: 1;
+    background-color: var(--title-bar-fill);
+    background-image: none;
+    box-shadow: var(--title-bar-shadow);
 }
 
 /* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's

@@ -559,10 +559,14 @@ const FRAME_EVENT: &str = "intentic-desktop-window";
  * all (no network on a cold start, the platform down, an error page in the webview) draws nothing either, and
  * that window would have no bar, no ×, and no way to be moved off the corner it opened on.
  *
- * Six seconds is chosen against the slow end of a working load rather than the median one. A page that
- * announces itself after the fallback has fired takes the frame straight back off (`chrome_is_up`), so a bad
- * connection costs a flicker; silence costs nothing at all, because the frame is what the user gets. */
-const CHROME_GRACE: Duration = Duration::from_secs(6);
+ * Chosen against the slow end of a working load rather than the median one — and against the page's `load`
+ * event, not its first paint: the page announces itself only once the document has finished loading, because
+ * an `intentic://` navigation started any earlier aborts what the document is still fetching and leaves the
+ * page's renderer in its loading regime for good (environments/desktop.ts `openDesktopLink`). Fonts and the
+ * sign-in script are in that wait. A page that announces itself after the fallback has fired takes the frame
+ * straight back off (`chrome_is_up`), so a bad connection costs a flicker; silence costs nothing at all,
+ * because the frame is what the user gets. */
+const CHROME_GRACE: Duration = Duration::from_secs(8);
 
 /// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built.
 fn arm_frame_fallback(app: &AppHandle) {

@@ -178,7 +178,16 @@
 .entry-plate::after {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 0 auto;
+    /* NO TALLER THAN THE SCREEN. The door's plate runs the full height of the document, and on a window shorter
+       than the page that is more than a screen of four blended gradient layers — which the renderer repaints
+       whole on every frame of a resize. Measured in the app's own dev server: 16.7ms a frame with the scrim
+       held to the viewport, 50ms with it running to the page's foot, and any ONE of the four layers alone is
+       fine at either height; it is the stack over a box taller than the screen that costs. So the scrim stops
+       at the fold. Below it the plate is bare canvas, three parts in 255 lighter than the floor's last row — a
+       seam only a scrolled window shorter than the page can show, and only to someone looking for it. A page
+       that caps the plate to a band (`--plate-reach`) is untouched: its plate was already shorter than this. */
+    height: min(100%, 100dvh);
     background:
         radial-gradient(58% 46% at 50% 34%, rgba(9, 6, 4, 0.78) 0%, rgba(9, 6, 4, 0.62) 42%, rgba(9, 6, 4, 0.3) 72%, transparent 100%),
         linear-gradient(0deg, rgba(9, 6, 4, 0.78) 0%, rgba(9, 6, 4, 0.46) 20%, rgba(9, 6, 4, 0.14) 40%, transparent 60%),

@@ -124,7 +124,17 @@ export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
  * rectangle nobody can move. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag";
 
-export const workDesktopWindow = (verb: DesktopWindowVerb): void => openDesktopLink(`intentic://window?do=${verb}`);
+/* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a
+ * press, and the platform's move loop wants the button still down when it starts. Before the page has loaded
+ * it is dropped rather than deferred — a move loop started after the release is a window glued to the pointer
+ * — and that costs nothing anyone will meet: the window can be dragged the moment the page has loaded, which
+ * is before most people have found the bar. */
+export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
+    if (verb === `drag` && !pageLoaded()) {
+        return;
+    }
+    openDesktopLink(`intentic://window?do=${verb}`);
+};
 
 /* What the app tells the page BACK about the window, on the update banner's channel (a DOM event dispatched by
  * `eval` from Rust) and for the same reason: the maximise button's glyph is a fact about the window, and half
@@ -215,10 +225,37 @@ export const desktopRecreateLink = (slug: string, hash?: string, rollback = fals
     return `intentic://recreate?${params.toString()}`;
 };
 
-// A navigation, not a fetch, since that's what the app intercepts. In a browser with no app it's a silent no-op,
-// which is why every caller shows download links beside it.
+/* `readyState` is "complete" from the moment the document's `load` event is about to fire, which is the one
+ * moment this file cares about (below). */
+const pageLoaded = (): boolean => document.readyState === `complete`;
+
+/* A navigation, not a fetch, since that's what the app intercepts. In a browser with no app it's a silent no-op,
+ * which is why every caller shows download links beside it.
+ *
+ * NEVER BEFORE THE DOCUMENT HAS LOADED — and this is load-bearing, not tidiness. Starting a navigation, even one
+ * the app cancels a millisecond later, aborts whatever the current document is still fetching: the renderer
+ * drops the pending loads, `load` never fires, and the page is left in Chromium's loading regime for the rest
+ * of its life, where every frame costs three to four times what it should. Measured on the login page in the
+ * app's own dev server: 16.7ms a frame on a page that loaded, 50–66ms a frame on one whose load a link had
+ * cut short, with nothing else different. That was the desktop app's "everything is slow": the page's own
+ * title bar announced itself (`intentic://window?do=ready`, WindowControls.vue) from `onMounted`, while the
+ * fonts and the sign-in script were still arriving.
+ *
+ * So a link asked for early waits for `load` and fires then. For the announcement that is invisible — a second
+ * at most, and the app's frame fallback allows for it (windows.rs `CHROME_GRACE`). For a press it is the same
+ * second, on a button pressed while the page was still loading. */
 export const openDesktopLink = (link: string): void => {
-    globalThis.location.href = link;
+    if (pageLoaded()) {
+        globalThis.location.href = link;
+        return;
+    }
+    window.addEventListener(
+        `load`,
+        () => {
+            globalThis.location.href = link;
+        },
+        { once: true },
+    );
 };
 
 // Every sign-in surface funnels through here rather than reimplementing "this webview can't ask Google" each time.

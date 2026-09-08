@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { edgeBar, titleBarGesture } from "./titleBar";
+import { edgeBar, titleBarGesture, topRow } from "./titleBar";
 
 /* The app's top row standing in for a title bar it no longer has (desktop-app windows.rs). Both rules are
  * about geometry the browser only has at runtime, so the pure halves are what is tested here: what a press on
@@ -56,6 +56,40 @@ describe(`titleBarGesture`, () => {
 
         expect(titleBarGesture(row.querySelector(`#prose`), 1, atTop)).toBeUndefined();
         expect(titleBarGesture(null, 1, atTop)).toBeUndefined();
+    });
+
+    /* THE LOGIN PAGE HAS NO BAR, and a window that cannot be moved from its login screen is the bug this
+     * exists for: the strip WindowControls draws across a bar-less top row is a title bar to the gesture, drag
+     * and double-press alike. */
+    it(`drags and maximises from the strip that stands in for a missing bar`, () => {
+        const row = rowOf(`<div class="window-titlebar"></div>`);
+        const strip = row.querySelector(`.window-titlebar`);
+
+        expect(titleBarGesture(strip, 1, atTop)).toBe(`drag`);
+        expect(titleBarGesture(strip, 2, atTop)).toBe(`maximize`);
+    });
+});
+
+describe(`topRow`, () => {
+    const bars = [
+        { name: `explorer`, top: 0, right: 320 },
+        { name: `editor`, top: 0.4, right: 1140 },
+        { name: `chat`, top: 0, right: 1440 },
+        { name: `terminal`, top: 700, right: 1440 },
+        { name: `detail`, top: 236, right: 1140 },
+    ];
+    const edgesOf = (bar: (typeof bars)[number]): { top: number; right: number } => bar;
+
+    /* The bars that wear the title fill are exactly the ones in the top row — a fraction of a pixel of
+     * scaled-display rounding included — and never the terminal's or a detail row's, however much those look
+     * like bars: a title fill halfway down the window is the failure this rule prevents. */
+    it(`names every bar in the top row and none below it`, () => {
+        expect(topRow(bars, edgesOf).map((bar) => bar.name)).toEqual([`explorer`, `editor`, `chat`]);
+    });
+
+    it(`is empty on a screen whose top row has no bar, which is when the strip stands in`, () => {
+        expect(topRow([{ name: `login`, top: 96, right: 1440 }], edgesOf)).toEqual([]);
+        expect(topRow([], edgesOf)).toEqual([]);
     });
 });
 

@@ -185,21 +185,33 @@ bar that is no longer there.
 
 The row does both jobs now: the columns keep their controls, the window's three go at the right end of whichever
 bar reaches the window's edge, and every empty stretch of the row drags the window
-([`_editor/web`'s WindowControls.vue](../web/src/shell/window/WindowControls.vue)). Where the launcher's header
-is an ordinary drag region calling the window API, this face **has no command surface and does not get one for
-this**:
+([`_editor/web`'s WindowControls.vue](../web/src/shell/window/WindowControls.vue)). It also **looks like the top of
+a window**: the bars standing in the top row wear a fill mixed down from the canvas toward black and a soft
+shadow onto the content under them (`data-title-bar`, `styles.css`), and a screen with no bar in its top row —
+the login page, a gate, an error — gets a strip of the same material drawn across it, which drags and
+double-clicks like any bar. Which bars are in the top row is measured, not declared: the terminal panel's bar
+and an agent's detail row wear the same class and must never wear the fill. Where the launcher's header is an
+ordinary drag region calling the window API, this face **has no command surface and does not get one for this**:
 
 - Every press is an `intentic://window?do=…` navigation, **including the drag**: Rust answers it with
   `start_dragging()`, which hands the window to the platform's own move loop — the same call a Tauri drag region
   makes, and asynchronous either way.
+- **No such navigation starts before the page's `load` event** (`environments/desktop.ts` `openDesktopLink`).
+  Starting one — even one this app cancels a millisecond later — aborts whatever the document is still fetching:
+  `load` never fires and the renderer keeps the page in its loading regime for good, at three to four times the
+  cost per frame. That was the first frameless build's "everything is slow": the page announced its bar from
+  `onMounted`, while its fonts and the sign-in script were still arriving. A link asked for early now waits for
+  `load`; a drag asked for early is dropped, because a move loop started after the release is a window glued
+  to the pointer.
 - What comes back is a DOM event dispatched by `eval` (the update banner's channel, and the setup bar's), because
   whether the window is maximised is a fact about the window: `Win+↑`, a drag to the top edge and a snap layout
   all change it without touching that button.
 - **A frameless window whose page draws no bar is a trap**, so the app refuses to be in one. It opens
-  undecorated and waits to hear `intentic://window?do=ready`; if nothing says it within six seconds — an app
+  undecorated and waits to hear `intentic://window?do=ready`; if nothing says it within eight seconds — an app
   newer than the page it loaded, a page that failed to load at all, an offline cold start — it hands the
-  platform's frame back (`arm_frame_fallback`). A page that announces itself later takes the frame off again, so
-  the cost of a slow connection is a flicker rather than a window nobody can move. The other half of the same
+  platform's frame back (`arm_frame_fallback`). Eight rather than six because the announcement now waits for
+  `load`, fonts and third-party scripts included. A page that announces itself later takes the frame off again,
+  so the cost of a slow connection is a flicker rather than a window nobody can move. The other half of the same
   problem is answered in the other direction: the app injects `frameless: true` into the page, and a build whose
   window still has a frame simply never says it, so a page newer than its app draws nothing.
 

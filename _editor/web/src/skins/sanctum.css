@@ -565,6 +565,13 @@
         border-bottom-color: var(--sanctum-rule-strong);
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }
+    /* THE SAME FILLET UNDER THE TITLE BAR. In the desktop app's frameless window the top row wears a darker fill
+     * and a shadow onto the content (styles.css `--title-bar-shadow`); this keeps the fainter gold line under
+     * it, so the seam is still the seam and the shadow is added beneath rather than replacing it. `html` in the
+     * selector because the app's dark-scheme value is declared on the same attribute weight and later. */
+    html[data-skin="sanctum"] {
+        --title-bar-shadow: 0 2px 0 -1px var(--sanctum-whisper), 0 4px 14px -4px rgb(0 0 0 / 0.7);
+    }
 
     /* ── OVERLAYS ─────────────────────────────────────────────────────────────────────────────────────────
      * Opaque, deliberately and without exception. An overlay is the only surface in the app that covers LIVE
