@@ -237,6 +237,9 @@ export class Conversation {
     readonly model = ref<string>(``);
     // Provider/model the app moved this chat FROM when it couldn't run there; cleared by restoreProvider or a pick.
     readonly movedFrom = ref<TurnPick | undefined>();
+    // Model the app moved this chat OFF because its provider stopped offering that id, owed back when the catalog
+    // lists it again (restoreModel). Same provider, so it is not a `movedFrom`; cleared by any pick of the user's own.
+    readonly displacedModel = ref<string | undefined>();
     readonly thinking = ref<boolean>(true);
     // Ask for fast speed on this chat's turns; not seeded from turnDefaults, since fast mode costs more.
     readonly fast = ref<boolean>(false);
@@ -365,6 +368,8 @@ export class Conversation {
         this.model.value = rememberedModelFor(provider);
         this.effortPick.value = turnDefaults.effort.value;
         this.thinking.value = turnDefaults.thinking.value;
+        // A re-seeded draft is starting over on today's picks; whatever a catalog owed the last one is gone with it.
+        this.displacedModel.value = undefined;
         // Born displaced when the pick couldn't run and something else was substituted (see movedFrom).
         const picked = turnDefaults.provider.value;
         this.movedFrom.value = picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
@@ -415,6 +420,8 @@ export class Conversation {
         // Switching back to the session's own runtime restores its account, so the next send resumes it.
         this.account.value = next === this.session.value?.provider ? this.session.value.account : rememberedAccountFor(next);
         this.model.value = rememberedModelFor(next);
+        // The owed model was an id of the provider being left; nothing on the new one can honour it.
+        this.displacedModel.value = undefined;
         // The old segment's live model and context meter don't describe the next turn.
         this.activeModel.value = null;
         this.contextUsage.value = undefined;
@@ -434,8 +441,10 @@ export class Conversation {
         // `pointAt` rather than `selectProvider`: the pair is remembered once below, with the model actually pressed.
         this.pointAt(pick.provider);
         this.model.value = pick.value;
-        // A choice, so nothing is owed back: see selectProvider.
+        // A choice, so nothing is owed back: see selectProvider. Both, since a same-provider pick skips pointAt's own
+        // clearing, and this pick supersedes whatever a catalog moved the chat off.
         this.movedFrom.value = undefined;
+        this.displacedModel.value = undefined;
         rememberPick(pick);
         // A same-provider model swap earns a divider too: it re-reads the whole conversation on a model never seen.
         this.refreshSwitchNotice();
@@ -460,6 +469,33 @@ export class Conversation {
             this.harness.value = pin.harness;
         }
         this.movedFrom.value = undefined;
+        this.displacedModel.value = undefined;
+        this.refreshSwitchNotice();
+    }
+
+    // The app's own model swap, not the user's: this chat's pick is not in the provider's catalog, so it moves to one
+    // the provider does serve and the displaced id is owed back. Never written to the module defaults, and never a
+    // choice — a catalog that lists the pick again gets it restored under the user, who picked it once already.
+    displaceModel(next: string): void {
+        if (next === this.model.value) {
+            return;
+        }
+        // An empty id is not a pick (a fresh chat before its catalog lands, an ACP row), so nothing is owed for it.
+        if (this.model.value !== ``) {
+            this.displacedModel.value ??= this.model.value;
+        }
+        this.model.value = next;
+        this.refreshSwitchNotice();
+    }
+
+    // Hands the pick back now the catalog offers it again; undoes displaceModel and nothing else.
+    restoreModel(): void {
+        const displaced = this.displacedModel.value;
+        if (displaced === undefined) {
+            return;
+        }
+        this.displacedModel.value = undefined;
+        this.model.value = displaced;
         this.refreshSwitchNotice();
     }
 
@@ -843,6 +879,8 @@ export class Conversation {
         this.harness.value = `native`;
         this.account.value = account;
         this.model.value = rememberedModelFor(`claude`);
+        // A restored conversation is a fresh identity in this tab; it inherits no catalog's debt.
+        this.displacedModel.value = undefined;
         this.title.value = title;
         this.activeModel.value = null;
         // Whatever the restored session last ran on, this window never sent it, so no swap here can claim a lost cache.

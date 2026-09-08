@@ -188,6 +188,22 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
+    // The debt a thin catalog left (Conversation.displacedModel): losing it on reload settles the app's substitution as
+    // though the user had picked it, and the pinned model never comes back.
+    it(`restores the model a catalog moved the tab off, and drops one that names nothing`, () => {
+        const stored = (displacedModel: unknown): string =>
+            JSON.stringify({
+                active: `a`,
+                tabs: [{ conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [], queued: [] }],
+            });
+
+        session.set(KEY, stored(`claude-opus-4-6-thinking`));
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `gemini-3.1-pro-low`, displacedModel: `claude-opus-4-6-thinking` });
+
+        session.set(KEY, stored(``));
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`displacedModel`);
+    });
+
     it(`restores the persona the tab acts as, and drops one that names nothing`, () => {
         const stored = (actsAs: unknown): unknown =>
             JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [], queued: [] }] });

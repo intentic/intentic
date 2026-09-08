@@ -367,6 +367,7 @@ export const createOpenCodeService = (
             const token = await usableXaiToken();
             return token === undefined ? [] : await discoverXaiModels(token, fetchImpl);
         },
+        idOf: (id) => id,
         store: modelStore,
         toStored: (ids) => [...ids],
         seed: SEED_XAI_MODELS,

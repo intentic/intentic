@@ -39,6 +39,7 @@ export const createGeminiCatalog = (config: Config, persistPath: string, fetchIm
             config.translator.url !== ""
                 ? discoverGeminiModels(config.translator.url, config.translator.token, fetchImpl).catch((): GeminiModel[] => [])
                 : Promise.resolve<GeminiModel[]>([]),
+        idOf: (model) => model.id,
         store: jsonFile<GeminiModel[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter(isGeminiModel) : undefined),
             fallback: () => [],

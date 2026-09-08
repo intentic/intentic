@@ -82,6 +82,7 @@ export const createMintedCatalog = (input: {
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
         discover,
+        idOf: (model) => model.id,
         store: input.file,
         toStored: (models: readonly Model[]) => [...models],
         seed: input.seed,

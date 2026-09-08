@@ -118,11 +118,24 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
         })),
     };
     providerDefaultModel.value = { ...providerDefaultModel.value, [target]: body.default };
-    // Repoints a model no longer offered (renamed, retired, or a stale alias) to the provider's default.
+    // Moves an open chat off a model this catalog no longer offers (renamed, retired, or a rung the provider has
+    // stopped serving) and back onto it when the next read lists it again. Reversible because the two cases are
+    // indistinguishable from here: a routed channel de-lists a model for as long as it is out of capacity for it, and
+    // a one-way repoint spends the rest of the conversation on a model the user never chose.
     const valid = new Set(body.models.map((entry) => entry.id));
     for (const conversation of conversations.value) {
-        if (conversation.provider.value === target && !valid.has(conversation.model.value)) {
-            conversation.model.value = body.default;
+        if (conversation.provider.value !== target) {
+            continue;
+        }
+        const displaced = conversation.displacedModel.value;
+        // Asked before the repoint, so a catalog that lists the owed pick again hands it back rather than moving the
+        // chat a second time when the row it was parked on is the one that went.
+        if (displaced !== undefined && valid.has(displaced)) {
+            conversation.restoreModel();
+            continue;
+        }
+        if (!valid.has(conversation.model.value)) {
+            conversation.displaceModel(body.default);
         }
     }
     // The remembered pick (not the open chat's model, moved above) is never rewritten from a catalog: a thin catalog

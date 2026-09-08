@@ -498,6 +498,51 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
     });
 
+    // A catalog read that no longer lists this chat's pick moves it off (useChat-catalog); the pick is the user's, so
+    // the move is a loan, not a decision. Displacing one-way is what spent an unchosen model's allowance for the rest
+    // of a conversation whenever a routed channel de-listed a model it was out of capacity for.
+    it(`owes back the model a thin catalog moved this chat off, and hands it back when it returns`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: `claude`, value: `opus` });
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.send(`first`, settings);
+
+        conversation.displaceModel(`haiku`);
+        expect(conversation.model.value).toBe(`haiku`);
+        expect(conversation.displacedModel.value).toBe(`opus`);
+        // Said out loud like any other swap: the next message would run on a model the user never picked.
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Switched to`);
+
+        conversation.restoreModel();
+        expect(conversation.model.value).toBe(`opus`);
+        expect(conversation.displacedModel.value).toBeUndefined();
+        // Back on what the last turn ran, so the divider it raised goes with it.
+        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+    });
+
+    it(`drops the debt the moment the user picks a model of their own`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: `claude`, value: `opus` });
+        conversation.displaceModel(`haiku`);
+
+        conversation.selectModel({ provider: `claude`, value: `sonnet` });
+        expect(conversation.displacedModel.value).toBeUndefined();
+
+        conversation.restoreModel();
+        // A restore has nothing to give back once the user has chosen: their pick stands.
+        expect(conversation.model.value).toBe(`sonnet`);
+    });
+
+    it(`forgets a displaced model when the chat moves to another provider`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: `claude`, value: `opus` });
+        conversation.displaceModel(`haiku`);
+
+        // The owed id belongs to Claude's catalog; nothing on Codex can honour it.
+        conversation.selectProvider(`codex`);
+        expect(conversation.displacedModel.value).toBeUndefined();
+    });
+
     it(`names the allowance the new model spends, when the plan meters it and we have a reading`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);

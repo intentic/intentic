@@ -8,6 +8,8 @@ export interface DiscoveredCatalogOptions<Item, Stored, Value, Args extends unkn
     readonly ttlMs: number;
     // Live source; empty means nothing usable now, so nothing is cached and the next read asks again.
     readonly discover: (...args: Args) => Promise<readonly Item[]>;
+    // The id a row is known by, for the grace window below; the same id a pin names.
+    readonly idOf: (item: Item) => string;
     // The last-known-good file. Absent for a provider with nothing worth keeping across restarts.
     readonly store?: JsonFile<Stored[]> | undefined;
     readonly toStored: (items: readonly Item[]) => Stored[];
@@ -30,10 +32,41 @@ export interface DiscoveredCatalog<Item, Value, Args extends unknown[]> {
     readonly forget: () => void;
 }
 
+// How long a row the live source has stopped listing is still served. A provider that drops a model it served minutes
+// ago is out of capacity or quota for it far more often than it has retired it: Google's channel de-lists a model for
+// exactly as long as it will not serve it. Serving the shrunk list instead moves every chat pinned to that model onto
+// the catalog's default and files the shrunk list as last-known-good, so the pin is held here and the provider is left
+// to answer for its own model. Long enough to ride out a capacity dip, short enough that a genuinely retired id is
+// gone within the hour.
+export const ABSENT_FOR_MS = 30 * 60_000;
+
 export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = []>(
     options: DiscoveredCatalogOptions<Item, Stored, Value, Args>,
 ): DiscoveredCatalog<Item, Value, Args> => {
     let cache: { readonly items: readonly Item[]; readonly value: Value; readonly expiresAt: number } | undefined;
+
+    // Every id this source has published, as it last published it; the grace window is measured off `at`.
+    const published = new Map<string, { readonly item: Item; readonly at: number }>();
+
+    // Stamps what the source just published and hands back that list plus any row still inside the grace window that
+    // this answer has dropped. Graced rows go last, so one can never outrank a row the source still serves.
+    const graced = (items: readonly Item[], now: number): readonly Item[] => {
+        for (const item of items) {
+            published.set(options.idOf(item), { item, at: now });
+        }
+        const live = new Set(items.map(options.idOf));
+        const kept: Item[] = [];
+        for (const [id, held] of published) {
+            if (now - held.at > ABSENT_FOR_MS) {
+                published.delete(id);
+                continue;
+            }
+            if (!live.has(id)) {
+                kept.push(held.item);
+            }
+        }
+        return kept.length === 0 ? items : [...items, ...kept];
+    };
 
     const adopt = (items: readonly Item[]): NonNullable<typeof cache> => {
         cache = { items, value: options.fromLive(items), expiresAt: Date.now() + options.ttlMs };
@@ -51,8 +84,11 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
         if (items.length === 0) {
             return undefined;
         }
-        await persist(items);
-        return adopt(items);
+        // Persisted as served, graced rows included: the file is what a restart opens on, and dropping them there would
+        // undo the window on the next boot.
+        const served = graced(items, Date.now());
+        await persist(served);
+        return adopt(served);
     };
 
     return {
@@ -65,7 +101,13 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
             return options.fromStored(stored.length > 0 ? stored : options.seed);
         },
         live: async (...args) => (await current(...args))?.items ?? cache?.items,
+        // Replaces the list rather than adding to it, so a proved set is the whole answer; the ids are stamped as
+        // published all the same, so a discovery that omits one next is graced like any other drop.
         record: async (items) => {
+            const now = Date.now();
+            for (const item of items) {
+                published.set(options.idOf(item), { item, at: now });
+            }
             await persist(items);
             adopt(items);
         },

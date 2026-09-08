@@ -34,6 +34,7 @@ export const createKimiCatalog = (cliProxy: Pick<CliProxyClient, "models">): Kim
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
         discover: async () => (await cliProxy.models("kimi").catch((): Model[] => [])).filter(isChatModel),
+        idOf: (model) => model.id,
         toStored: (models: readonly Model[]) => [...models],
         seed: SEED_KIMI_MODELS,
         fromLive: toCatalog,

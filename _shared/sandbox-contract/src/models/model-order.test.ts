@@ -96,6 +96,41 @@ test("files a re-served open-weights model on the cheap rung, not at the head of
     ]);
 });
 
+// The Google channel as CLIProxyAPI publishes it: one row per thinking level, ids that agree on nothing. The catalog's
+// head is the default a turn with no pin receives and the row an open chat is repointed to when its own pin goes
+// missing, so which of these leads is a routing decision, not a cosmetic one.
+const ANTIGRAVITY = [
+    "gemini-3.8-flash-high",
+    "gemini-3.6-flash-high",
+    "gemini-3.1-pro-low",
+    "gemini-3-flash",
+    "claude-sonnet-4-6",
+    "gpt-oss-120b-medium",
+    "gemini-3.1-flash-lite",
+    "claude-opus-4-6-thinking",
+    "gemini-3.7-flash-high",
+    "gemini-pro-agent",
+];
+
+test("seats a quiet rung under its own tier's ordinary rows, whatever version its id claims", () => {
+    // Both are Gemini 3.1 Pro; only the quiet one says which level, and only the loud one omits the version. On release
+    // alone the Low row leads the tier and every unpinned Google turn opens on it.
+    expect(["gemini-3.1-pro-low", "gemini-pro-agent"].toSorted(compareUnrankedModelIds)).toEqual(["gemini-pro-agent", "gemini-3.1-pro-low"]);
+    expect(["claude-sonnet-4-6-minimal", "claude-sonnet-4-6"].toSorted(compareModelIds)).toEqual(["claude-sonnet-4-6", "claude-sonnet-4-6-minimal"]);
+    // Only BELOW the default is quiet: a loud row keeps its release, so the newer model still leads its tier.
+    expect(["claude-opus-4-6-thinking", "claude-opus-5"].toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-opus-4-6-thinking"]);
+    expect(["gpt-oss-120b-medium", "gpt-oss-120b-low"].toSorted(compareModelIds)).toEqual(["gpt-oss-120b-medium", "gpt-oss-120b-low"]);
+});
+
+test("hands the Google channel a default that is a frontier row, before and after its Opus row goes missing", () => {
+    expect(ANTIGRAVITY.toSorted(compareUnrankedModelIds)[0]).toBe("claude-opus-4-6-thinking");
+    // What the picker and every unpinned turn fall to while the channel is out of Opus capacity: Pro at its own level,
+    // not the same model's Low row.
+    expect(ANTIGRAVITY.filter((id) => id !== "claude-opus-4-6-thinking").toSorted(compareUnrankedModelIds)[0]).toBe("gemini-pro-agent");
+    // The quiet row still sorts above every lesser tier: demoted within Pro, not out of it.
+    expect(ANTIGRAVITY.toSorted(compareUnrankedModelIds).slice(0, 3)).toEqual(["claude-opus-4-6-thinking", "gemini-pro-agent", "gemini-3.1-pro-low"]);
+});
+
 test("keeps the arrival order between ids the rule cannot separate: Anthropic's catalog IS ranked", () => {
     expect(["claude-opus-5", "claude-fable-5"].toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-fable-5"]);
     expect(["claude-fable-5", "claude-opus-5"].toSorted(compareModelIds)).toEqual(["claude-fable-5", "claude-opus-5"]);

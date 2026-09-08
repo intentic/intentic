@@ -716,7 +716,7 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
     expect(seen?.oauthToken).toBeUndefined();
 });
 
-test("agent.run keeps a pinned Gemini model the catalog still offers, and drops one it doesn't", async () => {
+test("agent.run keeps a pinned Gemini model the catalog still offers, and refuses one it doesn't", async () => {
     const models = ["gemini-pro-agent", "gemini-3-flash"];
     const geminiConnected = {
         accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
@@ -728,7 +728,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
     // Read off the native runner, the only one a Gemini turn reaches; the catalog-membership rule under test is
     // unchanged.
     // geminiModels overrides the direct member the runtime reads, not the derived record.
-    const run = async (model: string): Promise<string | undefined> => {
+    const run = async (model?: string): Promise<{ sent: string | undefined; errors: Extract<AgentEvent, { kind: "error" }>[] }> => {
         let seen: { model?: string } | undefined;
         const client = clientFor(
             createApp(
@@ -748,12 +748,20 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                 }),
             ),
         );
-        await runAgentTurn(client, { prompt: "hi", agent: "gemini", model });
-        return seen?.model;
+        const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini", ...(model === undefined ? {} : { model }) });
+        return { sent: seen?.model, errors: facts.flatMap((fact) => (fact.kind === "error" ? [fact] : [])) };
     };
-    expect(await run("gemini-3-flash")).toBe("gemini-3-flash");
-    // A retired pick fails catalog membership and falls to the live default rather than 400ing upstream.
-    expect(await run("gemini-2.5-pro")).toBe("gemini-pro-agent");
+    expect((await run("gemini-3-flash")).sent).toBe("gemini-3-flash");
+    // Nothing pinned is the one case that resolves to the catalog's own head.
+    expect((await run()).sent).toBe("gemini-pro-agent");
+
+    // A pick this channel no longer lists ends the turn instead of spending another model's allowance under its name:
+    // the channel vends Claude, Gemini and GPT-OSS rows on one provider id, each metered separately. The code is what
+    // holds the message and reloads the picker in the composer.
+    const retired = await run("gemini-2.5-pro");
+    expect(retired.sent).toBeUndefined();
+    expect(retired.errors.map((fact) => fact.code)).toEqual(["model-unavailable"]);
+    expect(retired.errors[0]?.message).toContain("gemini-2.5-pro");
 });
 
 // No Google account is still a named-fix refusal; the native runtime owns that gate now, not the routed one.

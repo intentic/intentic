@@ -172,6 +172,8 @@ export const restoreTab = (tab: StoredTab): Conversation => {
         conversation.model.value = tab.model ?? rememberedModelFor(tab.provider);
         // Whether the app parked it on a fallback account (a mid-redirect), so reconciliation can move it back later.
         conversation.movedFrom.value = tab.movedFrom;
+        // Same for a model a thin catalog moved it off: the debt outlives the window that took it on.
+        conversation.displacedModel.value = tab.displacedModel;
     }
     // Turn settings restore per tab: they describe this chat, not picks made in some other tab since.
     if (tab.thinking !== undefined) {

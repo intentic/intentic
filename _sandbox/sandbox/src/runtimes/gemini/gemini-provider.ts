@@ -48,9 +48,22 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
         // Reads the wording off the provider's spec row, matching what the connect prompt and picker already say.
         return { ok: false, message: `Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent to run Gemini here.` };
     }
-    // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const catalog = await services.geminiModels.models();
-    const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
+    // Absent and empty both mean the catalog default: the wire allows `model: ""`, and nothing was pinned.
+    const pinned = input.model === undefined || input.model === "" ? undefined : input.model;
+    // A pin this channel has stopped offering ends the turn rather than running on the catalog default. Substituting
+    // spends a model the user did not choose, on its own separate allowance, and says so nowhere; the code holds the
+    // message, reloads the picker, and leaves the choice where it belongs. The catalog keeps a de-listed row for its
+    // own grace window (model-catalog.ts), so reaching this means the channel has stopped serving it, not blinked.
+    if (pinned !== undefined && !catalog.models.some((entry) => entry.id === pinned)) {
+        return {
+            ok: false,
+            code: "model-unavailable",
+            message: `Google is no longer offering ${pinned}, and this chat is pinned to it. Pick another model for this chat, or send again if it comes back.`,
+        };
+    }
+    // Never empty, so this always resolves.
+    const model = pinned ?? catalog.default;
     return {
         ok: true,
         run: services.geminiAgent,

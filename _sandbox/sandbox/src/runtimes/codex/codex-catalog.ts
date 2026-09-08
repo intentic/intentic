@@ -33,6 +33,7 @@ export const createCodexCatalog = (config: Config, persistPath: string, fetchImp
                     : [];
             return fromTranslator.length > 0 ? fromTranslator : fromOpenAI;
         },
+        idOf: (id) => id,
         store: jsonFile<string[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
             fallback: () => [],

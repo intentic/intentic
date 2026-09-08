@@ -30,6 +30,9 @@ export interface StoredTab {
     readonly account?: string;
     // Persisted per tab like `account`, so reload can't reseed an open tab's model from another tab's pick.
     readonly model?: string;
+    // The pick a thin catalog moved this tab off, owed back when the model is offered again; without it a reload
+    // settles the app's substitution as if the user had made it.
+    readonly displacedModel?: string;
     readonly effort?: string;
     readonly thinking?: boolean;
     // Persisted per tab, not remembered globally: a reload keeps this chat's setting, but a new chat starts off.
@@ -72,6 +75,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     movedFrom: conversation.movedFrom.value,
     account: conversation.account.value,
     model: conversation.model.value,
+    displacedModel: conversation.displacedModel.value,
     effort: conversation.effortPick.value,
     actsAs: conversation.actsAs.value,
     thinking: conversation.thinking.value,
@@ -212,6 +216,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readMovedFrom(raw[`movedFrom`]),
         ...readText(`account`, raw[`account`]),
         ...readText(`model`, raw[`model`]),
+        ...readText(`displacedModel`, raw[`displacedModel`]),
         ...readText(`effort`, raw[`effort`]),
         ...readText(`actsAs`, raw[`actsAs`]),
         ...readFlag(`thinking`, raw[`thinking`]),

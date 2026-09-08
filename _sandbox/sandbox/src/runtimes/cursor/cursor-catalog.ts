@@ -41,6 +41,7 @@ export const createCursorCatalog = (store: CursorStore, persistPath: string): Cu
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
         discover,
+        idOf: (item) => item.id,
         store: jsonFile<string[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
             fallback: () => [],

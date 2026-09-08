@@ -165,6 +165,7 @@ export const createClaudeCatalog = (
             const [aliases, versioned] = await Promise.all([discover(token, cwd).catch(() => []), discoverApiModels(token, fetchImpl)]);
             return mergeCatalogs(aliases, versioned);
         },
+        idOf: (model) => model.id,
         // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
         store: jsonFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] }),
         toStored: (models) => [...models],

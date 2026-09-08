@@ -120,13 +120,21 @@ const thinkingRankOf = (family: string): number => {
 // The last recognized word wins: gemini-flash-lite is Flash's cheap end, gpt-codex-max is Codex's frontier end.
 export const tierRankOf = (family: string): number => lastRankOf(family, TIER_RANK);
 
-// The canonical order of two ids: tier first, then release, then a release-local tier. Stable under Array#toSorted, so
-// ids this rule cannot separate keep their arrival order.
+// A row naming a level BELOW the provider's default is a quieter rung of its tier, not a model of its own, so it sorts
+// under that tier's ordinary rows before any release is read. Read here and not just from the cheap end because a
+// routed channel vends one row per level with inconsistent ids: `gemini-3.1-pro-low` carries version digits and
+// `gemini-pro-agent` (the same model, loud) carries none, so on release alone the quiet row leads its tier and becomes
+// the catalog default.
+const quietRankOf = (family: string): number => (thinkingRankOf(family) < UNSTATED_THINKING ? 1 : 0);
+
+// The canonical order of two ids: tier first, then the quiet rung, then release, then a release-local tier. Stable
+// under Array#toSorted, so ids this rule cannot separate keep their arrival order.
 export const compareModelIds = (left: string, right: string): number => {
     const leftFamily = familyOf(left);
     const rightFamily = familyOf(right);
     return (
         tierRankOf(leftFamily) - tierRankOf(rightFamily) ||
+        quietRankOf(leftFamily) - quietRankOf(rightFamily) ||
         compareRelease(releaseOf(left), releaseOf(right)) ||
         releaseTierRankOf(leftFamily) - releaseTierRankOf(rightFamily)
     );
