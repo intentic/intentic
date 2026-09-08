@@ -11,6 +11,7 @@ import {
     SegmentedControl,
     useDevice,
     useExplorerStyle,
+    useLoadingReveal,
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
@@ -20,13 +21,7 @@ import ReviewStat from "../../../components/ReviewStat.vue";
 import { stopAgent } from "../fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../fleet/fleetScope";
 import { type Blocker, REASON_COPY } from "./conflictResolution";
-import {
-    AGENT_FILE_DIFF_OPTIONS,
-    agentFileDiffKey,
-    type AgentReviewFile,
-    readAgentFileDiff,
-    useAgentChanges,
-} from "./useAgentChanges";
+import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../core-views/documentRegistry";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
@@ -42,6 +37,8 @@ import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
+import AgentReviewOutline from "./AgentReviewOutline.vue";
+import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
@@ -82,6 +79,21 @@ const history = useAgentHistory(
     computed(() => agentId),
     computed(() => changes.absorbed.value > 0),
     computed(() => at),
+);
+
+// The two waits with nothing on screen behind them, told apart because they promise different things: the first read
+// of the branch, and (on an agent whose work the reader has already committed) the walk through history that finds
+// where it went. A refresh with rows already drawn is neither: it keeps the spinner in the list header, since
+// replacing a list the reader is using with bars would be a loss of place, not a promise.
+const firstRead = computed(() => changes.loading.value && changes.count.value === 0);
+const historyRead = computed(() => changes.count.value === 0 && changes.absorbed.value > 0 && history.loading.value);
+const waiting = computed(() => firstRead.value || historyRead.value);
+const waitLabel = computed(() => (firstRead.value ? `Reading this agent's changes…` : `Finding where this work went in your history…`));
+// Same thresholds every other skeleton in the app answers to, keyed on the agent so walking from one review to the
+// next starts a fresh wait rather than continuing the old one's hold.
+const outline = useLoadingReveal(
+    waiting,
+    computed(() => agentId),
 );
 
 // The list.
@@ -468,6 +480,12 @@ const { query: diffQuery, error: diffError } = useSandboxQuery(
 );
 const diff = computed(() => diffQuery.data.value);
 const diffLoading = diffQuery.isFetching;
+// Keyed on the row, not the agent: stepping down the list is a new wait each time, so a held outline can never sit
+// over the file after the one it was drawn for.
+const diffOutline = useLoadingReveal(
+    computed(() => diff.value === undefined && diffLoading.value),
+    computed(() => selectedKey.value ?? ``),
+);
 // Monaco is uncontrolled, so a genuinely different file must remount, not re-render. vue-query keeps `diff` the
 // same object across a no-op refetch, so that identity (numbered only because :key needs a string) is what
 // distinguishes files.
@@ -630,11 +648,14 @@ const seamWidth = computed<number>({
             </p>
         </div>
 
-        <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
-        <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
-        <p v-else-if="changes.count.value === 0 && changes.absorbed.value > 0 && history.loading.value" class="px-3 py-2 text-2xs text-subtle">
-            Finding where this work went in your history…
-        </p>
+        <!--
+            History loads only once absorbed work is reported, skipping a flash of "nothing here" first. The wait owns
+            this branch whether or not it is old enough to be drawn: below the reveal delay it renders the shell's
+            background, never the empty state below, which would state the opposite of what is about to arrive.
+        -->
+        <template v-if="waiting">
+            <AgentReviewOutline v-if="outline" :label="waitLabel" />
+        </template>
         <div
             v-else-if="changes.count.value === 0 && history.count.value === 0"
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
@@ -1000,9 +1021,12 @@ const seamWidth = computed<number>({
 
                     <div class="min-h-0 flex-1">
                         <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
-                        <p v-else-if="diff === undefined" class="p-4 text-xs text-subtle">
-                            <Icon v-if="diffLoading" name="spinner" spin class="mr-1 text-xs" />Loading the diff…
-                        </p>
+                        <!--
+                            The file's own read, one click deep into a list that already answered: the workspace
+                            editor's own diff outline, in this pane, past the same reveal delay, so a warmed row (the
+                            background loader reads ahead) still paints straight from cache with nothing in between.
+                        -->
+                        <template v-else-if="diff === undefined"><DiffSkeleton v-if="diffOutline" /></template>
                         <!--
                             Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace
                             editor.

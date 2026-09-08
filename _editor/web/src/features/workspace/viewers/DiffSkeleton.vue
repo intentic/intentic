@@ -7,6 +7,14 @@ import { useLayout } from "../../../shell/window/useLayout";
 // a spinner, since the reader already knows which file; the toolbar above already gives status and ± counts. Split
 // follows the same preference the real viewer reads, so the outline never promises a layout the diff then contradicts.
 
+const { bare = false } = defineProps<{
+    /**
+     * Drop the status region and its sentence, for a caller already announcing the wait this diff is one half of (the
+     * agent review's outline, which promises a file list beside it). Announcing twice says nothing the first didn't.
+     */
+    bare?: boolean;
+}>();
+
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
 const split = computed(() => !mobile.value && diffLayout.value === `split`);
@@ -30,8 +38,8 @@ const LINES = [
 
 <template>
     <!-- The bars are decoration; role=status plus the sr-only line carry it to the readers who need it said. -->
-    <div class="flex h-full min-h-0 overflow-hidden" role="status" aria-busy="true">
-        <span class="sr-only">Reading the file…</span>
+    <div class="flex h-full min-h-0 overflow-hidden" :role="bare ? undefined : `status`" :aria-busy="bare ? undefined : true">
+        <span v-if="!bare" class="sr-only">Reading the file…</span>
         <div
             v-for="pane in split ? 2 : 1"
             :key="pane"
@@ -40,8 +48,13 @@ const LINES = [
         >
             <span v-for="(line, index) in LINES" :key="index" class="flex items-center gap-3">
                 <!-- Gutter appears in every pane regardless of layout: the one column a reader can always count on. -->
-                <span class="h-2 w-4 shrink-0 rounded bg-content/10" />
-                <span class="h-2 rounded bg-content/10" :class="[line.width, line.indent]" />
+                <!--
+                    The app's own loading placeholder, not a hand-mixed tint of the same strength: a skin that dresses
+                    `.skeleton` (sanctum tints and grades it) would otherwise leave these bars the one grey pair on a
+                    screen of gold ones, most visibly beside the file list they wait with in the agent review.
+                -->
+                <span class="skeleton block h-2 w-4 shrink-0" />
+                <span class="skeleton block h-2" :class="[line.width, line.indent]" />
             </span>
         </div>
     </div>

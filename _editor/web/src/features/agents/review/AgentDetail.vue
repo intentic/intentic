@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
+import { Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
@@ -14,6 +14,7 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
+import AgentReviewOutline from "./AgentReviewOutline.vue";
 import AgentSessionMenu from "../board/AgentSessionMenu.vue";
 import SessionChip from "../board/SessionChip.vue";
 import SessionIdentity from "../board/SessionIdentity.vue";
@@ -156,7 +157,10 @@ const viewOptions: { label: string; value: `chat` | `changes` }[] = [
     { label: `Changes`, value: `changes` },
 ];
 
-const title = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value ?? `Agent`);
+// The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
+// question, which the header draws as a bar rather than filling with the word "Agent".
+const named = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value);
+const title = computed(() => named.value ?? `Agent`);
 
 const edit = createInlineRename(
     () => fleetAgent.value?.title ?? conversation.value?.title.value ?? undefined,
@@ -234,6 +238,11 @@ const localOnly = computed(() => !remote.value);
 const heardFrom = computed(
     () => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.readAt !== undefined),
 );
+// A box whose last attempt failed is not a wait: nothing is on its way until it is reachable again, so it gets the
+// sentence rather than an outline promising rows that can't arrive.
+const remoteSilent = computed(
+    () => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.state === `unreachable`),
+);
 const remoteUnavailable = computed(() => {
     const name = remoteName.value ?? `That sandbox`;
     if (fleetAgent.value !== undefined) {
@@ -248,6 +257,20 @@ const crossToAgent = (): void => {
         openInSandbox(remoteBox.value, agentId.value);
     }
 };
+
+// The page's own wait, before either panel below has anything to work with: locally, the roster and the archive
+// answering for this id (`settling`); remotely, the box named by `?sandbox=` answering at all. Both used to leave the
+// screen empty or, across sandboxes, print "hasn't answered yet" about a wait usually over in a blink.
+const looking = computed(() => (remote.value ? !heardFrom.value && !remoteSilent.value && fleetAgent.value === undefined : settling.value));
+// Drawn past the same thresholds as every other skeleton in the app, keyed on the agent so walking from one review to
+// the next starts a fresh wait instead of inheriting the last one's hold.
+const outline = useLoadingReveal(looking, agentId);
+// The header's half of it: with no roster entry there is no status, so its place is held as a bar rather than left as
+// a gap that fills in later and shifts everything beside it.
+const headerOutline = computed(() => outline.value && fleetAgent.value === undefined);
+// The title's, one step narrower: an open conversation can name the agent before the roster answers, and a name in
+// hand beats a bar every time.
+const unnamed = computed(() => headerOutline.value && named.value === undefined);
 
 // Session name and session actions, each an anchored popover on desktop and a thumb-reachable sheet on a phone
 // (ResponsiveOverlay), one open flag each instead of the old hand-written pair per surface.
@@ -293,9 +316,13 @@ const confirmDiscard = async (): Promise<void> => {
                 @vue:mounted="edit.focusInput"
             />
             <template v-else>
-                <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+                <!-- Nobody has named this agent yet: a bar in the title's own place, and no rename over a missing name. -->
+                <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" aria-hidden="true">
+                    <span class="skeleton block h-3 w-40 max-w-full"></span>
+                </span>
+                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
                 <button
-                    v-if="localOnly"
+                    v-if="localOnly && !unnamed"
                     type="button"
                     aria-label="Rename agent"
                     v-tooltip.bottom="'Rename'"
@@ -346,6 +373,8 @@ const confirmDiscard = async (): Promise<void> => {
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" aria-hidden="true" />
                 <span :class="mobile ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
+            <!-- Its place, held: the status arrives with the roster entry, and a header that grows one on arrival jumps. -->
+            <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
                 <!--
@@ -423,6 +452,14 @@ const confirmDiscard = async (): Promise<void> => {
         </div>
         <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
         <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
+        <!--
+            Still asking about this id: the review's own shape stands in, since an empty pane reads as an agent that
+            changed nothing and the sentence below would be answering a question that hasn't come back yet. Claims the
+            branch for the whole wait, drawing nothing under the reveal delay.
+        -->
+        <template v-else-if="looking">
+            <AgentReviewOutline v-if="outline" label="Opening this agent's review…" />
+        </template>
         <!--
             A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess:
             drawing an empty review would falsely read as "this agent changed nothing".

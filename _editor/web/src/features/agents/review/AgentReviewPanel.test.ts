@@ -14,6 +14,8 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { AGENT_DIFF, WORKSPACE_MODULES } from "../../../lib/queryKeys";
 import { router } from "../../../router";
 import { IconStub } from "@intentic/ui/testing";
+// The threshold the outline itself waits for, read from where it's defined rather than restated as a number here.
+import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 
 // The import chain pulls in app-wide singletons reading browser globals at import time; matches:false keeps the
 // device desktop, where list and diff share the screen.
@@ -122,6 +124,8 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     queryClient.clear();
+    // The reveal-delay test is the only one that fakes them; left on, they would freeze every timer after it.
+    vi.useRealTimers();
     // Toggles are app-wide state outliving a mount; reset here so one test can't hand the next a different panel.
     if (showComments.value) {
         toggleShowComments();
@@ -399,4 +403,75 @@ it(`lands a path clicked in the report on its row, and says so in the diff heade
     const header = el.querySelector(`section > div`)!;
     expect(header.textContent).toContain(`logo.png`);
     expect(header.textContent).toContain(REASON_COPY.binary.mark);
+});
+
+// The first read used to be a line of text where the review was about to be, so the panel said one thing, then
+// replaced it with a completely different shape. Two facts are pinned here: the wait keeps the branch even before it
+// is old enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the
+// review's own two columns.
+it(`holds the review's shape through its first read instead of a line of text`, async () => {
+    vi.useFakeTimers();
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({
+        setup() {
+            // The daemon hasn't answered: every list is empty and `loading` is the only thing true. Built here rather
+            // than through useAgentChanges, whose query is gated on a daemon this suite doesn't run.
+            const reading = {
+                repos: ref([]),
+                modulesOf: () => [],
+                files: ref([]),
+                count: ref(0),
+                absorbed: ref(0),
+                pending: ref([]),
+                blocked: ref([]),
+                additions: ref(0),
+                deletions: ref(0),
+                codeStat: ref({ files: 0, additions: 0, deletions: 0 }),
+                testStat: ref({ files: 0, additions: 0, deletions: 0 }),
+                loading: ref(true),
+                error: ref(undefined),
+                refresh: vi.fn(),
+                fileDiff: vi.fn(),
+                viewed: ref(new Set<string>()),
+                viewedCount: ref(0),
+                setViewed: vi.fn(),
+                land: vi.fn(),
+                setAutoLand: vi.fn(),
+                askResolve: vi.fn(),
+                discard: vi.fn(),
+                archive: vi.fn(),
+                conflicts: ref(undefined),
+                resolving: ref(undefined),
+                asked: ref(false),
+                actionBusy: ref(false),
+                actionError: ref(undefined),
+            } as unknown as ReturnType<typeof useAgentChanges>;
+            return () => h(AgentReviewPanel, { agentId: AGENT, changes: reading, streaming: false, writing: false });
+        },
+    });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
+    app.mount(el);
+    await nextTick();
+
+    // Below the reveal delay an answer still reads as immediate, so nothing is drawn — least of all the sentence for
+    // an agent that changed nothing, which is the opposite of what is on its way.
+    expect(el.querySelector(`.skeleton`)).toBeNull();
+    expect(el.textContent).not.toContain(`hasn't changed any files`);
+
+    vi.advanceTimersByTime(REVEAL_DELAY_MS);
+    await nextTick();
+
+    // One status region for the whole wait, with the subject read rather than printed over the rows' places.
+    const status = el.querySelector(`[role="status"]`)!;
+    expect(status.getAttribute(`aria-busy`)).toBe(`true`);
+    expect(status.textContent).toContain(`Reading this agent's changes…`);
+    expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
+    // The list and the diff beside it: both halves of what the answer lands in, at the widths it will land at.
+    expect(el.querySelector(`aside`)).not.toBeNull();
+    expect(el.querySelector(`section`)).not.toBeNull();
+    expect(el.textContent).not.toContain(`hasn't changed any files`);
 });
