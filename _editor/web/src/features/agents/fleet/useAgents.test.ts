@@ -45,10 +45,6 @@ describe("windowFinished", () => {
     const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
     // The board reads its own id; the chat list reaches through a wrapper, hence a reader function, not a type.
     const byId = (agent: FleetAgent): string => agent.id;
-    // The ids a full window holds, derived rather than spelled out: these expectations were written as literal
-    // seven-element arrays and every one of them broke the day the window became six, which told us nothing about
-    // windowFinished and cost a reading of four tests to confirm.
-    const inWindow = Array.from({ length: FINISHED_WINDOW }, (_, at) => `a${at}`);
 
     it("shows a short lane whole, with nothing to collapse", () => {
         expect(windowFinished(lane(3), undefined, byId)).toEqual({ shown: lane(3), hidden: 0 });
@@ -58,16 +54,15 @@ describe("windowFinished", () => {
         const { shown, hidden } = windowFinished(lane(10), undefined, byId);
 
         expect(shown).toHaveLength(FINISHED_WINDOW);
-        expect(hidden).toBe(10 - FINISHED_WINDOW);
+        expect(hidden).toBe(4);
     });
 
     it("keeps the selected card whatever its age: pinned at the tail, and counted OUT of the row that hides the rest", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
-        expect(ids(shown)).toEqual([...inWindow, `a8`]);
-        // A window's worth on screen plus the pin, out of ten: the row below may only claim what it actually hides,
-        // which is everything beyond the window except the card pinned out of it.
-        expect(hidden).toBe(10 - FINISHED_WINDOW - 1);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+        // Seven cards on screen out of ten: the row below may only claim the three it actually hides.
+        expect(hidden).toBe(3);
     });
 
     it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
@@ -79,11 +74,10 @@ describe("windowFinished", () => {
     });
 
     it("drops the tail row entirely when the pin was the only card behind it", () => {
-        // One card past the window, and that card is the pin: nothing is left for the tail row to claim.
-        const onePast = `a${FINISHED_WINDOW}`;
-        const { shown, hidden } = windowFinished(lane(FINISHED_WINDOW + 1), onePast, byId);
+        // Seven cards, so `a6` is the only one past the window, and it is the pin: nothing is left to claim.
+        const { shown, hidden } = windowFinished(lane(7), `a6`, byId);
 
-        expect(ids(shown)).toEqual([...inWindow, onePast]);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
         expect(hidden).toBe(0);
     });
 
@@ -93,8 +87,8 @@ describe("windowFinished", () => {
         const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
         const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
 
-        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([...inWindow, `a8`]);
-        expect(hidden).toBe(10 - FINISHED_WINDOW - 1);
+        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+        expect(hidden).toBe(3);
     });
 });
 
