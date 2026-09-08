@@ -338,7 +338,7 @@ const DEFECTS: readonly Defect[] = [
         why: "windowSlug is meant to derive a meaningful tmux window name from the description; taking zero characters makes every description fall back to `run`",
     },
     {
-        file: "src/agent/run/turn-usage.ts",
+        file: "src/agent/run/turn/turn-usage.ts",
         find: "const add = (a: number | undefined, b: number | undefined): number | undefined => (a === undefined ? b : b === undefined ? a : a + b);",
         replace:
             "const add = (a: number | undefined, b: number | undefined): number | undefined => (a === undefined ? b : b === undefined ? a : a - b);",

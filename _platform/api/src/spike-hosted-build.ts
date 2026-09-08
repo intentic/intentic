@@ -2,8 +2,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { loadConfig } from "./config.js";
-import { createApp, deleteApp, createMachine, destroyMachine, flyBuildRole, FlyError, getMachineDetail } from "./sandbox/hosted/fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandbox/hosted/fly-tokens.js";
+import { createApp, deleteApp, createMachine, destroyMachine, flyBuildRole, FlyError, getMachineDetail } from "./sandbox/hosted/fly/fly.js";
+import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandbox/hosted/fly/fly-tokens.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson } from "./sandbox/hosted/hosted-build-script.js";
 import { hostedInstanceId } from "./sandbox/hosted/hosted.js";
 

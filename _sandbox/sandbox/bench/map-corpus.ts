@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { displayNameOf, toolCategoryOf, toolLocations, toolTarget } from "../src/agent/tools/tool-calls.js";
-import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/turn-metrics.js";
+import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/turn/turn-metrics.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/prompt/workspace-map.js";
 import { transcriptFiles } from "./transcripts.js";
 

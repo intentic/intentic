@@ -41,7 +41,7 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
 - [src/pages/pricing.astro](src/pages/pricing.astro): your machine beside ours, words from
   `site-content/pricing.ts`, figures from `site-content/hosted.ts`.
 - [src/pages/docs](src/pages/docs): the documentation pages.
-- [src/components/DocsLayout.astro](src/components/DocsLayout.astro): every docs page's shell, and the one place
+- [src/components/docs/DocsLayout.astro](src/components/docs/DocsLayout.astro): every docs page's shell, and the one place
   that sees a page's whole rendered body: it anchors the headings, builds the section list, and checks a page's
   authored index against the headings that actually exist.
 - [src/lib/docs-headings.ts](src/lib/docs-headings.ts): the render pass that gives every prose heading a stable

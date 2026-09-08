@@ -14,7 +14,7 @@ import { expect, test, vi } from "vitest";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
-import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";

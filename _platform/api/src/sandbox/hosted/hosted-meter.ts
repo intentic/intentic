@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_METER, runExclusive } from "../../jobs-lock.js";
-import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly/fly.js";
 import { hostedEnabled } from "./hosted.js";
 import { hostedBudgetOf, settleHostedStretches } from "./hosted-usage.js";
 

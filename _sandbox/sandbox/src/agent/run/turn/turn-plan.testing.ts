@@ -1,10 +1,10 @@
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { createCredentialGrants } from "../../secrets/credential-grants.js";
-import type { Services } from "../../composition.js";
-import { testConfig } from "../../testing.js";
-import type { AgentRequest } from "./agent.js";
-import { composeWirePrompt } from "../prompt/turn-preamble.js";
+import { createCredentialGrants } from "../../../secrets/credential-grants.js";
+import type { Services } from "../../../composition.js";
+import { testConfig } from "../../../testing.js";
+import type { AgentRequest } from "../agent.js";
+import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "./turn-plan.js";
 
 /* THE SEAMS A PLANNED TURN REACHES, as one fixture both turn-plan suites build on.

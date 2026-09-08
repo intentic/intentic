@@ -161,7 +161,7 @@ test("defects plants every anchor it grades against, and padding the answer is p
 
         const found = [
             { file: `daemon/src/agent/tools/agent-terminals.ts`, line: 26 },
-            { file: `daemon/src/agent/run/turn-usage.ts`, line: 8 },
+            { file: `daemon/src/agent/run/turn/turn-usage.ts`, line: 8 },
         ];
         await writeFile(join(dir, `answer.json`), JSON.stringify({ defects: found }));
         const half = await prepared.grade();

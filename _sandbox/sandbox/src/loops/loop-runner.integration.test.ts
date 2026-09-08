@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
-import { turnRunOf } from "../agent/run/turn-runs.js";
+import { turnRunOf } from "../agent/run/turn/turn-runs.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, runLoop, type TurnFn } from "./loop-runner.js";

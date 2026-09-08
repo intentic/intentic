@@ -18,8 +18,8 @@ import {
     isFlyGone,
     listMachines,
     updateMachine,
-} from "./fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly-tokens.js";
+} from "./fly/fly.js";
+import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly/fly-tokens.js";
 import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "./hosted.js";

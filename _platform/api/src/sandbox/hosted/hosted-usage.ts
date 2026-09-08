@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { onHostedPlan } from "./hosted-plan.js";
-import { getMachine, isFlyGone, LIVE_STATES } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 
 /* THE FREE HOSTED LANE'S HOUR METER, what a machine we run costs its owner's monthly allowance, and whether
  * there is any left to wake it with.

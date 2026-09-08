@@ -6,7 +6,7 @@ import type { Config } from "../../config.js";
 import { encryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
-import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly.js";
+import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
 import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 

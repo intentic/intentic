@@ -1,16 +1,16 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { createCredentialGrants } from "../../secrets/credential-grants.js";
+import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { unstubbed } from "@intentic/testing";
-import type { Services } from "../../composition.js";
-import { testConfig } from "../../testing.js";
-import { SKILL_CATALOG_NOTE_HEADER } from "../../settings/loaded-skills.js";
-import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../workspace/layout/workspace-setup.js";
-import type { AgentRequest } from "./agent.js";
-import { composeWirePrompt } from "../prompt/turn-preamble.js";
+import type { Services } from "../../../composition.js";
+import { testConfig } from "../../../testing.js";
+import { SKILL_CATALOG_NOTE_HEADER } from "../../../settings/loaded-skills.js";
+import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../workspace/layout/workspace-setup.js";
+import type { AgentRequest } from "../agent.js";
+import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
@@ -37,7 +37,7 @@ import { base, codexServices, context, harnessServices, servicesWith, turn, wire
 // The harness arm's credential resolution, which is a question about the owner's accounts rather than about the
 // tree: stubbed so the Claude case below can reach the part this file is actually asserting on. The native arms
 // never call it.
-vi.mock("../providers/harness-credentials.js", () => ({
+vi.mock("../../providers/harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
 }));
 

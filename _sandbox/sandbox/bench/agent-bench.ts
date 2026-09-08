@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type AgentRequest, runAgent } from "../src/agent/run/agent.js";
-import { sumUsage, type UsageFrame } from "../src/agent/run/turn-usage.js";
+import { sumUsage, type UsageFrame } from "../src/agent/run/turn/turn-usage.js";
 import { type BenchTask, taskFor } from "./agent-tasks.js";
 
 /* AGENT-ARCHITECTURE A/B BENCHMARK, does delegating the tedious work beat one agent doing all of it?

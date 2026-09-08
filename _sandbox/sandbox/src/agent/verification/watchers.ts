@@ -7,8 +7,8 @@ import type { WakeFn } from "../../automations/scheduler.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../anchors/agent-steering.js";
-import { startConversationTurn } from "../run/turn-resume.js";
-import { seedFields, type TurnSeed } from "../run/turn-seed.js";
+import { startConversationTurn } from "../run/turn/turn-resume.js";
+import { seedFields, type TurnSeed } from "../run/turn/turn-seed.js";
 import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 
@@ -73,7 +73,7 @@ const DELIVER_RETRY_MS = 15_000;
 const DELIVER_ATTEMPTS = 240;
 
 /* The turn identity a wake must reproduce, snapshotted at arm time, and shared with the proof follow-up because
- * the two continue a turn for the same reason (agent/run/turn-seed.ts has the argument, and the list).
+ * the two continue a turn for the same reason (agent/run/turn/turn-seed.ts has the argument, and the list).
  * `sessionId` is deliberately not in it: that is looked up at FIRE time, since the conversation may advance
  * while the watch runs. Everything else is the arming turn's own — a session only resumes on the provider that
  * minted it, an isolated conversation's work sits in a worktree the wake must re-enter, and `unattended` carries

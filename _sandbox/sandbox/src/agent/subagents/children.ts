@@ -10,7 +10,7 @@ import { conversationTaintSource, markConversationTaint } from "../../guard/turn
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "./subagents.js";
-import { startTurnRun, turnRunOf } from "../run/turn-runs.js";
+import { startTurnRun, turnRunOf } from "../run/turn/turn-runs.js";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../sessions/turn-transcript.js";
 import type { TurnFn } from "../../loops/loop-runner.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";

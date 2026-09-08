@@ -1,14 +1,14 @@
 ---
 import { type Book, bookHref, bookNeighbours, bookPage } from "@intentic/site-content/book";
 import { docsBook } from "@intentic/site-content/docs";
-import { assertNoCodeBleed, extractDocsContent } from "../lib/docs-headings";
-import BaseLayout from "../layouts/BaseLayout.astro";
+import { assertNoCodeBleed, extractDocsContent } from "../../lib/docs-headings";
+import BaseLayout from "../../layouts/BaseLayout.astro";
 import DocsSearch from "./DocsSearch.astro";
 import DocsSearchField from "./DocsSearchField.astro";
 import DocsSidebar from "./DocsSidebar.astro";
 import DocsToc from "./DocsToc.astro";
-import Footer from "./Footer.astro";
-import Nav from "./Nav.astro";
+import Footer from "../Footer.astro";
+import Nav from "../Nav.astro";
 
 interface Props {
     /**

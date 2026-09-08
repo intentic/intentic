@@ -55,7 +55,7 @@ import { createViewFrameLedger } from "../verification/agent-viewing.js";
 import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
-import { actorOf, type TurnInput } from "../run/turn-actor.js";
+import { actorOf, type TurnInput } from "../run/turn/turn-actor.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
@@ -71,19 +71,19 @@ import {
     recordLimitFailure,
     recordOutageFailure,
     startConversationTurn,
-} from "../run/turn-resume.js";
+} from "../run/turn/turn-resume.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
-import { applyReply, composeSteerText } from "../run/turn-interactions.js";
+import { applyReply, composeSteerText } from "../run/turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { type LimitWay, limitWayOf } from "../models/limit-way.js";
-import { turnRunOf } from "../run/turn-runs.js";
+import { turnRunOf } from "../run/turn/turn-runs.js";
 import { nameAgentTitle } from "../models/title-namer.js";
-import { createTurnMetrics } from "../run/turn-metrics.js";
-import { planTurn } from "../run/turn-plan.js";
-import { turnTier } from "../run/turn-tier.js";
-import { sumUsage, type UsageFrame } from "../run/turn-usage.js";
+import { createTurnMetrics } from "../run/turn/turn-metrics.js";
+import { planTurn } from "../run/turn/turn-plan.js";
+import { turnTier } from "../run/turn/turn-tier.js";
+import { sumUsage, type UsageFrame } from "../run/turn/turn-usage.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
 // looking at and, when they selected text, the lines themselves, so deictic prompts ("fix this") ground

@@ -1,6 +1,6 @@
 import type { AgentProvider, AgentCapabilities, AgentTurn } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import type { TurnContext, TurnPlan } from "../run/turn-plan.js";
+import type { TurnContext, TurnPlan } from "../run/turn/turn-plan.js";
 
 /* THE SEAM EVERY AGENT RUNTIME SITS BEHIND.
  *

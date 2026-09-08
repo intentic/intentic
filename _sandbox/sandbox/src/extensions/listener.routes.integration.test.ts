@@ -5,7 +5,7 @@ import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSc
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
-import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";

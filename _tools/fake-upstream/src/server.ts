@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { readBody, sendJson } from "@intentic/testing/http-fake";
+import { readBody, sendJson } from "./http.ts";
 
 /* A STAND-IN FOR THE MODEL THE FREE TRIAL SPENDS. Google's two surfaces, served locally, deterministically.
  *

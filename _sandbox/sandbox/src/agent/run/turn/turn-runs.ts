@@ -9,7 +9,7 @@ import {
     type TurnFact,
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
-import { recordCommands } from "../providers/agent-commands.js";
+import { recordCommands } from "../../providers/agent-commands.js";
 import type { TurnJournal } from "./turn-journal.js";
 
 /* Detached turn runs, turn EXECUTION decoupled from any client connection. POST /agent starts a run: the

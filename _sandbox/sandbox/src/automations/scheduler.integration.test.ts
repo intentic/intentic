@@ -7,7 +7,7 @@ import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
-import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";

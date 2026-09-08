@@ -51,7 +51,7 @@ const NARROW_TAKERS = new Set([
     "activity/outbound.ts",
     "agent/providers/adapter.ts",
     "agent/providers/provider-module.ts",
-    "agent/run/turn-interactions.ts",
+    "agent/run/turn/turn-interactions.ts",
     "chores/chore-signals.ts",
     "runtimes/codex/codex-readiness.ts",
     "git/changes/diff-raw.ts",

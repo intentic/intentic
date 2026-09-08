@@ -25,7 +25,7 @@ unfinished", which is what a hand-off that loses the checklist looks like from t
 
 ## 2. What was there
 
-`agent/run/turn-resume.ts` already held a refused turn whole (`pendingLimit`), re-ran it on a press
+`agent/run/turn/turn-resume.ts` already held a refused turn whole (`pendingLimit`), re-ran it on a press
 (`fireLimitResume`, with a `routing` so the press could name another account), and fired it by itself at the
 provider's reset when `resumeAfterLimit` said so, per conversation or for the sandbox. `agent.routes.ts`
 dressed the failure frame with the reset instant and the hold. A turn that resumed no session was seeded from

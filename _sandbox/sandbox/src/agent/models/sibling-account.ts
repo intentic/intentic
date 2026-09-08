@@ -1,6 +1,6 @@
 import { type AccountUsage, type AgentProvider, bindingWindow, type ModelRef, type OauthAccount, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { moveAfterLimitArmed } from "../run/turn-resume.js";
+import { moveAfterLimitArmed } from "../run/turn/turn-resume.js";
 
 /* THE ACCOUNT A SPENT ALLOWANCE CAN BE ANSWERED WITH, as the daemon judges it, so the owner's policy can move a
  * held turn without a browser in the room. The editor's limitFallback.ts makes the same judgement for the press

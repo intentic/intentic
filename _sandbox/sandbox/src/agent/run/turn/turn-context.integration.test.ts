@@ -5,7 +5,7 @@ import { createResidentEngine, type QueryOutcome, type ResidentEngine } from "@i
 import type { Logger } from "pino";
 import { expect, test, vi } from "vitest";
 import { retrievalQueryOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
-import { stripTurnPreamble, withTurnPreamble } from "../prompt/turn-preamble.js";
+import { stripTurnPreamble, withTurnPreamble } from "../../prompt/turn-preamble.js";
 
 /* Pre-injection spends input tokens on every turn it fires on, so what it refuses to fire on is as much of the
  * feature as what it retrieves. These pin the refusals, the gates on a weak answer, and the two properties that

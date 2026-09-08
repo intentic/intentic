@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { type AgentTurn, ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
-import { startConversationTurn } from "../agent/run/turn-resume.js";
+import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
-import { listAppNames } from "./fly.js";
+import { listAppNames } from "./fly/fly.js";
 import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedEnabled } from "./hosted.js";
 

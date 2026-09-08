@@ -8,7 +8,7 @@ import { createRequest, resolveRequest } from "../tools/agent-requests.js";
 // Two modules export a `TurnFn` and they are not the same shape: the loop pump's takes the services it runs
 // against, a run's takes only the turn. `fakeTurn` below is the pump's; the parent stream further down is a
 // run's, so it is imported under its own name rather than annotated with whichever was already in scope.
-import { startTurnRun, turnRunOf, type TurnFn as RunTurnFn } from "../run/turn-runs.js";
+import { startTurnRun, turnRunOf, type TurnFn as RunTurnFn } from "../run/turn/turn-runs.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
 

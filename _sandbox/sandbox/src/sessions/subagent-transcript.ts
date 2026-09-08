@@ -1,7 +1,7 @@
 import { sdk } from "../runtimes/claude/claude-sdk.js";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { subagentAgentId, subagentSource } from "../agent/subagents/subagents.js";
-import { turnRunOf } from "../agent/run/turn-runs.js";
+import { turnRunOf } from "../agent/run/turn/turn-runs.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 import { restoredSessionMessages } from "./sessions.js";
 

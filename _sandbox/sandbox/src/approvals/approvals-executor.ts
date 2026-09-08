@@ -1,7 +1,7 @@
 import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
 import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
 import { streamAgent } from "../agent/routes/agent.routes.js";
-import { startConversationTurn } from "../agent/run/turn-resume.js";
+import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";

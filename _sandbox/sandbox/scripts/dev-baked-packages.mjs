@@ -5,9 +5,10 @@
 // describes what is being mounted. They disagreed once and the container ran a dist its own package.json
 // refused to resolve, so the list has one definition.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 
-export const REPO_ROOT = resolve(import.meta.dirname, "../../..");
+export const REPO_ROOT = repoRoot(import.meta.url);
 
 // Where the image puts the daemon, and where it puts the workspace packages pruned in beside it.
 export const SANDBOX_ROOT = "/opt/sandbox";

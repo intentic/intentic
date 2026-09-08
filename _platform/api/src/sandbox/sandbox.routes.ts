@@ -10,7 +10,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
-import { getMachine, isFlyGone, stopMachine } from "./hosted/fly.js";
+import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
 import {
     destroyHosted,
     forgetHostedMachine,

@@ -25,7 +25,7 @@ import {
     startMachine,
     updateMachine,
     LIVE_STATES,
-} from "./fly.js";
+} from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { hostedSlotsOf } from "./hosted-plan.js";
 

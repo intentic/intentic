@@ -1,10 +1,10 @@
 import type { AgentReply, EditorContext } from "@intentic/sandbox-contract";
-import type { Caller } from "../../auth/auth.js";
-import type { Services } from "../../composition.js";
-import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
-import { conversationOf, resolveRequest } from "../tools/agent-requests.js";
-import { steerTurn, stopTurn } from "../anchors/agent-steering.js";
-import { withAttachmentNote } from "../prompt/attachment-note.js";
+import type { Caller } from "../../../auth/auth.js";
+import type { Services } from "../../../composition.js";
+import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
+import { conversationOf, resolveRequest } from "../../tools/agent-requests.js";
+import { steerTurn, stopTurn } from "../../anchors/agent-steering.js";
+import { withAttachmentNote } from "../../prompt/attachment-note.js";
 import { turnRunOf } from "./turn-runs.js";
 
 /* ANSWERING A PARKED CARD, AND SPEAKING INTO A RUNNING TURN, as functions rather than route bodies, because

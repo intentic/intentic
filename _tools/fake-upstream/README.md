@@ -43,15 +43,22 @@ whole chain that would otherwise need a credential nobody can commit.
   go green on precisely the mix-up that once emptied the trial's picker in the field.
 - **Model ids come back `models/`-prefixed**, because the real ones do. An unprefixed id here would let a broken
   strip on the platform side ship.
-- **No dependencies and no build.** Node 24 runs TypeScript by erasing its types, so the image is the stock node
-  base with these files copied in. That is why relative imports here name `.ts` rather than the `.js` every
-  other package writes: node resolves the specifier literally and will not rewrite one extension into the
-  other.
+- **No dependencies and no build, and that binds everything under `src/`.** Node 24 runs TypeScript by erasing
+  its types, so the image is the stock node base with `package.json` and `src` copied in — no install, no
+  `node_modules`. That is why relative imports here name `.ts` rather than the `.js` every other package
+  writes: node resolves the specifier literally and will not rewrite one extension into the other. It is also
+  why [src/http.ts](src/http.ts) keeps its own copy of the two helpers every other fake in the repo imports
+  from `@intentic/testing/http-fake`. A workspace import in `src/` type-checks, passes this package's suite and
+  resolves fine from the checkout; it then dies in the container on `ERR_MODULE_NOT_FOUND` the moment the
+  onboarding journey stands the world up, which is how the nightly `onboarding` job failed for a night. The
+  tests and `vitest.config.ts` import freely — they never enter the image.
 - `refuseKeys` makes named keys answer 429, which is what drives the platform's pool walk without a real quota.
 
 ## Key files
 
 - [src/server.ts](src/server.ts), the server: both surfaces, the two dialects, streamed and plain replies.
+- [src/http.ts](src/http.ts): the request-body read and the JSON reply, owned here rather than imported, for the
+  reason the convention above gives.
 - [src/main.ts](src/main.ts): the container entrypoint, configured entirely from the environment.
 - [src/server.test.ts](src/server.test.ts): what the platform sends, and every refusal that matters.
 - [Dockerfile](Dockerfile): the image the journey harness stands up beside the platform.

@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { type AgentTurn, type Capability, PI_PROVIDER } from "@intentic/sandbox-contract";
 import { type AgentAdapter, attemptProbe, healthUnavailable, healthUnknown, healthReady } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn-plan.js";
+import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { onPath } from "../../platform/boot/on-path.js";
 

@@ -11,7 +11,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { opt } from "../agent/run/opt.js";
-import { type LimitFailure, pendingLimitFailure } from "../agent/run/turn-resume.js";
+import { type LimitFailure, pendingLimitFailure } from "../agent/run/turn/turn-resume.js";
 import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";

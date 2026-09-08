@@ -1,4 +1,4 @@
-import { liveTurnConversations } from "../agent/run/turn-runs.js";
+import { liveTurnConversations } from "../agent/run/turn/turn-runs.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 

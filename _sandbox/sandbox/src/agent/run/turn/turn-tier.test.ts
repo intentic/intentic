@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentTurn, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
-import type { Services } from "../../composition.js";
+import type { Services } from "../../../composition.js";
 import { turnTier } from "./turn-tier.js";
 
 /* AUTOMATIC TIER SELECTION AS THE DAEMON SPENDS IT. The judge itself is pinned next to it in the contract

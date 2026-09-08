@@ -3,7 +3,7 @@ import { type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn-plan.js";
+import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGrokAgent, createGrokRunner } from "../grok/grok-agent.js";

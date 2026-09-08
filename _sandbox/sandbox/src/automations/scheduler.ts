@@ -6,7 +6,7 @@ import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
-import type { TurnInput } from "../agent/run/turn-actor.js";
+import type { TurnInput } from "../agent/run/turn/turn-actor.js";
 import type { Services } from "../composition.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";

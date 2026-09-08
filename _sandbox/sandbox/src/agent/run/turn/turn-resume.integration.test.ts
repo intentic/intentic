@@ -13,21 +13,21 @@ import {
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-import type { PersistedAgent } from "../../agents/registry/agents-store.js";
-import { fileHeldWakesStore } from "../../automations/held-wakes-store.js";
-import { fileAutomationsStore } from "../../automations/automations-store.js";
-import type { WakeFn } from "../../automations/scheduler.js";
-import type { Services } from "../../composition.js";
+import type { PersistedAgent } from "../../../agents/registry/agents-store.js";
+import { fileHeldWakesStore } from "../../../automations/held-wakes-store.js";
+import { fileAutomationsStore } from "../../../automations/automations-store.js";
+import type { WakeFn } from "../../../automations/scheduler.js";
+import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";
-import type { TranscriptAgent } from "../../sessions/agent-transcript.js";
-import { testMintedSlices } from "../../harness/route-services.testing.js";
-import { automationConfig } from "../../harness/route-stores.testing.js";
-import { fileTranscriptRecord } from "../../sessions/transcript-record.js";
-import { fileSandboxSettingsStore } from "../../settings/settings-store.js";
-import { resolveRequest } from "../tools/agent-requests.js";
-import { stopTurn } from "../anchors/agent-steering.js";
-import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
+import type { TranscriptAgent } from "../../../sessions/agent-transcript.js";
+import { testMintedSlices } from "../../../harness/route-services.testing.js";
+import { automationConfig } from "../../../harness/route-stores.testing.js";
+import { fileTranscriptRecord } from "../../../sessions/transcript-record.js";
+import { fileSandboxSettingsStore } from "../../../settings/settings-store.js";
+import { resolveRequest } from "../../tools/agent-requests.js";
+import { stopTurn } from "../../anchors/agent-steering.js";
+import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
 import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
 import { turnRunOf } from "./turn-runs.js";
 import {

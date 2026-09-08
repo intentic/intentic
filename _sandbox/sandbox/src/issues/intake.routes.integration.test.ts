@@ -13,7 +13,7 @@ import {
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
-import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";

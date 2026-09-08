@@ -8,8 +8,8 @@ import { conditionHolds } from "../../rules/rules.js";
 import { workspaceRelative } from "../../rules/turn-ending.js";
 import { type VerificationLedger, verifyEditsMessage } from "./agent-verification.js";
 import { type ViewLedger, verifyUiEditsMessage } from "./agent-viewing.js";
-import { startConversationTurn } from "../run/turn-resume.js";
-import { seedFields } from "../run/turn-seed.js";
+import { startConversationTurn } from "../run/turn/turn-resume.js";
+import { seedFields } from "../run/turn/turn-seed.js";
 
 /* THE PROOF FOLLOW-UP, ON THE FIVE RUNTIMES THAT COULD NEVER HAVE IT.
  *
@@ -79,7 +79,7 @@ const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly 
 
 export interface VerifyNudge {
     readonly conversationId: string;
-    /* The turn that just ended. Its whole identity is copied onto the follow-up (agent/run/turn-seed.ts) —
+    /* The turn that just ended. Its whole identity is copied onto the follow-up (agent/run/turn/turn-seed.ts) —
      * provider, harness, account, model, effort, reasoning, speed, persona, posture and job — because the
      * follow-up has to run WHERE the work ran, or it is asking a different agent about somebody else's edits.
      *
@@ -173,7 +173,7 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
                 prompt: message,
                 conversationId,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                /* THE NUDGED TURN, WHOLE (agent/run/turn-seed.ts): same provider, same model, same reasoning,
+                /* THE NUDGED TURN, WHOLE (agent/run/turn/turn-seed.ts): same provider, same model, same reasoning,
                  * same persona, same job. This module's standing rule is that a follow-up on a different model
                  * is a different agent asked about somebody else's edits, and it meets them cold — the whole
                  * value of resuming the session above is a context the provider has already cached.

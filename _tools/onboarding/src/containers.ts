@@ -89,8 +89,27 @@ export const startContainer = async (spec: ContainerSpec): Promise<void> => {
     await docker(args, `starting ${spec.name}`, 300_000);
 };
 
-export const logsOf = async (name: string): Promise<string> =>
-    docker([`logs`, `--tail`, `80`, name], `reading ${name}'s log`, 30_000).catch(() => `(no log)`);
+/* A container's last 80 lines, BOTH STREAMS, and not just stdout.
+ *
+ * `docker logs` writes the container's stdout to its own stdout and the container's stderr to its own stderr,
+ * so reading only stdout through the helper above keeps exactly the half that a crashing container does not
+ * use. A startup crash is on stderr, always: an unhandled throw, a failed bind, a missing module.
+ *
+ * That cost a night. The stand-in model exited instantly on `ERR_MODULE_NOT_FOUND` and the nightly reported
+ * `the stand-in model exited before it answered at … , last attempt: fetch failed` with NOTHING under the
+ * container's name — so the one line that named the cause was the one line thrown away, and the report read as
+ * a container that had died silently. Hence also the note when the log really is empty: "the container printed
+ * nothing" is a fact about the container, and it must not be confusable with a reporter that dropped it.
+ */
+export const logsOf = async (name: string): Promise<string> => {
+    try {
+        const { stdout, stderr } = await run(`docker`, [`logs`, `--tail`, `80`, name], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+        const both = `${stdout}${stderr}`.trim();
+        return both === `` ? `(log empty: the container printed nothing)` : both;
+    } catch {
+        return `(no log)`;
+    }
+};
 
 /* Whether a container is still running.
  *

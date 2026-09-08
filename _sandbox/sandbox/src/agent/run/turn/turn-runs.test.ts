@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { describe, expect, it, vi } from "vitest";
 import type { JournalEntry } from "./turn-journal.js";
-import { commandsOf, resetCommands } from "../providers/agent-commands.js";
+import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
 import { type AttachEntry, type AttachHead, startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
 
 // A hand-cranked turn: the test pushes events (or a failure) and the run's pump consumes them as they land:

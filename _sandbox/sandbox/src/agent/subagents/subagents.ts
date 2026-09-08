@@ -12,7 +12,7 @@ import type {
 } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../../system/runtime-watch.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
-import { turnRunOf } from "../run/turn-runs.js";
+import { turnRunOf } from "../run/turn/turn-runs.js";
 
 /* THE AGENTS AN AGENT STARTS, AS THINGS THE DAEMON CAN NAME.
  *

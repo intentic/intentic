@@ -21,12 +21,12 @@ survive reconnects. Its subsystems:
   ([sandbox-contract/agent-catalog.ts](../../_shared/sandbox-contract/src/models/agent-catalog.ts)) is one row per runtime:
   steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery: and both sides of
   the wire read it. The daemon gates its seams on it and strips the controls a runtime would silently drop
-  ([agent/turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn-plan.ts)); the composer offers only the modes and knobs
+  ([agent/turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-plan.ts)); the composer offers only the modes and knobs
   something applies, and names the rest as what this provider can't do. A capability is listed only if
   something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
   without a row
   ([webchat/](../../_sandbox/sandbox/src/webchat/)). A chat turn executes as a **detached run**
-  ([agent/turn-runs.ts](../../_sandbox/sandbox/src/agent/run/turn-runs.ts)): `POST /agent` acks with a run id, the
+  ([agent/turn-runs.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)): `POST /agent` acks with a run id, the
   daemon folds the provider's frames into the conversation's rows as they arrive (one fold, the contract's
   [transcript-fold.ts](../../_shared/sandbox-contract/src/text/transcript-fold.ts), shared with the demo), and any number
   of clients render them via `/agent/attach`: the head carries the run's rows whole, then every change lands as
@@ -34,9 +34,9 @@ survive reconnects. Its subsystems:
   and folds nothing, so a turn survives reloads and dropped connections, and every window or device on the
   conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
   daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
-  ([agent/turn-journal.ts](../../_sandbox/sandbox/src/agent/run/turn-journal.ts)) and cleared when it settles, so whatever
+  ([agent/turn-journal.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-journal.ts)) and cleared when it settles, so whatever
   is still there at boot is exactly what the process died under: and `resumeInterruptedTurns`
-  ([agent/turn-resume.ts](../../_sandbox/sandbox/src/agent/run/turn-resume.ts)) re-runs it on the session holding its
+  ([agent/turn-resume.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-resume.ts)) re-runs it on the session holding its
   partial work. That matters because intentic's own flows cause the deaths: every update, environment approval
   and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
   to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's

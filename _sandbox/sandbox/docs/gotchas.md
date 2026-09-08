@@ -123,7 +123,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
   already told what it proved), and a nudge never answers a nudge.
 - **A nudge, and a watch wake, run as the turn they continue — every field of it**
-  (`src/agent/run/turn-seed.ts`). Both start a turn that picks an earlier one's thread back up, so both copy
+  (`src/agent/run/turn/turn-seed.ts`). Both start a turn that picks an earlier one's thread back up, so both copy
   that turn's whole identity: provider, harness, account, model, effort, reasoning, speed, persona and job.
   They each used to spell that list out for themselves and each spelled a different, shorter one — provider,
   model and effort travelled while `thinking`, `fast` and `actsAs` did not — so a follow-up on a
@@ -136,7 +136,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not
   to duplicate them. Built-ins add no prompt text. Native runtimes are omitted because their fallback does not
   execute command rules. Said on a conversation's opening message and on the first turn after a compaction, not
-  on every turn (`src/agent/run/turn-plan.ts`, the `send.turnEnding` gate): from the second message the note stands
+  on every turn (`src/agent/run/turn/turn-plan.ts`, the `send.turnEnding` gate): from the second message the note stands
   in the session's own history where the model can read it, and repeating it there is the per-turn cost the
   dependency notice and the rebase note were each walked back from. A compaction is the one event that takes it
   back out of that history, so it is the one event that earns it again — recorded per conversation as the turn
@@ -152,7 +152,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   dependency directories are bare mount points and reported a red tree over `prisma: not found` in a fully
   installed workspace, with `nsenter` right there in its own command line. Unset rather than reassigned: with
   nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
-- **A `turn.ending` check says in the log where it ran** (`src/agent/run/turn-plan.ts`): `checks: check started`
+- **A `turn.ending` check says in the log where it ran** (`src/agent/run/turn/turn-plan.ts`): `checks: check started`
   and `checks: check settled` carry the command, `anchored`, the status, the exit code and the duration, the
   same shape `prepush` has. Without them a check that exited 127 over a missing workspace binary left the only
   record of itself in a model's transcript.
@@ -217,7 +217,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   bad-model-pick branch in each: the sentence ends in "on this model", so the older branch would have thrown away
   a pinned model that was never at fault.
 - **Automatic tier selection is judged in one place, said out loud, and refusable.** Every turn passes a pure
-  keyword-and-weights judge before it is planned (`src/agent/run/turn-tier.ts` over the contract's
+  keyword-and-weights judge before it is planned (`src/agent/run/turn/turn-tier.ts` over the contract's
   `prompt-complexity.ts`), which costs no call and, in the default `shadow` mode, no I/O either: the verdict is
   recorded and nothing is moved. It can only ever route DOWN, to a cheaper rung of the provider the turn is
   already on, because the standard tier is not a setting, it is whatever the user picked. Three things follow
@@ -241,7 +241,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   why the ledger records the verdict and the ceiling beside the score, a bare 0.35 is standard on one stop and
   fast on the next, and a refit reading the score column alone could not tell those rows apart.
 - **The conversation record is what was on screen, cards included, because both come from ONE fold.** A turn's
-  frames are folded into transcript rows as they arrive, inside the run itself (`TurnRun` in src/agent/run/turn-runs.ts,
+  frames are folded into transcript rows as they arrive, inside the run itself (`TurnRun` in src/agent/run/turn/turn-runs.ts,
   running the contract's `TranscriptFold`, `@intentic/sandbox-contract/transcript-fold`), and everything reads
   those rows: `/agent/attach` hands a window the run's rows whole and then every change as a patch, the record on
   `/history/transcripts` is appended the settled run's rows (src/sessions/turn-transcript.ts), a subagent's

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import { planHarnessTurn } from "../../agent/run/turn-plan.js";
+import { planHarnessTurn } from "../../agent/run/turn/turn-plan.js";
 import type { Config } from "../../env.config.js";
 import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-credentials.js";
 import { claudeOneShot } from "./claude-one-shot.js";

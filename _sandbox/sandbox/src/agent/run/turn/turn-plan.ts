@@ -17,23 +17,23 @@ import {
     envSuffix,
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../agents/worktrees/isolation.js";
-import { admitTurn, readMemoryHeadroom } from "../../platform/resources/memory-admission.js";
-import { createFreshnessResolver } from "../../dependencies/registry-freshness.js";
-import { createWorkspacePins } from "../../dependencies/workspace-pins.js";
-import { statePath } from "../../workspace/layout/state-paths.js";
-import { dirtyPathsAcross } from "../../git/changes/changes.js";
-import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
-import { accountsServer } from "../../browser/tools/accounts-tools.js";
-import { secretsServer } from "../../browser/tools/secrets-tools.js";
-import type { SecretAccess } from "../tools/agent-secrets.js";
-import { gateTargetOf } from "../../secrets/credential-gates.js";
-import { gatedCapabilities, gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../secrets/credential-gating.js";
-import { fetchEmailCode } from "../../browser/tools/email-codes.js";
-import { openBrowserAccount } from "../../capabilities/open-account.js";
-import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
-import { browserServersOf } from "../../browser/tools/browser-tools.js";
-import { personaKitPlugin, readPersonaPrompt } from "../../personas/persona-kit.js";
+import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
+import { admitTurn, readMemoryHeadroom } from "../../../platform/resources/memory-admission.js";
+import { createFreshnessResolver } from "../../../dependencies/registry-freshness.js";
+import { createWorkspacePins } from "../../../dependencies/workspace-pins.js";
+import { statePath } from "../../../workspace/layout/state-paths.js";
+import { dirtyPathsAcross } from "../../../git/changes/changes.js";
+import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
+import { accountsServer } from "../../../browser/tools/accounts-tools.js";
+import { secretsServer } from "../../../browser/tools/secrets-tools.js";
+import type { SecretAccess } from "../../tools/agent-secrets.js";
+import { gateTargetOf } from "../../../secrets/credential-gates.js";
+import { gatedCapabilities, gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
+import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
+import { openBrowserAccount } from "../../../capabilities/open-account.js";
+import { browserOutputDir } from "../../../browser/cast/browser-artifacts.js";
+import { browserServersOf } from "../../../browser/tools/browser-tools.js";
+import { personaKitPlugin, readPersonaPrompt } from "../../../personas/persona-kit.js";
 import {
     type TurnPersona,
     personaCapabilities,
@@ -42,51 +42,51 @@ import {
     personaNote,
     personaPrompt,
     turnPersona,
-} from "../../personas/personas.js";
-import { personaScopeOf } from "../../personas/persona-scope.js";
-import { jsExecutionPlanOf } from "../../execution/js-runtime.js";
-import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
-import { peerToolsOf } from "../../peers/peer-tools.js";
-import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
-import { pluginDirsOf } from "../../capabilities/plugin-dirs.js";
-import type { Services } from "../../composition.js";
-import { extensionAgentDirsOf } from "../../extensions/installed-extensions.js";
-import { createHashlineServer } from "../../hashline/hashline-tools.js";
-import { createDiagnosticsServer } from "../../logs/diagnostics-tools.js";
-import { type RuleCommandRun, runRuleCommand } from "../../rules/rule-command.js";
-import { fileEditedReviewer, spawnEditCommand } from "../../rules/file-edited.js";
-import { verifyTestsMessage } from "../verification/agent-tests.js";
-import { passesAgainstHead } from "../verification/agent-test-strength.js";
-import { recordCheckVerdict } from "../verification/turn-checks.js";
-import { standing } from "../../rules/rules.js";
-import { turnEndingNote } from "../../rules/turn-ending-note.js";
-import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
-import { queueRunEnabled } from "../../terminal/terminal-run.js";
-import type { AgentRequest } from "./agent.js";
-import { armSupervisor, type ChildSupervisor } from "../subagents/children.js";
-import { SPAWN_NOTE_TITLE, spawnNote } from "../subagents/spawn-note.js";
-import { adapterFor } from "../providers/adapter-registry.js";
-import { isUnknownSlashCommand } from "../providers/agent-commands.js";
-import type { SteeringQueue } from "../anchors/agent-steering.js";
-import { withAttachmentNote } from "../prompt/attachment-note.js";
-import { contextShortfall } from "../prompt/context-budget.js";
-import { subagentWaitServer } from "../subagents/subagent-wait.js";
-import { watchServer } from "../verification/watch-server.js";
-import type { WatcherTurnSeed } from "../verification/watchers.js";
+} from "../../../personas/personas.js";
+import { personaScopeOf } from "../../../personas/persona-scope.js";
+import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
+import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
+import { peerToolsOf } from "../../../peers/peer-tools.js";
+import { mcpToolsOf } from "../../../capabilities/mcp-tools.js";
+import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
+import type { Services } from "../../../composition.js";
+import { extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
+import { createHashlineServer } from "../../../hashline/hashline-tools.js";
+import { createDiagnosticsServer } from "../../../logs/diagnostics-tools.js";
+import { type RuleCommandRun, runRuleCommand } from "../../../rules/rule-command.js";
+import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
+import { verifyTestsMessage } from "../../verification/agent-tests.js";
+import { passesAgainstHead } from "../../verification/agent-test-strength.js";
+import { recordCheckVerdict } from "../../verification/turn-checks.js";
+import { standing } from "../../../rules/rules.js";
+import { turnEndingNote } from "../../../rules/turn-ending-note.js";
+import { CHECKS_SESSION } from "../../../terminal/terminal-session.js";
+import { queueRunEnabled } from "../../../terminal/terminal-run.js";
+import type { AgentRequest } from "../agent.js";
+import { armSupervisor, type ChildSupervisor } from "../../subagents/children.js";
+import { SPAWN_NOTE_TITLE, spawnNote } from "../../subagents/spawn-note.js";
+import { adapterFor } from "../../providers/adapter-registry.js";
+import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
+import type { SteeringQueue } from "../../anchors/agent-steering.js";
+import { withAttachmentNote } from "../../prompt/attachment-note.js";
+import { contextShortfall } from "../../prompt/context-budget.js";
+import { subagentWaitServer } from "../../subagents/subagent-wait.js";
+import { watchServer } from "../../verification/watch-server.js";
+import type { WatcherTurnSeed } from "../../verification/watchers.js";
 import { seedFields } from "./turn-seed.js";
-import { resolveHarnessCredentials } from "../providers/harness-credentials.js";
-import { turnPromptPlacement } from "../prompt/system-prompt.js";
-import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../prompt/turn-preamble.js";
-import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "../prompt/workspace-map.js";
-import { createDepsServer } from "../../workspace/deps/deps-tools.js";
-import { dependencyDirForCommand } from "../tools/agent-deps.js";
-import { setupNoticeFor, setupNoticeTitle } from "../../workspace/layout/workspace-setup.js";
-import { loadedSkillCatalogNote, SKILL_CATALOG_NOTE_TITLE } from "../../settings/loaded-skills.js";
-import { compactedSinceLastTurn } from "../../agents/registry/agents-store.js";
-import { contextNoteIfDue } from "../context/conversation-context.js";
-import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "../prompt/iq-search-instruction.js";
-import { judgeCommand } from "../tools/command-judge.js";
-import type { CommandGateOptions } from "../../guard/command-gate.js";
+import { resolveHarnessCredentials } from "../../providers/harness-credentials.js";
+import { turnPromptPlacement } from "../../prompt/system-prompt.js";
+import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
+import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "../../prompt/workspace-map.js";
+import { createDepsServer } from "../../../workspace/deps/deps-tools.js";
+import { dependencyDirForCommand } from "../../tools/agent-deps.js";
+import { setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
+import { loadedSkillCatalogNote, SKILL_CATALOG_NOTE_TITLE } from "../../../settings/loaded-skills.js";
+import { compactedSinceLastTurn } from "../../../agents/registry/agents-store.js";
+import { contextNoteIfDue } from "../../context/conversation-context.js";
+import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
+import { judgeCommand } from "../../tools/command-judge.js";
+import type { CommandGateOptions } from "../../../guard/command-gate.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED, the one question every turn has to answer before it can
  * stream anything, and the one the turn route used to answer inline as a four-arm if/else chain wrapped around
@@ -211,7 +211,7 @@ export interface TurnContext {
 /* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE: where the arming turn ran, on whose account, at what tier,
  * with what reasoning, as which persona, in what posture, and what job it was.
  *
- * The list belongs to agent/run/turn-seed.ts rather than here, because the proof follow-up needs exactly the
+ * The list belongs to agent/run/turn/turn-seed.ts rather than here, because the proof follow-up needs exactly the
  * same one and the two used to keep separate, differently incomplete copies of it. A wake that fires four hours
  * later has nobody to ask what it should have been; every answer it gets has to have been written down at arm
  * time, and a field this forgets is a field the wake silently changes. */

@@ -2,7 +2,7 @@ import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentOriginSchema, AgentTurnSchema, isConversationId, ParkedCardSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { writeJsonFile } from "../../store/json-file.js";
+import { writeJsonFile } from "../../../store/json-file.js";
 
 /* THE TURN JOURNAL, what is in flight right now, written down where the process cannot take it with it.
  *

@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
-import { stopMachine } from "../sandbox/hosted/fly.js";
+import { stopMachine } from "../sandbox/hosted/fly/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
 import { cancelHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";

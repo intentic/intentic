@@ -79,7 +79,7 @@ const JournalledWatchSchema = z.object({
         isolated: z.boolean().optional(),
         unattended: z.boolean().optional(),
         // What JOB the arming turn was, carried so the wake stays that same job. Not a model fallback: the wake
-        // already runs on the arming turn's own model (see agent/run/turn-seed.ts).
+        // already runs on the arming turn's own model (see agent/run/turn/turn-seed.ts).
         runRole: ModelRoleSchema.optional(),
     }),
 });

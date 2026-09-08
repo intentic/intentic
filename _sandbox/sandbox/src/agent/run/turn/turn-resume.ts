@@ -10,21 +10,21 @@ import {
     withoutResumeNote,
     withResumeNote,
 } from "@intentic/sandbox-contract";
-import { fireAutomation, type WakeFn } from "../../automations/scheduler.js";
-import { replaceRejectedToken } from "../../runtimes/claude/claude-credentials.js";
-import type { Services } from "../../composition.js";
-import { turnAwaiting, turnFinished } from "../../push/notifications.js";
-import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../sessions/turn-transcript.js";
-import { grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
-import { formatAnswers } from "../tools/question-answers.js";
-import { restoreRequest } from "../tools/agent-requests.js";
-import { personaRunModel, runRoleModel } from "../models/run-role-model.js";
-import { registerTurn } from "../anchors/agent-steering.js";
-import { outageRetryDue, outageRetryFired } from "../providers/provider-health.js";
+import { fireAutomation, type WakeFn } from "../../../automations/scheduler.js";
+import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
+import type { Services } from "../../../composition.js";
+import { turnAwaiting, turnFinished } from "../../../push/notifications.js";
+import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
+import { grantRestoredPermission, POST_PLAN_MODE } from "../agent.js";
+import { formatAnswers } from "../../tools/question-answers.js";
+import { restoreRequest } from "../../tools/agent-requests.js";
+import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
+import { registerTurn } from "../../anchors/agent-steering.js";
+import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { TurnInput } from "./turn-actor.js";
-import type { VerificationStanding } from "../verification/agent-verification.js";
+import type { VerificationStanding } from "../../verification/agent-verification.js";
 
 /* RE-RUNNING A TURN WHOSE BLOCKER HAS CLEARED, three conditions, one mechanism.
  *

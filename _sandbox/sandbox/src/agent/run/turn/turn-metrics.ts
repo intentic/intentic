@@ -1,5 +1,5 @@
 import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
-import { isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork } from "../tools/tool-calls.js";
+import { isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork } from "../../tools/tool-calls.js";
 
 /* WHAT A TURN DID BEFORE IT DID THE WORK, counted as the frames arrive, because the frame stream is the only
  * place that still knows the ORDER things happened in. The four readings the mechanism experiments are judged

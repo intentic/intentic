@@ -7,7 +7,7 @@ import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, health
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn-plan.js";
+import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { onPath } from "../../platform/boot/on-path.js";

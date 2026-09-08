@@ -8,8 +8,8 @@ import {
     fastTierModel,
     judgeComplexity,
 } from "@intentic/sandbox-contract";
-import type { Services } from "../../composition.js";
-import { splitAttachments } from "../prompt/attachment-note.js";
+import type { Services } from "../../../composition.js";
+import { splitAttachments } from "../../prompt/attachment-note.js";
 
 /* AUTOMATIC TIER SELECTION, daemon side: the one place a turn is judged and, when the owner has asked for it,
  * quietly moved onto a cheaper rung of the provider it is already on.

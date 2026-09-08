@@ -1,6 +1,6 @@
 import type { AgentTurn } from "@intentic/sandbox-contract";
-import type { Caller } from "../../auth/auth.js";
-import { type Principal, principalActor } from "../../auth/principal.js";
+import type { Caller } from "../../../auth/auth.js";
+import { type Principal, principalActor } from "../../../auth/principal.js";
 
 /* WHO ASKED FOR THIS TURN, as the daemon verified it, never as the client said it.
  *

@@ -9,7 +9,7 @@ import type { Services } from "../../composition.js";
 import { testConfig } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
 import type { AgentRequest } from "../run/agent.js";
-import { planTurn, type TurnContext } from "../run/turn-plan.js";
+import { planTurn, type TurnContext } from "../run/turn/turn-plan.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 

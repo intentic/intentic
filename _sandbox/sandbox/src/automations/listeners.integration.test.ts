@@ -5,7 +5,7 @@ import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMe
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { fileTurnJournal } from "../agent/run/turn-journal.js";
+import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";

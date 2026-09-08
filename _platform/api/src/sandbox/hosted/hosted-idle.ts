@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { onHostedPlan } from "./hosted-plan.js";
-import { getMachine, isFlyGone, LIVE_STATES } from "./fly.js";
+import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
 import { closeHostedStretch } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";

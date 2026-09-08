@@ -8,7 +8,7 @@ import {
 import { judgeCommand } from "../agent/tools/command-judge.js";
 import { raiseCard } from "../agent/run/offer-card.js";
 import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
-import { turnRunOf } from "../agent/run/turn-runs.js";
+import { turnRunOf } from "../agent/run/turn/turn-runs.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";

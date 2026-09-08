@@ -2,11 +2,11 @@ import { tmpdir } from "node:os";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { Services } from "../../composition.js";
+import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { testConfig } from "../../testing.js";
-import { TURN_ENDING_NOTE_HEADER } from "../../rules/turn-ending-note.js";
-import type { AgentRequest } from "./agent.js";
+import { testConfig } from "../../../testing.js";
+import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
+import type { AgentRequest } from "../agent.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
@@ -22,12 +22,12 @@ import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
-vi.mock("../providers/harness-credentials.js", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../providers/harness-credentials.js")>()),
+vi.mock("../../providers/harness-credentials.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../../providers/harness-credentials.js")>()),
     resolveHarnessCredentials: () => credentials(),
 }));
 const browserServers = vi.fn();
-vi.mock("../../browser/tools/browser-tools.js", () => ({
+vi.mock("../../../browser/tools/browser-tools.js", () => ({
     ROUTED_BROWSER_SERVER: "browser",
     browserServersOf: (...args: unknown[]) => browserServers(...args),
 }));
@@ -37,7 +37,7 @@ vi.mock("../../browser/tools/browser-tools.js", () => ({
  * and no prompt assertion below depends on whatever happens to be checked out on the machine running it. The
  * cases that need a REAL tree (a dependency notice, a skill catalogue read off disk) are asserted where one can
  * be built: turn-plan.integration.test.ts. The seams themselves live in turn-plan.testing.ts, shared with it. */
-const IQ_PLUGIN_DIR = new URL("../../../../../_search/iq/plugin", import.meta.url).pathname;
+const IQ_PLUGIN_DIR = new URL("../../../../../../_search/iq/plugin", import.meta.url).pathname;
 
 beforeEach(() => {
     credentials.mockReset();

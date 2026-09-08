@@ -2,7 +2,7 @@ import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import type { Caller } from "../../auth/auth.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../platform/boot/leftovers.js";
 import { createRequest, type MayAnswer } from "../tools/agent-requests.js";
-import { soleLiveConversation, turnRunOf } from "./turn-runs.js";
+import { soleLiveConversation, turnRunOf } from "./turn/turn-runs.js";
 
 /* AN OFFER CARD is a card raised from OUTSIDE the turn generator: the agent's CLI call arrives as an HTTP
  * request while the turn sits inside its Bash tool, or a tool call crosses a bridge on its way to somebody's

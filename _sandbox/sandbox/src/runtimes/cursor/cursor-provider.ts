@@ -6,7 +6,7 @@ import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn-plan.js";
+import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";

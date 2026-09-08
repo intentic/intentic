@@ -109,7 +109,7 @@ import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
-import { fileTurnJournal, type TurnJournal } from "./agent/run/turn-journal.js";
+import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
 import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/anchors/turn-anchors.js";
 import type { Config } from "./env.config.js";
@@ -196,7 +196,7 @@ import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js"
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { liveCardRun } from "./agent/run/offer-card.js";
-import { onTurnSettled, turnRunOf } from "./agent/run/turn-runs.js";
+import { onTurnSettled, turnRunOf } from "./agent/run/turn/turn-runs.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";

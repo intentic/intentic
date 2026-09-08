@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { createTurnMetrics } from "./turn-metrics.js";
-import { toolCategoryOf } from "../tools/tool-calls.js";
+import { toolCategoryOf } from "../../tools/tool-calls.js";
 
 /* The four readings the mechanism experiments are judged on, and every one of them is a claim about ORDER: the
  * same calls in a different sequence are a different turn. So the fixtures here are sequences, and the numbers

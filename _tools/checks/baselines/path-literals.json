@@ -19,7 +19,7 @@
     "_sandbox/sandbox/src/agent/models/role-model.test.ts": 1,
     "_sandbox/sandbox/src/agent/providers/agent-freshness.test.ts": 1,
     "_sandbox/sandbox/src/agent/routes/agent.routes.integration.test.ts": 4,
-    "_sandbox/sandbox/src/agent/run/turn-plan.test.ts": 2,
+    "_sandbox/sandbox/src/agent/run/turn/turn-plan.test.ts": 2,
     "_sandbox/sandbox/src/agent/subagents/children.test.ts": 4,
     "_sandbox/sandbox/src/agent/tools/agent-redaction.test.ts": 3,
     "_sandbox/sandbox/src/agent/verification/agent-test-strength.integration.test.ts": 1,
