@@ -132,7 +132,7 @@ describe("request and response shapes", () => {
     });
 
     it("carries no dialect banner on any schema node", async () => {
-        // Checked by value, not by key: an extension manifest has a real field literally named $schema.
+        // Checked by value: not.toContain("$schema") fails because an extension manifest has a real field named $schema.
         const banners: string[] = [];
         const walk = (node: unknown, path: string): void => {
             if (node === null || typeof node !== "object") {
