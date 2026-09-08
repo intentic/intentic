@@ -1,6 +1,6 @@
 import { createBackoff } from "@intentic/base/async";
-import { webextConnectUrl } from "@intentic/sandbox-contract";
-import { dialPeer, PEER_LINK_BACKOFF, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
+import { WEBEXT_HEARTBEAT_MS, webextConnectUrl } from "@intentic/sandbox-contract";
+import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { createWebExtRouter } from "./router.js";
 import { store } from "./store.js";
@@ -46,6 +46,9 @@ export const ensureLink = async (): Promise<void> => {
         hello: async () => ({ type: "hello", token: (await store.sandbox())?.token ?? "", version: version() }),
         attach: (ws) => handler.upgrade(ws),
         backoff: createBackoff(PEER_LINK_BACKOFF),
+        /* A socket the sandbox has gone quiet on is redialled rather than held: the alarm above only re-dials a
+         * link that reads `closed`, so a half-open one would look connected to every entry point there is. */
+        silenceMs: peerLinkSilenceMs(WEBEXT_HEARTBEAT_MS),
         // Nothing reads a log here: the popup's activity list is written by the calls themselves.
         log: () => undefined,
         /* The sandbox revoked this browser. Forgetting the pairing is the honest response: the token is now

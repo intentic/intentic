@@ -1,7 +1,7 @@
 import { createBackoff } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
-import { hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
-import { dialPeer, PEER_LINK_BACKOFF, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
+import { HOST_HEARTBEAT_MS, hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
+import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
 import { type HostLink, rememberScopes } from "./config.js";
@@ -71,6 +71,11 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
         hello: () => ({ type: "hello", token: config.token, version }),
         attach: (ws) => handler.upgrade(ws),
         backoff: createBackoff(PEER_LINK_BACKOFF),
+        /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most:
+         * the address resolved above is often a loopback hop through a port relay that outlives the container
+         * behind it, which is precisely the socket that dies without a close frame (peer-dial.ts says what that
+         * cost). Timed off the sandbox's own heartbeat, so silence here means the sandbox, not the network. */
+        silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),
         log,
         revoked: () =>
             log("the sandbox refused this device's enrollment: it was revoked there. Run `intentic-machine device uninstall` to clean up, or connect again from the sandbox."),

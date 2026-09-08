@@ -43,6 +43,12 @@ export type RunnerHello = z.infer<typeof RunnerHelloSchema>;
 
 // The URL a runner dials, given its parent's public URL. One builder, so `ic`, the Fly provisioner and the
 // daemon route cannot disagree about where the door is (hostConnectUrl's rule).
+/* HOW OFTEN THE PARENT PINGS A CONNECTED RUNNER, read by both sides of the socket: the parent's hub pings on
+ * it (runners/runner-peer.ts) and the runner presumes the link dead after a few of them pass in silence
+ * (peer-dial.ts's peerLinkSilenceMs). One number, because the two sides disagreeing about it is a runner either
+ * dropped while healthy or believed alive for as long as its socket happens to stay open. */
+export const RUNNER_HEARTBEAT_MS = 30_000;
+
 export const runnerConnectUrl = (parentUrl: string): string => `${parentUrl.replace(/^http/, "ws").replace(/\/$/, "")}/system/runners/connect`;
 
 // Where a runner redeems its pairing for the durable token, once, over plain HTTPS.

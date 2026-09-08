@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { type webextContract,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
+import { type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
@@ -46,7 +46,9 @@ export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, n
     },
     hub: {
         domain: "webext",
-        heartbeatMs: 20_000,
+        // Tighter than the machine door's, for the MV3 reason webext-protocol.ts states beside the number: the
+        // extension's own watchdog is timed off it, so it lives in the contract both sides read.
+        heartbeatMs: WEBEXT_HEARTBEAT_MS,
         callTimeoutMs: 10 * 60 * 1000,
         offline: (id) => `"${id}" is not connected right now: that browser is closed, or its computer is asleep.`,
     },

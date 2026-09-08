@@ -1,6 +1,6 @@
 import { createBackoff } from "@intentic/base/async";
-import { runnerConnectUrl } from "@intentic/sandbox-contract";
-import { dialPeer, PEER_LINK_BACKOFF, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
+import { RUNNER_HEARTBEAT_MS, runnerConnectUrl } from "@intentic/sandbox-contract";
+import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import type { Services } from "../composition.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
@@ -35,6 +35,10 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): P
         },
         attach: (ws) => handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]),
         backoff: createBackoff(PEER_LINK_BACKOFF),
+        /* A parent that went away without closing this socket leaves a runner that looks attached and answers
+         * nothing — and unlike a device, nobody is watching a card for it, so silence is the only signal there
+         * is. Timed off the parent's own heartbeat. */
+        silenceMs: peerLinkSilenceMs(RUNNER_HEARTBEAT_MS),
         log: (message) => services.logger.info({ parent: identity.parentUrl, id: identity.id }, `runner link: ${message}`),
         revoked: () =>
             services.logger.error(

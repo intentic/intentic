@@ -16,6 +16,14 @@ import { z } from "zod";
 // offline machine negotiating a different protocol than the same machine awake.
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
+/* HOW OFTEN THIS DOOR PINGS A CONNECTED MACHINE, read by both sides of the socket: the daemon's hub pings on
+ * it (hosts/host-peer.ts) and the agent presumes a link dead after a few of them pass in silence
+ * (peer-dial.ts's peerLinkSilenceMs). Frequent enough to stay inside the idle timeout of every tunnel and proxy
+ * in the path, and it is the failure of a ping that tells the daemon a lid closed without a close frame ever
+ * arriving. One number, because the two sides disagreeing about it is a device that is either dropped while
+ * healthy or believed alive for as long as its socket stays open. */
+export const HOST_HEARTBEAT_MS = 30_000;
+
 export const HostHelloSchema = z.object({
     type: z.literal("hello"),
     /* The machine's enrollment token, in the FIRST FRAME, never in the URL. A WebSocket has no headers to put

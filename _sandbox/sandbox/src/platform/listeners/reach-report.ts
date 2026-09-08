@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
 import type { BootTracker } from "../boot/boot.js";
+import type { ReachPosture } from "./ingress-tunnel.js";
 import { readCpuThrottle } from "../resources/cpu-throttle.js";
 import { postToPlatform } from "../platform-post.js";
 
@@ -56,7 +57,10 @@ export interface ReachState {
 }
 
 export interface ReachReporter {
-    readonly start: () => void;
+    /* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for
+     * here rather than guessed at from config: the give-up window below is patience for a dial in flight, and
+     * a container that dials nothing has no dial to be patient about. */
+    readonly start: (posture: ReachPosture) => void;
     readonly stop: () => void;
     readonly status: () => ReachState;
 }
@@ -176,7 +180,25 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
     };
 
     return {
-        start: () => {
+        start: (posture) => {
+            /* THE ONE VERDICT THAT IS SETTLED THE MOMENT IT IS ASKED, and getting it wrong cost somebody an
+             * evening. A container handed a public name but no grant and no edge to dial will not start
+             * answering there in five minutes or in five days — the values it needs ride in with a setup
+             * command, and until one does, every probe spends ten seconds to reprint the same 502. What the
+             * wizard read while that happened was "its tunnel has not come up", which is a sentence about
+             * waiting, so people waited; the daemon log said the same thing every thirty seconds and then
+             * fell silent, and the address kept being handed to device-pairing commands that could never
+             * work. `ic sandbox doctor` has drawn pending apart from settled for a while (doctor.rs's
+             * classify_public). This is the daemon drawing it too, at the one moment it is free to. */
+            if (posture.by === "loopback") {
+                const detail =
+                    `nothing will answer at ${publicUrl}: this sandbox has no reachability — ${posture.reason} — so its daemon dials no edge. ` +
+                    `Re-run its setup command from the setup screen, which carries the values it is missing; until then it answers on its own machine only.`;
+                logger.warn({ publicUrl, detail }, "sandbox has a public address it cannot serve");
+                status = { state: "unreachable", detail, retrying: false, at: Date.now() };
+                void tell("unreachable", detail);
+                return;
+            }
             deadline = Date.now() + REACH_GIVE_UP_MS;
             status = { state: "checking", at: Date.now() };
             reportWhenConverged();

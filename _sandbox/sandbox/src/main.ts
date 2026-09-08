@@ -75,7 +75,7 @@ import { onTurnSettled, turnRunMetrics } from "./agent/run/turn-runs.js";
 import { browserSessionMetrics } from "./browser/sessions/browser-sessions.js";
 import { unmaskableSecrets } from "./agent/tools/agent-redaction.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/tls/local-cert.js";
-import { startIngressTunnelWhenConfigured } from "./platform/listeners/ingress-tunnel.js";
+import { reachPosture, startIngressTunnelWhenConfigured } from "./platform/listeners/ingress-tunnel.js";
 import { createLoopbackListener } from "./platform/listeners/loopback-listener.js";
 import { restoreAuthorizedKeys } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
@@ -469,6 +469,10 @@ const main = async (): Promise<void> => {
      * preview proxy, so without one there is nowhere to forward to. A daemon with no grant, no edge or no
      * proxy is simply loopback-only — a test, a `local` profile, a platform running no fabric — which is a
      * posture, never a failure. */
+    /* HOW THIS SANDBOX IS REACHED, asked once here because two things downstream need the same answer: the
+     * tunnel that may have to be dialled, and the reporter that tells the setup screen whether anybody can
+     * get here at all. Both read `reachPosture`, so neither can hold an opinion the other does not. */
+    const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners, vm: config.sandbox.vm });
     const ingressTunnel = startIngressTunnelWhenConfigured({
         url: config.ingress.url,
         grant: config.sandbox.grant,
@@ -492,7 +496,7 @@ const main = async (): Promise<void> => {
              * has to hear "checking" while the tunnel comes up rather than nothing at all. The two are
              * separate claims deliberately (see reach-report.ts); registering says the daemon exists,
              * this says somebody can get to it. */
-            services.reach.start();
+            services.reach.start(reach);
         }
     }
 

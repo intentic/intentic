@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type hostContract,type HostFacts,type HostHello,HostHelloSchema,type HostScopes,type HostSummary } from "@intentic/sandbox-contract";
+import { HOST_HEARTBEAT_MS,type hostContract,type HostFacts,type HostHello,HostHelloSchema,type HostScopes,type HostSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
@@ -34,9 +34,9 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
     },
     hub: {
         domain: "hosts",
-        // Keepalive and liveness in one: frequent enough to stay inside the idle timeout of every tunnel and
-        // proxy in the path, and the failure that tells us a lid closed without a close frame ever arriving.
-        heartbeatMs: 30_000,
+        // Keepalive and liveness in one, and the agent's own watchdog is timed off the same number, which is
+        // why it lives in the contract both sides read (host-protocol.ts) rather than here.
+        heartbeatMs: HOST_HEARTBEAT_MS,
         callTimeoutMs: 15 * 60 * 1000,
         offline: (id) => `"${id}" is not connected right now: the device is asleep, offline, or its agent isn't running.`,
     },

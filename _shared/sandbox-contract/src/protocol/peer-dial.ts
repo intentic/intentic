@@ -32,6 +32,21 @@
 // takes seconds; the ceiling is low enough that a laptop opened after a night asleep is back within a minute.
 export const PEER_LINK_BACKOFF = { floorMs: 1_000, capMs: 30_000, stableMs: 60_000 } as const;
 
+/* HOW LONG A SOCKET MAY SAY NOTHING before this side calls the link dead, as a multiple of the door's own
+ * heartbeat: the hub pings every live peer on an interval (peer-hub.ts), so a socket with nothing on it for
+ * three heartbeats is not quiet, it is gone.
+ *
+ * WHY A PEER NEEDS THIS AT ALL — a close event is not guaranteed, and the loop below has nothing else to react
+ * to. The socket that taught us is a loopback one: a machine agent dialling a sandbox container on its own
+ * machine through Docker Desktop's port relay. The container was recreated; the relay was not, so it held the
+ * agent's TCP connection open with nothing behind it. No FIN, no error, no close event — the agent held an open
+ * socket to a daemon that had never heard of it for 25 hours, its Devices card offline the whole time, every
+ * control on that card dead, and the only cure anyone found was re-running setup by hand. Any path with a
+ * middlebox in it (a NAT, a tunnel, a userland proxy, a laptop's suspended wifi) can do this to a socket with
+ * nothing to say, and the middlebox is never the side that notices. The peer is. */
+export const PEER_LINK_SILENCE_HEARTBEATS = 3;
+export const peerLinkSilenceMs = (heartbeatMs: number): number => heartbeatMs * PEER_LINK_SILENCE_HEARTBEATS;
+
 // The sandbox closes with this when the token is not enrolled: a decision, not a fault, and one that never heals.
 const UNAUTHORIZED = 1008;
 
@@ -42,7 +57,10 @@ const OPEN = 1;
 // and a test's fake all satisfy it without a cast.
 export interface SocketLike {
     readonly readyState: number;
-    addEventListener(type: "open" | "close" | "error", listener: (event: { readonly code?: number }) => void): void;
+    /* `message` is here for the watchdog alone, which needs no more than the fact that one arrived: what is IN
+     * the frames belongs to the oRPC handler `attach` hands the socket to, and a listener added here does not
+     * take it from that one (both runtimes' sockets fan an event out to every listener). */
+    addEventListener(type: "open" | "close" | "error" | "message", listener: (event: { readonly code?: number }) => void): void;
     send(data: string): void;
     close(code?: number, reason?: string): void;
 }
@@ -60,6 +78,11 @@ export interface PeerDialSpec<S extends SocketLike> {
     readonly attach: (socket: S) => void;
     // The retry ladder: how long to wait after a drop, given how long the socket had held.
     readonly backoff: { readonly next: (heldMs: number) => number };
+    /* How long this socket may hear nothing before the link is presumed dead: `peerLinkSilenceMs` of the
+     * heartbeat the door's own hub pings on. Required rather than defaulted, because the number belongs to the
+     * door and a peer that quietly inherited someone else's would be guessing about the one deadline that
+     * decides whether it ever notices a dead link. */
+    readonly silenceMs: number;
     readonly log: (message: string) => void;
     // The sandbox refused the enrollment (1008). The loop has already stopped; this is where the peer says so.
     readonly revoked: () => void;
@@ -78,6 +101,9 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
     let socket: S | undefined;
     let waiting = false;
     let openedAt: number | undefined;
+    // The live attempt's watchdog, reachable from `stop`: a stopped link that left a timer armed is a process
+    // the runtime keeps alive for a socket nobody holds any more.
+    let disarmWatchdog: () => void = () => undefined;
     let resolveDone: () => void = () => undefined;
     const done = new Promise<void>((resolve) => {
         resolveDone = resolve;
@@ -101,8 +127,61 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         const ws = attempt.socket;
         socket = ws;
 
+        let watchdog: ReturnType<typeof setTimeout> | undefined;
+        const disarm = (): void => {
+            if (watchdog !== undefined) {
+                clearTimeout(watchdog);
+                watchdog = undefined;
+            }
+        };
+        disarmWatchdog = disarm;
+
+        /* THIS ATTEMPT'S DROP, taken by whichever side notices first: the far end's close frame, or the
+         * watchdog. Latched, because a socket the watchdog abandoned may still emit its close minutes later,
+         * and two redials on one link is two loops racing to hold the same door. */
+        let dropped = false;
+        const drop = (said: string): void => {
+            if (dropped) {
+                return;
+            }
+            dropped = true;
+            disarm();
+            if (socket === ws) {
+                socket = undefined;
+            }
+            if (stopping.signal.aborted) {
+                resolveDone();
+                return;
+            }
+            const delay = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
+            openedAt = undefined;
+            spec.log(`${said}; reconnecting in ${Math.round(delay / 1000)}s`);
+            waiting = true;
+            setTimeout(() => void open(), delay);
+        };
+
+        const arm = (): void => {
+            disarm();
+            watchdog = setTimeout(() => {
+                /* ABANDONED, not closed politely. A close frame sent to an end that is gone waits on a reply
+                 * that never comes — CLOSING is the state this watchdog exists to escape — so `close` is called
+                 * for the runtime's sake and the redial does not wait on an event that may never fire. */
+                ws.close(1000, "no heartbeat");
+                drop(`nothing heard for ${Math.round(spec.silenceMs / 1000)}s`);
+            }, spec.silenceMs);
+        };
+        // Armed from the DIAL rather than the open, because a socket that never finishes connecting hangs the
+        // same way and reads the same from outside: "connecting", forever, with nothing coming.
+        arm();
+        // Every frame is proof the far end is there, and the hub's heartbeat is what guarantees there are some.
+        ws.addEventListener("message", arm);
+
         ws.addEventListener("open", () => {
+            if (dropped) {
+                return; // abandoned mid-connect: this socket is already closed and its replacement is on the ladder
+            }
             openedAt = Date.now();
+            arm();
             spec.attach(ws);
             const send = (hello: Record<string, unknown>): void => {
                 ws.send(JSON.stringify(hello));
@@ -122,22 +201,21 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         });
 
         ws.addEventListener("close", (event) => {
-            socket = undefined;
-            if (stopping.signal.aborted) {
-                resolveDone();
-                return;
-            }
+            /* A revocation is answered here rather than through `drop`: it is the one close that ends the loop
+             * instead of feeding the ladder, and it must still land on a socket the watchdog abandoned first —
+             * an owner who revoked a peer has said so, whether or not this side had already given up on it. */
             if (event.code === UNAUTHORIZED) {
+                dropped = true;
+                disarm();
+                if (socket === ws) {
+                    socket = undefined;
+                }
                 stopping.abort();
                 resolveDone();
                 spec.revoked();
                 return;
             }
-            const delay = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
-            openedAt = undefined;
-            spec.log(`disconnected (${event.code ?? "no code"}); reconnecting in ${Math.round(delay / 1000)}s`);
-            waiting = true;
-            setTimeout(() => void open(), delay);
+            drop(`disconnected (${event.code ?? "no code"})`);
         });
 
         // A socket error is always followed by a close event, which owns the retry; this only records the cause,
@@ -152,6 +230,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         stop: (reason = "stopping") => {
             stopping.abort();
             waiting = false;
+            disarmWatchdog();
             // Forgotten before the close frame arrives, so `state` reads closed the moment the peer asked.
             const held = socket;
             socket = undefined;

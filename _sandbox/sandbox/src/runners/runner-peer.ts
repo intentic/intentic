@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type runnerContract,type NeedsAction,type RunnerFacts,type RunnerHello,RunnerHelloSchema,type RunnerSummary } from "@intentic/sandbox-contract";
+import { type runnerContract,type NeedsAction,type RunnerFacts,RUNNER_HEARTBEAT_MS,type RunnerHello,RunnerHelloSchema,type RunnerSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
 import type { Services } from "../composition.js";
@@ -40,7 +40,9 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
     },
     hub: {
         domain: "runners",
-        heartbeatMs: 30_000,
+        // The runner's own watchdog is timed off the same number, which is why it lives in the contract both
+        // sides read (runner-protocol.ts) rather than here.
+        heartbeatMs: RUNNER_HEARTBEAT_MS,
         callTimeoutMs: 15 * 60 * 1000,
         offline: (id) => `The runner "${id}" is offline — its machine is asleep, or the runner container is down.`,
     },

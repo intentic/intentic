@@ -103,7 +103,7 @@ describe("createReachReporter", () => {
     it("says it is checking before it knows, then reports the verdict and goes quiet", async () => {
         vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
         const reporter = createReachReporter(config, logger);
-        reporter.start();
+        reporter.start({ by: "tunnel" });
         await settle();
 
         // The first word matters on its own: it tells a waiting page that a daemon exists and is testing
@@ -120,7 +120,7 @@ describe("createReachReporter", () => {
     it("keeps reporting an address that does not answer, and keeps its reason", async () => {
         vi.stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
         const reporter = createReachReporter(config, logger);
-        reporter.start();
+        reporter.start({ by: "tunnel" });
         await settle();
 
         expect(reporter.status().state).toBe("unreachable");
@@ -135,7 +135,7 @@ describe("createReachReporter", () => {
     it("stops retrying after the give-up window, keeping the last reason", async () => {
         vi.stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
         const reporter = createReachReporter(config, logger);
-        reporter.start();
+        reporter.start({ by: "tunnel" });
         await vi.advanceTimersByTimeAsync(10 * 60_000);
         const settled = posted.length;
 
@@ -148,5 +148,30 @@ describe("createReachReporter", () => {
 
     it("is off until started: a headless run has no address to probe", () => {
         expect(createReachReporter(config, logger).status()).toEqual({ state: "off" });
+    });
+
+    /* A container told a public name but given nothing to dial with. The verdict is knowable before any probe
+     * and cannot change while the box runs, so it is stated once, with the reason and without a probe: the
+     * five minutes of "its tunnel has not come up yet" that used to fill this case read as waiting, and the
+     * people reading them waited. */
+    it("settles at once when the daemon dials no edge, naming why and probing nothing", async () => {
+        const probe = vi.fn(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
+        vi.stubGlobal("fetch", probe);
+        const reporter = createReachReporter(config, logger);
+
+        reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
+        await settle();
+
+        expect(probe).not.toHaveBeenCalled();
+        expect(reporter.status().state).toBe("unreachable");
+        expect(reporter.status().retrying).toBe(false);
+        // The reason travels: it is the one sentence that tells somebody what to do about it.
+        expect(reporter.status().detail).toContain("no edge to dial");
+        expect(reporter.status().detail).toContain(PUBLIC_URL);
+        expect(reporter.status().detail).toContain("setup screen");
+        // Told once. Waiting is not a strategy here, so neither is re-reporting.
+        expect(posted.map((post) => (post.body as { reach: string }).reach)).toEqual(["unreachable"]);
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(posted).toHaveLength(1);
     });
 });
