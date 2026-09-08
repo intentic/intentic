@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
  * has two properties nothing else does: the same link works from an EXTERNAL browser (where the OS routes it
  * to the installed app), and a page that is somehow not ours can at worst ask for a setup it has no code for.
  *
- * Four actions, and the parse is deliberately total — anything unrecognised, or missing a value it cannot do
- * without, returns None rather than half a request. */
+ * The parse is deliberately total — anything unrecognised, or missing a value it cannot do without, returns
+ * None rather than half a request. (There is no count in this sentence any more: it was written when there
+ * were four of these and was wrong by two before anyone noticed. `Link` below is the list.) */
 
 /* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it.
  *
@@ -99,6 +100,43 @@ pub struct AuthArgs {
     pub state: String,
 }
 
+/* `intentic://window?do=…` — THE TITLE BAR THE PAGE DRAWS, WORKING THE WINDOW IT IS DRAWN IN.
+ *
+ * Both faces of this app are undecorated (windows.rs): the platform's title bar was a 32px strip carrying a
+ * logo and three buttons above a product whose own top row is already a full-width bar, and the app's row is
+ * where those three buttons belong. On the launcher face that is an ordinary Tauri custom title bar, local
+ * content calling the window API. The WORKSPACE face is remote content with an empty capability list, and this
+ * is what it gets instead — the same one-way link channel every other action here uses.
+ *
+ * IT IS A COMPLETE TITLE BAR AND NOT THREE BUTTONS. `Drag` is the one that looks like it should need IPC and
+ * does not: a press on an empty stretch of the bar navigates here, and Rust hands the window to the platform's
+ * own move loop, which is what `start_dragging` does from a command anyway — that call is asynchronous either
+ * way, and the OS takes over while the button is still down. So the bar drags, snaps and double-clicks to
+ * maximise without app.intentic.dev gaining a single callable command.
+ *
+ * [`Source::App`] ONLY, like `update`. These verbs are harmless compared to what an external link can already
+ * ask for, but they are about THIS window, and a link from the OS handler is not something this app's own
+ * window asked for. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowVerb {
+    /* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap.
+     *
+     * The app and the SPA ship separately — a binary somebody installed once against a page that is deployed
+     * continuously — so "the window has no frame and the page draws no controls" is a state that has to be
+     * survivable rather than impossible. The window opens undecorated and waits to hear this; silence (an app
+     * newer than the page, a page that failed to load at all, an offline start) hands the platform's frame
+     * back instead of leaving somebody a window they cannot move (windows.rs `arm_frame_fallback`). */
+    Ready,
+    Minimize,
+    /// Maximise or restore, one verb: it is one button, and which of the two it does is a fact about the
+    /// window rather than about the press.
+    Maximize,
+    /// The × — which asks the same question the platform's × asked, through the same `request_close`.
+    Close,
+    /// A press on an empty stretch of the bar: hand the window to the platform's own move loop.
+    Drag,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Link {
     Setup(Box<SetupArgs>),
@@ -122,6 +160,9 @@ pub enum Link {
      * `announce_setup`) and this is the button beside that bar. [`Source::App`] only, and it carries nothing:
      * it raises a window of this app, which is the app's own window's business and no page's from outside. */
     Launcher,
+    /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
+    /// same reason everything else here is.
+    Window(WindowVerb),
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -180,6 +221,17 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             handoff: get("handoff")?,
             state: get("state")?,
         })),
+        // The page's own title bar. App-window only, and one verb per press — an unknown verb is a page newer
+        // than this app, which is the ordinary skew between the two and is answered by doing nothing.
+        "window" if source == Source::App => Some(Link::Window(match get("do")?.as_str() {
+            "ready" => WindowVerb::Ready,
+            "minimize" => WindowVerb::Minimize,
+            "maximize" => WindowVerb::Maximize,
+            "close" => WindowVerb::Close,
+            "drag" => WindowVerb::Drag,
+            _ => return None,
+        })),
+        "window" => None,
         _ => None,
     }
 }
@@ -345,6 +397,45 @@ mod tests {
             ),
             None
         );
+    }
+
+    /// Every press the page's own title bar can make, including the one that looks like it needs IPC: a drag
+    /// is a link too, which is what lets a window with no command surface still be moved by its own bar.
+    #[test]
+    fn parses_every_verb_of_the_pages_own_title_bar() {
+        for (link, verb) in [
+            ("intentic://window?do=ready", WindowVerb::Ready),
+            ("intentic://window?do=minimize", WindowVerb::Minimize),
+            ("intentic://window?do=maximize", WindowVerb::Maximize),
+            ("intentic://window?do=close", WindowVerb::Close),
+            ("intentic://window?do=drag", WindowVerb::Drag),
+        ] {
+            assert_eq!(
+                parse_link(link, Source::App),
+                Some(Link::Window(verb)),
+                "{link}"
+            );
+        }
+    }
+
+    /* THE BAR BELONGS TO THIS WINDOW, so only this window may work it. Nothing here is dangerous the way an
+     * `update` is, but a link from the OS handler is one any page can navigate to, and "the app you just
+     * opened minimises itself" is not a thing this app should be able to be told from outside.
+     *
+     * An unknown verb is the ordinary skew between a page that deploys continuously and an app somebody
+     * installed once: it parses to nothing and the press does nothing, rather than to a window action chosen
+     * by whichever arm happened to be last. */
+    #[test]
+    fn a_title_bar_press_is_refused_from_outside_the_app_and_when_it_names_nothing() {
+        assert_eq!(
+            parse_link("intentic://window?do=close", Source::External),
+            None
+        );
+        assert_eq!(
+            parse_link("intentic://window?do=explode", Source::App),
+            None
+        );
+        assert_eq!(parse_link("intentic://window", Source::App), None);
     }
 
     #[test]

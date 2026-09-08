@@ -19,6 +19,7 @@ import { useSandbox } from "./features/sandbox/client/useSandbox";
 import { startNotificationSources } from "./shell/notifications/notificationSources";
 import NotificationHost from "./shell/notifications/NotificationHost.vue";
 import GoogleSigninGate from "./features/sandbox/gates/GoogleSigninGate.vue";
+import WindowControls from "./shell/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
 const { user } = useAuth();
@@ -53,4 +54,9 @@ watch(user, (current, previous) => {
          of the workspace, and a first-time user stuck on a stale bundle is the one least able to work out why
          nothing behaves as documented. -->
     <NotificationHost />
+    <!-- THE WINDOW'S OWN THREE BUTTONS, in the app's top row, inside the desktop app and nowhere else
+         (shell/window/WindowControls.vue). Above the route for the notification lane's reason and one of its
+         own: a window has to be closable from the login screen, from a gate, and from the mobile chrome a
+         narrow window gets, and the app's window has no title bar of its own to fall back on. -->
+    <WindowControls />
 </template>

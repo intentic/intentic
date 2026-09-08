@@ -129,6 +129,30 @@
  * the one that says WHY is the brighter. */
 :root {
     --color-attention-edge: color-mix(in srgb, var(--color-warning) 80%, var(--color-card));
+
+    /* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. It is a
+     * variable rather than a number in one rule because the desktop app's window buttons stand in this row and
+     * have to be exactly as tall as it (shell/window/WindowControls.vue). */
+    --bar-height: 2.25rem;
+
+    /* WHAT THE TOP-RIGHT BAR GIVES UP TO THE WINDOW'S OWN BUTTONS, and zero everywhere the window has a title
+     * bar of its own — which is every browser, and an older build of the desktop app. Inside the app's
+     * frameless window (desktop-app windows.rs) this row IS the title bar, so the bar that ends at the window's
+     * right edge reserves this much and the buttons are drawn over it (titleBar.ts finds that bar, and it is
+     * a different one in each layout).
+     *
+     * Wider than the buttons on purpose: the gap is bar background, which is what the window is dragged by.
+     * Without it a chat column whose switcher fills its bar would have no draggable pixel in the whole row.
+     *
+     * The number is three of WindowControls.vue's own buttons: a reserve smaller than they are would put the ×
+     * over the last control of the bar underneath. Both are kept deliberately narrow, because in the default
+     * layout the bar paying for this is a 22rem chat column. */
+    --window-controls-buttons: 7.5rem;
+    --window-controls-width: 0px;
+}
+
+[data-frameless] {
+    --window-controls-width: calc(var(--window-controls-buttons) + 0.75rem);
 }
 
 /* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's
@@ -139,8 +163,7 @@
  * The class owns nothing else — padding, background and the border itself stay with each view. */
 @layer components {
     .view-header {
-        /* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. */
-        height: 2.25rem;
+        height: var(--bar-height);
         /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
         flex: none;
     }
@@ -151,7 +174,7 @@
      * stopped being a wrapping tab strip; it is a single switcher line now, so it is a plain .view-header.) */
     .view-header-wrap {
         height: auto;
-        min-height: 2.25rem;
+        min-height: var(--bar-height);
     }
 
     /* A session card's identity tile, tinted by what KIND of work the session is (categoryHue): the wash and

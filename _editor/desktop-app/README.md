@@ -30,7 +30,8 @@ from any device. The app adds no third plane. It is three thin native things aro
 
 1. **A shell for the hosted SPA.** The workspace screen loads `https://app.intentic.dev`
    (override: `INTENTIC_APP_URL`, or settings). It gets **no IPC at all**, its capability list is empty, and
-   its only channel into the app is an `intentic://` navigation the window intercepts in Rust.
+   its only channel into the app is an `intentic://` navigation the window intercepts in Rust — the title bar
+   it draws for its own frameless window included.
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
    spawned as a child process with its output streamed into the app's own screen.
 3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
@@ -168,6 +169,44 @@ Three more consequences worth knowing:
   anything moves, and the uninstaller **closes the app itself** instead of asking
   ([`installer-hooks.nsh`](src-tauri/installer-hooks.nsh), which `installer.nsi` inserts ahead of its own
   running-app check).
+
+### …and neither has the workspace: the SPA's own top row is its title bar
+
+The card above took the frame off the app's own screens. The same argument answers the face the user actually
+spends the day in, and it is worth more there: the workspace's platform strip carried a logo, the word
+*Intentic* and three buttons — a full row of screen above a product whose own top row is already a full-width
+bar, with the logo and the name each said twice over (the taskbar says both, the rail's sandbox chip says the
+second). So this window is `decorations(false)` too, with `shadow(true)` for the drop shadow, the border and
+Windows 11's rounded corners.
+
+With no face wearing a platform frame, `FRAME_ALLOWANCE` went with it: every size in `windows.rs` is a client
+area, the frame used to be added back outside it, and 48 logical rows were reserved on every screen for a title
+bar that is no longer there.
+
+The row does both jobs now: the columns keep their controls, the window's three go at the right end of whichever
+bar reaches the window's edge, and every empty stretch of the row drags the window
+([`_editor/web`'s WindowControls.vue](../web/src/shell/window/WindowControls.vue)). Where the launcher's header
+is an ordinary drag region calling the window API, this face **has no command surface and does not get one for
+this**:
+
+- Every press is an `intentic://window?do=…` navigation, **including the drag**: Rust answers it with
+  `start_dragging()`, which hands the window to the platform's own move loop — the same call a Tauri drag region
+  makes, and asynchronous either way.
+- What comes back is a DOM event dispatched by `eval` (the update banner's channel, and the setup bar's), because
+  whether the window is maximised is a fact about the window: `Win+↑`, a drag to the top edge and a snap layout
+  all change it without touching that button.
+- **A frameless window whose page draws no bar is a trap**, so the app refuses to be in one. It opens
+  undecorated and waits to hear `intentic://window?do=ready`; if nothing says it within six seconds — an app
+  newer than the page it loaded, a page that failed to load at all, an offline cold start — it hands the
+  platform's frame back (`arm_frame_fallback`). A page that announces itself later takes the frame off again, so
+  the cost of a slow connection is a flicker rather than a window nobody can move. The other half of the same
+  problem is answered in the other direction: the app injects `frameless: true` into the page, and a build whose
+  window still has a frame simply never says it, so a page newer than its app draws nothing.
+
+Two things are genuinely lost, both on Windows: hovering the maximise button no longer opens the **Snap Layouts
+flyout** (it is drawn by the OS for a real caption button, and Tauri has no equivalent of Electron's native
+overlay), and `Alt+Space` no longer opens the system menu. Dragging to snap, `Win`+arrow, double-click to
+maximise and the resize edges are all unaffected — `tao` hit-tests those itself for undecorated windows.
 
 ### The × is a question: `confirm-close`
 
@@ -444,7 +483,7 @@ public id therefore cannot collect or consume the credentials intended for the a
 
 ## The link surface
 
-Four actions, and it is the whole channel between the SPA and the app
+The whole channel between the SPA and the app
 ([`src-tauri/src/setup_link.rs`](src-tauri/src/setup_link.rs), built browser-side in
 [`_editor/web/src/environments/desktop.ts`](../web/src/app/environments/desktop.ts)):
 
@@ -455,14 +494,18 @@ Four actions, and it is the whole channel between the SPA and the app
 | `intentic://signin` | the login screen | sign in, in the user's real browser |
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
 | `intentic://update` | the SPA's own update banner | install the app update already downloaded here |
+| `intentic://launcher` | the setup page's *Show the setup* | raise the app's own card again, holding the same run |
+| `intentic://window?do=…` | the title bar the SPA draws | minimise, maximise, close, drag, or announce that bar |
 
 The first four work from an external browser too, where the OS routes them to the installed app: with the one
-difference the next section is about. **`intentic://update` is the exception and is refused from anywhere but
-this app's own window.** What it does is end the process and run an installer, which is a fine thing for a
+difference the next section is about. **The last three are refused from anywhere but this app's own window.**
+What `update` does is end the process and run an installer, which is a fine thing for a
 button this app drew to ask for and not something a page in a browser should be able to do to somebody who
 answered *"Open Intentic?"*. There is nothing to confirm afterwards that would make it a fair question: the
 answer is that your app closes now. Out of a window, the tray row is the way to reach it — on the machine,
-rather than on the web.
+rather than on the web. `launcher` and `window` are refused for a duller reason: nothing they do is dangerous,
+but both are about a window of this app, and a link from the OS handler is not something this app's own window
+asked for.
 
 ### A link from outside is not a link from us
 

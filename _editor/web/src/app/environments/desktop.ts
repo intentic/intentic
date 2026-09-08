@@ -28,6 +28,16 @@ interface DesktopWebview {
     installId: string;
     update: string | null;
     loopbackUngated?: boolean;
+    /* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. The app's window is undecorated
+     * (desktop-app windows.rs): the platform's strip carried a logo and three buttons above a product whose own
+     * top row is already a full-width bar, and this is the page being told those three buttons are now its to
+     * draw (shell/window/WindowControls.vue).
+     *
+     * OPTIONAL FOR THE REASON THE FLAG ABOVE IS, and this one is load-bearing: the app is a binary somebody
+     * installed once and this SPA is deployed continuously, so a window older than the page is an ordinary
+     * state. An app that still opens a decorated window never says this word, and the page then draws no
+     * controls — where a page that drew them regardless would put a second set of buttons under the first. */
+    frameless?: boolean;
 }
 
 declare global {
@@ -122,6 +132,33 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
  * holding the same run. App-window only on the Rust side, like the update: it raises a window of the app,
  * which is the app's own page's business and no outside page's. */
 export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
+
+/* --- THE TITLE BAR THIS PAGE DRAWS FOR A WINDOW THAT HAS NONE ------------------------------------------
+ *
+ * `frameless` above says the window arrived without a platform frame; these are the presses that work it.
+ * Links, like everything else here, which is what lets a window whose page has NO command surface still be
+ * minimised, maximised, closed and DRAGGED by its own bar: `drag` hands the window to the platform's own move
+ * loop from Rust, exactly as a Tauri drag region would, and that call is asynchronous either way.
+ *
+ * `ready` is the page saying its bar is up. It is not decoration: the app opens undecorated and hands the
+ * platform's frame BACK if nothing announces one within a few seconds (windows.rs `arm_frame_fallback`), so a
+ * page that failed to load, or an app newer than the page it loaded, is a window with a frame rather than a
+ * rectangle nobody can move. */
+export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag";
+
+export const workDesktopWindow = (verb: DesktopWindowVerb): void => openDesktopLink(`intentic://window?do=${verb}`);
+
+/* What the app tells the page BACK about the window, on the update banner's channel (a DOM event dispatched by
+ * `eval` from Rust) and for the same reason: the maximise button's glyph is a fact about the window, and half
+ * the ways a window gets maximised never touch that button — Win+↑, a drag to the top edge, a snap layout. */
+export const DESKTOP_WINDOW_EVENT = `intentic-desktop-window`;
+
+export interface DesktopWindowEvent {
+    maximized: boolean;
+}
+
+/// Whether this window is one the page has to draw a title bar for.
+export const desktopFrameless = (): boolean => desktopApp()?.frameless === true;
 
 export interface DesktopSetupArgs {
     code: string;

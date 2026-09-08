@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
 use tauri::webview::NewWindowResponse;
 use tauri::{
     AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
@@ -7,7 +10,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
-use crate::setup_link::{parse_link, Link, SetupArgs, Source};
+use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
 use crate::state::CloseAction;
 
 /* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no
@@ -109,22 +112,21 @@ const CONTENT_MARGIN: f64 = 24.0;
 /// The least a face is ever fitted to: an empty manager still has its header and its one sentence.
 const CONTENT_MIN_HEIGHT: f64 = 120.0;
 
-/* WHAT THE FRAME COSTS OUTSIDE THE SIZE THAT IS ASKED FOR. Every size here is an INNER one — the client area
- * — and the title bar and border are added back OUTSIDE it. So a window asked for exactly the work area's
- * height opens exactly a title bar taller than the screen can show.
- *
- * Logical units, and deliberately generous. The real figure varies by platform, theme and display scale, and
- * the cost of over-reserving is a few unused pixels at the edge of a window nobody has resized yet — against
- * a first impression that reads as broken. */
-const FRAME_ALLOWANCE: (f64, f64) = (16.0, 48.0);
-
 /* THE SIZE TO OPEN AT, given what this screen can actually show.
  *
  * `DEFAULT_SIZE` is 1440×900 and was treated as if it always fits. It is LOGICAL, so at the 150% scale most
  * laptops are sold at it is 2160×1350 physical — on a panel with 1080 physical rows. The first window a new
  * user ever sees opened a third taller than their display, with its bottom edge and everything near it off
- * the screen entirely. Both faces open through this, so it is one arithmetic rather than a rule each screen
- * has to remember.
+ * the screen entirely. This is the WORKSPACE's arithmetic: a launcher card is sized by what is on it
+ * (`fitted_height`) and never asks for `DEFAULT_SIZE`.
+ *
+ * NOTHING IS RESERVED OUTSIDE THE SIZE ASKED FOR ANY MORE. This used to subtract a `FRAME_ALLOWANCE` of 16×48
+ * logical units, because every size here is an INNER one and the platform added a title bar and a border back
+ * outside it — so a window asked for exactly the work area's height opened exactly a title bar taller than the
+ * screen could show. The workspace is undecorated now too (see `show_workspace_at`; the card already was), and
+ * an undecorated window's outer rectangle is its client area plus, on Windows, the single pixel of border that
+ * carries the shadow. Reserving 48 rows for a title bar that is not there is 48 rows of somebody's screen
+ * given back to nothing.
  *
  * Pure and separate from the monitor lookup so it can be tested against the numbers that actually break, and
  * fitted rather than merely capped: the preference wins whenever it fits, the screen wins whenever it does
@@ -132,10 +134,11 @@ const FRAME_ALLOWANCE: (f64, f64) = (16.0, 48.0);
  * minimum comes down too, because a floor above the ceiling is a window that cannot be resized onto its own
  * display. */
 fn fit_to_screen(preferred: (f64, f64), available: (f64, f64)) -> (f64, f64) {
-    let room = |available: f64, allowance: f64| (available - allowance).max(1.0);
+    // Never zero, whatever a desktop reports: a monitor unplugged mid-session can answer with an area of
+    // nothing at all, and a window asked for 0×0 is one nobody can grab.
     (
-        preferred.0.min(room(available.0, FRAME_ALLOWANCE.0)),
-        preferred.1.min(room(available.1, FRAME_ALLOWANCE.1)),
+        preferred.0.min(available.0.max(1.0)),
+        preferred.1.min(available.1.max(1.0)),
     )
 }
 
@@ -174,17 +177,17 @@ struct WorkArea {
  * - It centres on the WORK AREA, not on the monitor — which is why this is arithmetic here rather than
  *   Tauri's own `center()`. That one centres on the full screen, so with a taskbar at the bottom it hands
  *   back half a taskbar of the very overhang this exists to remove.
- * - It centres the OUTER rectangle. Every size in this file is an inner one with the frame added outside it
- *   (`FRAME_ALLOWANCE`), so centring the inner size leaves the title bar over the top edge of the screen and
- *   the same distance of window past the bottom.
+ * - It centres the rectangle the window actually occupies, which for an undecorated window is the size asked
+ *   for. While these windows wore a platform frame that was NOT the same rectangle, and centring the inner
+ *   size left the title bar over the top edge of the screen and the same distance of window past the bottom.
  *
  * Never negative: a window bigger than the work area starts AT the origin, where the part of it that is on
- * screen is the top-left — the corner carrying the title bar to drag it by and the controls to resize it. */
+ * screen is the top-left — the corner carrying the bar to drag it by and the edge to resize it. */
 fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
     let offset = |available: f64, outer: f64| ((available - outer) / 2.0).max(0.0);
     (
-        work.origin.0 + offset(work.size.0, inner.0 + FRAME_ALLOWANCE.0),
-        work.origin.1 + offset(work.size.1, inner.1 + FRAME_ALLOWANCE.1),
+        work.origin.0 + offset(work.size.0, inner.0),
+        work.origin.1 + offset(work.size.1, inner.1),
     )
 }
 
@@ -353,13 +356,19 @@ fn over_workspace(window: &WebviewWindow, workspace: Option<&WebviewWindow>) {
 /// reach for loopback (`BROWSER_ARGS` on Windows, WebKit having no such check anywhere else), so the page may
 /// dial the sandbox on this machine without first showing the card that explains a dialog nothing is going to
 /// raise. It grants nothing — the page could always make the request; this only says nobody will interrupt it.
+///
+/// `frameless` is the fifth and is the page's INSTRUCTION TO DRAW A TITLE BAR: this window has no platform
+/// frame, so the three buttons it used to carry are the page's to draw, in the bar it already has across the
+/// top of every column (the SPA's WindowControls.vue). It is a claim about the window rather than a permission,
+/// and it is the half that stops an app OLDER than the page from ending up with two sets of controls: a build
+/// that still opens a decorated window simply never says this, and the page draws nothing.
 fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -436,6 +445,12 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         .title("Intentic")
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
+        /* NO PLATFORM TITLE BAR ON EITHER FACE — see [`WindowVerb`] for the bar the page draws in its place,
+         * and `arm_frame_fallback` below for what this window does when no page ever draws one. `shadow` is
+         * what keeps an undecorated window looking like a window on Windows: the drop shadow, the 1px border
+         * and, on Windows 11, the rounded corners. */
+        .decorations(false)
+        .shadow(true)
         /* Tauri's native drag-drop handler and the webview's HTML5 drag-drop API are mutually exclusive on
          * Windows (and the same on Linux): with the handler on, OS files never reach the SPA's drop handlers
          * (WorkspaceDesktop.vue, WorkspaceTree.vue), so drag-and-drop from Explorer works in the browser but
@@ -483,16 +498,28 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         });
     match builder.build() {
         Ok(window) => {
-            // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the window
-            // is HIDDEN rather than destroyed, so reopening from the tray is instant and this webview keeps the
-            // session it signed in with instead of reloading the SPA.
             let handle = app.clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
+            window.on_window_event(move |event| match event {
+                // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the
+                // window is HIDDEN rather than destroyed, so reopening from the tray is instant and this
+                // webview keeps the session it signed in with instead of reloading the SPA. The page's own ×
+                // arrives here too: it asks the window to close rather than deciding anything itself.
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     request_close(&handle);
                 }
+                /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. Half the ways a
+                 * window gets maximised never touch that button — Win+↑, a drag to the top edge, a snap
+                 * layout, the platform's own restore — and a glyph that only tracked presses would be wrong
+                 * after every one of them. */
+                WindowEvent::Resized(_) => {
+                    if let Some(window) = handle.get_webview_window(WORKSPACE) {
+                        announce_frame(&window, false);
+                    }
+                }
+                _ => {}
             });
+            arm_frame_fallback(app);
             // Before `swap_in`, and while the window is still hidden. This is the placement for a COLD start —
             // a swap that has a frame to inherit overwrites it a line later, which is the right precedence:
             // the window the user is already looking at beats the middle of the screen.
@@ -507,6 +534,106 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
 
 pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
+}
+
+/* ------------------------------------------------------------------------------------------------------
+ * THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT.
+ *
+ * There is one window, so these are two bits rather than a struct in the app's state: whether the page has
+ * ever said its own bar is up, and what this window last told the page about being maximised. The second is
+ * what keeps a resize drag from firing one `eval` into the webview per frame.
+ * ------------------------------------------------------------------------------------------------------ */
+static CHROME_READY: AtomicBool = AtomicBool::new(false);
+static ANNOUNCED_MAXIMIZED: AtomicBool = AtomicBool::new(false);
+
+/// The event the page listens on for what the window is doing to itself. A DOM event dispatched by `eval` —
+/// the update banner's channel exactly (update.rs `announce_to_workspace`), and one-way for the same reason:
+/// nothing is returned and nothing becomes callable.
+const FRAME_EVENT: &str = "intentic-desktop-window";
+
+/* HOW LONG A COLD START MAY GO WITHOUT A TITLE BAR BEFORE THE PLATFORM'S COMES BACK.
+ *
+ * The app and the SPA ship separately — a binary somebody installed once, against a page deployed
+ * continuously — so an app that opens a frameless window for a page which draws no controls is a state to
+ * survive rather than one to declare impossible. It is not only version skew: a page that fails to load at
+ * all (no network on a cold start, the platform down, an error page in the webview) draws nothing either, and
+ * that window would have no bar, no ×, and no way to be moved off the corner it opened on.
+ *
+ * Six seconds is chosen against the slow end of a working load rather than the median one. A page that
+ * announces itself after the fallback has fired takes the frame straight back off (`chrome_is_up`), so a bad
+ * connection costs a flicker; silence costs nothing at all, because the frame is what the user gets. */
+const CHROME_GRACE: Duration = Duration::from_secs(6);
+
+/// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built.
+fn arm_frame_fallback(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CHROME_GRACE).await;
+        if CHROME_READY.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Some(window) = app.get_webview_window(WORKSPACE) {
+            eprintln!("no title bar from the workspace page: handing back the platform's frame");
+            let _ = window.set_decorations(true);
+        }
+    });
+}
+
+/// The page saying its bar is up. `set_decorations(false)` is a no-op in the ordinary case and the whole point
+/// in the slow one: a page that arrives after the fallback fired takes the frame off again, so the window ends
+/// in the state the page can actually drive either way round.
+fn chrome_is_up(window: &WebviewWindow) {
+    CHROME_READY.store(true, Ordering::Relaxed);
+    let _ = window.set_decorations(false);
+    // Unconditionally, because this is a page that has just loaded: it knows nothing yet about a window that
+    // may have been maximised before it got here.
+    announce_frame(window, true);
+}
+
+/// Tell the page whether the window is maximised. `always` is for a page that has just announced itself and
+/// has no state at all; every other caller is an event, and sends only what CHANGED.
+fn announce_frame(window: &WebviewWindow, always: bool) {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let changed = ANNOUNCED_MAXIMIZED.swap(maximized, Ordering::Relaxed) != maximized;
+    if !always && !changed {
+        return;
+    }
+    let _ = window.eval(format!(
+        "window.dispatchEvent(new CustomEvent('{FRAME_EVENT}', {{ detail: {{ maximized: {maximized} }} }}));"
+    ));
+}
+
+/* A PRESS ON THE PAGE'S OWN TITLE BAR. One verb per press, always about the workspace window, and every one
+ * of them a link the window intercepted rather than a command the page can call (setup_link.rs [`WindowVerb`]).
+ *
+ * The × is the interesting one: it does not close anything here. It asks the window to close, exactly as the
+ * platform's × did, so the question about the tray is asked in the one place that has ever asked it. */
+fn work_the_window(app: &AppHandle, verb: WindowVerb) {
+    let Some(window) = app.get_webview_window(WORKSPACE) else {
+        return;
+    };
+    match verb {
+        WindowVerb::Ready => chrome_is_up(&window),
+        WindowVerb::Minimize => {
+            let _ = window.minimize();
+        }
+        WindowVerb::Maximize => {
+            let _ = if window.is_maximized().unwrap_or(false) {
+                window.unmaximize()
+            } else {
+                window.maximize()
+            };
+            // The resize event says the same thing a moment later and is deduplicated against this; sending it
+            // here is what makes the glyph flip on the press rather than on the platform's next frame.
+            announce_frame(&window, false);
+        }
+        WindowVerb::Close => request_close(app),
+        // The platform's own move loop, started while the button is still down — the same call a Tauri drag
+        // region makes, reached by a link instead of by a command.
+        WindowVerb::Drag => {
+            let _ = window.start_dragging();
+        }
+    }
 }
 
 /* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice.
@@ -681,6 +808,10 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         // whatever is behind, and nothing to maximise because its size is its content's (`fit_to_content`).
         // Resizable for GTK's sake: a non-resizable window there is pinned to its child's requisition and
         // ignores the resize the fit asks for.
+        //
+        // The workspace face is undecorated too now (`show_workspace_at`), and no fallback is armed for
+        // EITHER local face: they are shipped inside the binary, so a build whose header is missing is a
+        // broken build rather than a page that is late. Only the hosted SPA gets that guarantee.
         .decorations(false)
         .shadow(true)
         .maximizable(false)
@@ -854,6 +985,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::Update) => crate::update::act(app),
         // The setup page's way back to a card that stepped aside: the same face, holding the same run.
         Some(Link::Launcher) => show_launcher(app),
+        // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
+        // and no face is swapped: these are presses on this window, answered on this window.
+        Some(Link::Window(verb)) => work_the_window(app, verb),
         None => {}
     }
 }
@@ -952,6 +1086,16 @@ mod loopback_tests {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("loopbackUngated: true"), "{script}");
     }
+
+    /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told
+     * so — that word is the whole of what makes it draw a title bar (WindowControls.vue). Say it without
+     * building the window undecorated and the user gets two sets of buttons; build it undecorated without
+     * saying it and they get none, on a window they cannot move. */
+    #[test]
+    fn the_page_is_told_the_window_has_no_frame_of_its_own() {
+        let script = workspace_init_script("install-1", None);
+        assert!(script.contains("frameless: true"), "{script}");
+    }
 }
 
 #[cfg(test)]
@@ -1023,10 +1167,7 @@ mod frame_tests {
     fn bottom_edge(work: WorkArea) -> (f64, f64) {
         let (size, _) = opening_bounds(Some(work.size));
         let at = opening_position(work, size);
-        (
-            at.1 + size.1 + FRAME_ALLOWANCE.1,
-            work.origin.1 + work.size.1,
-        )
+        (at.1 + size.1, work.origin.1 + work.size.1)
     }
 
     /// THE BUG THIS SHIPPED WITH, in the numbers that caused it: a 1080p panel at the 150% scale most laptops
@@ -1038,8 +1179,10 @@ mod frame_tests {
         let available = (1280.0, 688.0);
         let (size, min) = opening_bounds(Some(available));
 
-        assert!(size.1 < available.1, "opened {size:?} into {available:?}");
-        assert!(size.0 < available.0, "opened {size:?} into {available:?}");
+        // At most the screen, which for an undecorated window is exactly the screen: there is no title bar
+        // left to reserve rows for, so a fit that fills the work area IS the window fitting on it.
+        assert!(size.1 <= available.1, "opened {size:?} into {available:?}");
+        assert!(size.0 <= available.0, "opened {size:?} into {available:?}");
         // And the floor cannot be what puts it back over the edge.
         assert!(
             min.1 <= size.1 && min.0 <= size.0,
@@ -1069,12 +1212,12 @@ mod frame_tests {
     fn a_screen_below_the_minimum_lowers_the_minimum_too() {
         let (size, min) = opening_bounds(Some((800.0, 500.0)));
 
-        assert!(size.0 < 800.0 && size.1 < 500.0, "opened {size:?}");
+        assert!(size.0 <= 800.0 && size.1 <= 500.0, "opened {size:?}");
         assert_eq!(min, size);
     }
 
-    /// Never zero or negative, whatever a desktop reports — a monitor unplugged mid-session can answer with
-    /// an area smaller than the frame allowance, and a window asked for 0×0 is one nobody can grab.
+    /// Never zero or negative, whatever a desktop reports — a monitor unplugged mid-session can answer with an
+    /// area of a few pixels, and a window asked for 0×0 is one nobody can grab.
     #[test]
     fn an_absurd_screen_still_asks_for_a_window() {
         let (size, _) = opening_bounds(Some((4.0, 4.0)));
@@ -1175,9 +1318,10 @@ mod frame_tests {
             window <= available,
             "window ends at {window}, screen at {available}"
         );
-        // And it is not merely on screen by being tiny: the fit gives it every row the screen has to spare.
+        // And it is not merely on screen by being tiny: the fit gives it every row the screen has to spare,
+        // which is now all of them — the 48 that used to go to a title bar are the window's.
         let (size, _) = opening_bounds(Some(work.size));
-        assert_eq!(size.1 + FRAME_ALLOWANCE.1, work.size.1);
+        assert_eq!(size.1, work.size.1);
     }
 
     /// The same, on the screens this app is actually met on — including the one where the preference fits and
@@ -1208,13 +1352,13 @@ mod frame_tests {
         let at = opening_position(work, size);
 
         let above = at.1 - work.origin.1;
-        let below = (work.origin.1 + work.size.1) - (at.1 + size.1 + FRAME_ALLOWANCE.1);
+        let below = (work.origin.1 + work.size.1) - (at.1 + size.1);
         assert!(
             (above - below).abs() < 0.001,
             "above {above}, below {below}"
         );
         let left = at.0 - work.origin.0;
-        let right = (work.origin.0 + work.size.0) - (at.0 + size.0 + FRAME_ALLOWANCE.0);
+        let right = (work.origin.0 + work.size.0) - (at.0 + size.0);
         assert!((left - right).abs() < 0.001, "left {left}, right {right}");
     }
 
@@ -1242,12 +1386,12 @@ mod frame_tests {
             "opened at {at:?}, area starts {:?}",
             work.origin
         );
-        assert!(at.0 + size.0 + FRAME_ALLOWANCE.0 <= work.origin.0 + work.size.0);
-        assert!(at.1 + size.1 + FRAME_ALLOWANCE.1 <= work.origin.1 + work.size.1);
+        assert!(at.0 + size.0 <= work.origin.0 + work.size.0);
+        assert!(at.1 + size.1 <= work.origin.1 + work.size.1);
     }
 
     /// A window that cannot fit starts AT the corner rather than at a negative offset — the piece of it left on
-    /// screen is then the top-left, which is the piece carrying the title bar and the resize controls.
+    /// screen is then the top-left, which is the piece carrying the bar to drag it by.
     #[test]
     fn a_window_too_big_for_its_screen_starts_at_the_corner() {
         let work = WorkArea {
