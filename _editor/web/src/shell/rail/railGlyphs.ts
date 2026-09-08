@@ -16,9 +16,9 @@ export const RAIL_GLYPHS: Readonly<Record<string, RailGlyph>> = {
     agents: {
         outline: `M5 9V6l4 1 3-4 3 4 4-1v3l2 2v5l-5 5H8l-5-5v-5Z M7 12h2 M15 12h2 M10 17h4`,
     },
-    // Folios stacked on a stepped plinth: the files the workspace holds.
+    // One folder with a cut corner: an open interior keeps the file area easy to recognise.
     workspace: {
-        outline: `M4 9h16v12H4Z M7 9V6h10v3 M10 6V3h4v3 M8 13h8 M8 17h5`,
+        outline: `M3 5h6l3 3h9v10l-2 2H3Z`,
     },
     // The eye is a lotus petal in profile; a single diamond is enough for its pupil.
     preview: {
@@ -69,13 +69,13 @@ export const RAIL_GLYPHS: Readonly<Record<string, RailGlyph>> = {
         outline: `M10 20H5l-2-2V6l2-2h14l2 2v5 M3 9h18 M13 12v10l3-3h5Z`,
         solid: `M6 5.5 7.5 7 6 8.5 4.5 7Z`,
     },
-    // One agent delegating to two: the diamond joint repeats the workflow language.
+    // Two staggered guardian faces: helpers share the Agents tile's face and pointed crown.
     subagents: {
-        outline: `M12 8v4 M5 16v-4h14v4 M2 21v-3l3-2 3 2v3 M16 21v-3l3-2 3 2v3`,
-        solid: `m12 2 3 3-3 3-3-3Z`,
+        outline: `M3 10h3l2-3 2 3h3l2 2v6l-3 3H5l-3-3v-6Z M6 15h1 M10 15h1 M12 6h2l2-3 2 3h2l2 2v6l-3 3h-1 M18 11h1`,
     },
+    // A wide, unframed command prompt.
     terminal: {
-        outline: `M6 3H3v18h3 M18 3h3v18h-3 M7 8l4 4-4 4 M13 16h4`,
+        outline: `M4 7l6 5-6 5 M14 17h6`,
     },
     vpn: {
         outline: `m12 3 8 3v7l-3 5-5 3-5-3-3-5V6Z M9 12V9a3 3 0 0 1 6 0v3 M8 12h8v5H8Z`,
@@ -84,9 +84,9 @@ export const RAIL_GLYPHS: Readonly<Record<string, RailGlyph>> = {
     ports: {
         outline: `M3 21V7h3V4h9v3h3 M7 21V9h7v3 M11 16h11 M18 12l4 4-4 4`,
     },
-    // Opening another petal adds a capability. The plus remains the dominant read.
+    // The familiar add action needs only a plus.
     capabilities: {
-        outline: `M12 3v18 M3 12h18 M6 6l3 1 M18 6l-3 1 M6 18l3-1 M18 18l-3-1`,
+        outline: `M12 4v16 M4 12h16`,
     },
     more: {
         outline: ``,
