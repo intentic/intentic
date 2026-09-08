@@ -1382,9 +1382,9 @@ test("a result with a backgrounded child in flight holds the stream open for the
     ]);
 });
 
-// is_backgrounded never arrives as a task_updated patch, so the Agent call's own run_in_background field must reach the
-// frame that announces the child.
-test("the Agent call's run_in_background reaches the frame that announces the child", async () => {
+// is_backgrounded never arrives as a task_updated patch and the task stream carries no model, so the Agent
+// call's own run_in_background and model fields must reach the frame that announces the child.
+test("the Agent call's run_in_background and model reach the frame that announces the child", async () => {
     resetSubagents();
     const events = await collect(
         { ...request, conversationId: "c-bg" },
@@ -1393,7 +1393,14 @@ test("the Agent call's run_in_background reaches the frame that announces the ch
                 type: "assistant",
                 session_id: "s",
                 message: {
-                    content: [{ type: "tool_use", id: "call-1", name: "Agent", input: { description: "audit chapter 4", run_in_background: true } }],
+                    content: [
+                        {
+                            type: "tool_use",
+                            id: "call-1",
+                            name: "Agent",
+                            input: { description: "audit chapter 4", run_in_background: true, model: "sonnet" },
+                        },
+                    ],
                 },
             },
             {
@@ -1414,6 +1421,7 @@ test("the Agent call's run_in_background reaches the frame that announces the ch
         subagentKind: "subagent",
         agentType: "Explore",
         description: "audit chapter 4",
+        model: "sonnet",
         background: true,
     });
 });

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -13,6 +13,7 @@ import {
     noteSubagentSpawn,
     noteSubagentTask,
     openSpawnedChild,
+    pairLiveSubagents,
     resetSubagents,
     settleSpawnedChild,
     subagentCountsOf,
@@ -37,6 +38,21 @@ const started = (over: { [K in keyof SubagentTaskMessage]?: SubagentTaskMessage[
         subagent_type: "Explore",
         ...over,
     }) as SubagentTaskMessage;
+
+// The SubagentStop hook as the SDK fires it: the child's transcript path, whose meta sibling the registry
+// actually reads, and the child's agent id.
+const stopped = async (dir: string, agentId: string, lastAssistantMessage?: string): Promise<void> => {
+    await subagentHooks(turn()).SubagentStop?.[0]?.hooks[0]?.(
+        {
+            hook_event_name: "SubagentStop",
+            agent_transcript_path: join(dir, `agent-${agentId}.jsonl`),
+            agent_id: agentId,
+            ...(lastAssistantMessage !== undefined ? { last_assistant_message: lastAssistantMessage } : {}),
+        } as unknown as HookInput,
+        "t1",
+        { signal: new AbortController().signal },
+    );
+};
 
 const update = (frame: AgentEvent | undefined): Extract<AgentEvent, { kind: "subagent_update" }> => {
     if (frame?.kind !== "subagent_update") {
@@ -63,15 +79,53 @@ describe("the SDK's own subagents", () => {
         ]);
     });
 
-    it("takes 'backgrounded' from the spawning tool call, onto the frame that announces the child", () => {
-        noteSubagentSpawn("call-1");
-        expect(noteSubagentTask(turn(), started())).toMatchObject({ kind: "subagent", id: "call-1", background: true });
-        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true }]);
+    // Neither fact is on the task stream: `is_backgrounded` rides a task_updated patch that never comes, and no
+    // task message carries a model, so both come off the spawning call and both must reach the born frame.
+    it("takes 'backgrounded' and the model from the spawning tool call, onto the frame that announces the child", () => {
+        noteSubagentSpawn("call-1", { background: true, model: "sonnet" });
+        expect(noteSubagentTask(turn(), started())).toMatchObject({ kind: "subagent", id: "call-1", background: true, model: "sonnet" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true, model: "sonnet" }]);
     });
 
-    it("leaves an unmarked child without the flag", () => {
+    // A foreground child says nothing rather than `background: false`, and `inherit` is not a model: it asks for
+    // the parent's, which is the state the row's own fallback covers.
+    it("leaves an unmarked child without the flag, and a child that named no model without one", () => {
+        noteSubagentSpawn("call-1", { background: false, model: "inherit" });
         expect(noteSubagentTask(turn(), started())).not.toHaveProperty("background");
         expect(listSubagentSessions()[0]).not.toHaveProperty("background");
+        expect(listSubagentSessions()[0]).not.toHaveProperty("model");
+    });
+
+    // The meta file fills the model in for a child whose call named none, which is where an agent definition's
+    // own pin shows up.
+    it("takes the model from the meta file for a child whose call named none", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-model-"));
+        await writeFile(join(dir, "agent-xyz.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "claude-haiku-4-5-20251001" }));
+        await writeFile(join(dir, "agent-abc.meta.json"), JSON.stringify({ toolUseId: "call-2", model: "inherit" }));
+        noteSubagentTask(turn(), started());
+        noteSubagentTask(turn(), started({ tool_use_id: "call-2", task_id: "task-b" }));
+        await stopped(dir, "xyz");
+        await stopped(dir, "abc");
+        const byId = new Map(listSubagentSessions().map((session) => [session.id, session]));
+        expect(byId.get("call-1")).toMatchObject({ model: "claude-haiku-4-5-20251001" });
+        // And the file says `inherit` for a definition that asks for its parent's model, which is not a model:
+        // filed as one, a card would print the directive where the model goes.
+        expect(byId.get("call-2")).not.toHaveProperty("model");
+    });
+
+    // A child still working is paired where the roster is served, which is the only source for one the daemon
+    // never saw spawned (a workflow's), and the stop hook is too late for a row read while it runs.
+    it("pairs a child that is still working when the roster is read", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-live-"));
+        noteSubagentTask({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: dir }, started());
+        await writeFile(join(dir, "agent-live.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "sonnet", spawnDepth: 2 }));
+        await pairLiveSubagents();
+        expect(listSubagentSessions()[0]).toMatchObject({ id: "call-1", status: "running", model: "sonnet", spawnDepth: 2 });
+        // Read once and kept: the file is written when the child starts and never touched again, so a paired
+        // child asks nothing further of the disk however often the roster is served.
+        await rm(join(dir, "agent-live.meta.json"));
+        await pairLiveSubagents();
+        expect(listSubagentSessions()[0]).toMatchObject({ model: "sonnet" });
     });
 
     it("skips a task with no tool_use id, and an ambient one", () => {
@@ -371,16 +425,8 @@ describe("how a subagent ends", () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-ending-"));
         await writeFile(join(dir, "agent-xyz.meta.json"), JSON.stringify({ toolUseId: "call-1", agentType: "Explore" }));
         noteSubagentTask(turn(), started());
-        await subagentHooks(turn()).SubagentStop?.[0]?.hooks[0]?.(
-            {
-                hook_event_name: "SubagentStop",
-                agent_transcript_path: join(dir, "agent-xyz.jsonl"),
-                agent_id: "xyz",
-                last_assistant_message: "Found it in the reducer.",
-            } as unknown as HookInput,
-            "t1",
-            { signal: new AbortController().signal },
-        );
+        await stopped(dir, "xyz", "Found it in the reducer.");
+        // The SDK's exit notification lands afterwards with its own digest: the child's own words stand.
         noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-1", status: "completed", summary: "ran 12 tools" });
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
     });

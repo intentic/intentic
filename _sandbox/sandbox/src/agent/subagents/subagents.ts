@@ -80,13 +80,30 @@ const notifyChanged = (): void => {
     }
 };
 
-// Which children the parent walked away from, marked by the spawning tool call since the SDK's own `is_backgrounded`
-// patch never arrives for one. Marked before the record exists; `open` consumes the mark onto the born frame.
-const backgrounded = new Set<string>();
+// What only the spawning tool call knows: whether the parent walked away (the SDK's `is_backgrounded` patch
+// never arrives for one) and which model the child was asked for (no task message carries a model, and the meta
+// file is read too late for a row read while the child runs). Marked before the record exists; `open` consumes
+// the mark onto the born frame, the only frame carrying either.
+interface SubagentSpawn {
+    readonly background?: true;
+    readonly model?: string;
+}
+const spawns = new Map<string, SubagentSpawn>();
 
-/** Marks a spawning tool call id as backgrounded, ahead of the task_started that will read it. */
-export const noteSubagentSpawn = (id: string): void => {
-    backgrounded.add(id);
+// A model the child was actually asked for. `inherit` (an agent definition asking for its parent's model) and
+// `default` name none, and filed as models they would print as one.
+const NAMES_NO_MODEL: ReadonlySet<string> = new Set(["", "inherit", "default"]);
+const namedModel = (model: string | undefined): string | undefined =>
+    model === undefined || NAMES_NO_MODEL.has(model.trim().toLowerCase()) ? undefined : model;
+
+/** Marks a spawning tool call id with what it said, ahead of the task_started that will read it. Nothing is
+ *  marked for a call with no news, so the map holds only the calls worth consuming. */
+export const noteSubagentSpawn = (id: string, spawn: { readonly background?: boolean; readonly model?: string } = {}): void => {
+    const model = namedModel(spawn.model);
+    if (spawn.background !== true && model === undefined) {
+        return;
+    }
+    spawns.set(id, { ...(spawn.background === true ? { background: true } : {}), ...(model !== undefined ? { model } : {}) });
 };
 
 const wire = (record: SubagentRecord): SubagentSession => ({
@@ -192,17 +209,20 @@ export interface SubagentTurn {
 const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
     const now = Date.now();
     sweep(now);
+    // What the spawning call said about this child, consumed here: it is the only frame either fact can ride.
+    const spawn = spawns.get(id);
+    spawns.delete(id);
     const record: SubagentRecord = {
         id,
         kind,
         conversationId: turn.conversationId,
         agentType: undefined,
         description: undefined,
-        model: undefined,
+        model: spawn?.model,
         provider: undefined,
         harness: undefined,
         spawnDepth: undefined,
-        background: backgrounded.delete(id) ? true : undefined,
+        background: spawn?.background,
         status: "running",
         startedAt: now,
         endedAt: undefined,
@@ -409,13 +429,14 @@ const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => 
 // A session's children live in `<session-dir-without-.jsonl>/subagents/`, beside its transcript.
 const subagentsDirOf = (sessionTranscriptPath: string): string => join(sessionTranscriptPath.replace(/\.jsonl$/u, ""), "subagents");
 
-// Copies the meta file's facts onto the record; all but agentId use `??=` since the task stream usually got there
-// first.
+// Copies the meta file's facts onto the record; all but agentId use `??=` since the task stream or the spawning
+// call usually got there first. The model is the file's own resolution, so a definition-pinned one lands here
+// for a child whose call named none.
 const fill = (record: SubagentRecord, meta: SubagentMeta, agentId: string): void => {
     record.agentId = agentId;
     record.agentType ??= meta.agentType;
     record.description ??= meta.description;
-    record.model ??= meta.model;
+    record.model ??= namedModel(meta.model);
     record.spawnDepth ??= meta.spawnDepth;
 };
 
@@ -429,29 +450,97 @@ const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void =>
     fill(records.get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
 };
 
-// Which SDK agent a child is, resolved from the session's meta files at read time (a backgrounded child often outlives
-// SubagentStop, so that hook cannot always do the pairing). Cached once resolved.
+/* One scanner for a session's meta files, serving both callers that need them: the transcript door, which wants
+ * the SDK agent id of the child being opened, and the roster, which wants every live child's model (the only
+ * source for a child the daemon did not watch being spawned). A backgrounded child often outlives SubagentStop,
+ * so that hook cannot always do the pairing.
+ *
+ * A file is read once and kept under the tool call it names, so a file whose record is not open yet is neither
+ * lost nor re-read. An unmatched file is cached rather than adopted: a meta file outlives the record it
+ * describes (retention is five minutes, the file is the session's), so opening records off the disk would
+ * resurrect children that have aged out of the roster. */
+const metaFiles = new Map<string, Map<string, SubagentMeta>>();
+// One pass per directory at a time, so readers arriving together share the one read.
+const passes = new Map<string, Promise<void>>();
+
+// Every meta file in this directory, by the SDK agent id its name carries; read at most once each, since the
+// file is written when its child starts and never touched again.
+const metaOf = async (dir: string): Promise<Map<string, SubagentMeta>> => {
+    const seen = metaFiles.get(dir) ?? new Map<string, SubagentMeta>();
+    metaFiles.set(dir, seen);
+    for (const entry of await readdir(dir).catch(() => [])) {
+        const agentId = /^agent-(.+)\.meta\.json$/u.exec(entry)?.[1];
+        if (agentId === undefined || seen.has(agentId)) {
+            continue;
+        }
+        const meta = await readMeta(join(dir, entry));
+        if (meta !== undefined) {
+            seen.set(agentId, meta);
+        }
+    }
+    return seen;
+};
+
+const scan = async (dir: string): Promise<void> => {
+    let changed = false;
+    for (const [agentId, meta] of await metaOf(dir)) {
+        const record = meta.toolUseId === undefined ? undefined : records.get(meta.toolUseId);
+        if (record !== undefined && record.agentId === undefined) {
+            fill(record, meta, agentId);
+            changed = true;
+        }
+    }
+    // Publishes but emits no frame: the born frame carried these fields and no update frame has a slot for them.
+    if (changed) {
+        publishRuntimeChange("subagents");
+        notifyChanged();
+    }
+};
+
+const pair = async (dir: string): Promise<void> => {
+    const running = passes.get(dir) ?? scan(dir).finally(() => passes.delete(dir));
+    passes.set(dir, running);
+    await running;
+};
+
+// Which SDK agent a child is, half of what getSubagentMessages reads a transcript with. Asked at read time, so
+// the meta files are long written; cached on the record, since the answer cannot change.
 export const subagentAgentId = async (id: string): Promise<string | undefined> => {
     const record = records.get(id);
     if (record === undefined || record.agentId !== undefined) {
         return record?.agentId;
     }
-    const dir = record.turn.subagentsDir;
-    if (dir === undefined) {
+    if (record.turn.subagentsDir === undefined) {
         return undefined;
     }
-    for (const entry of await readdir(dir).catch(() => [])) {
-        const agentId = /^agent-(.+)\.meta\.json$/u.exec(entry)?.[1];
-        if (agentId === undefined) {
-            continue;
-        }
-        const meta = await readMeta(join(dir, entry));
-        if (meta?.toolUseId === id) {
-            fill(record, meta, agentId);
-            return agentId;
+    await pair(record.turn.subagentsDir);
+    return record.agentId;
+};
+
+/** Pairs the children still working, awaited where the roster is served so a live row can name its own model.
+ *  Costs one directory read per session with an unpaired child, and nothing once they are all paired. */
+export const pairLiveSubagents = async (): Promise<void> => {
+    // Every directory the roster still points at, and the subset whose live children the files have not
+    // answered for yet.
+    const known = new Set<string>();
+    const unpaired = new Set<string>();
+    for (const record of records.values()) {
+        const dir = record.turn.subagentsDir;
+        if (dir !== undefined) {
+            known.add(dir);
+            if (record.agentId === undefined && subagentRunning(record)) {
+                unpaired.add(dir);
+            }
         }
     }
-    return undefined;
+    // What has been read is kept only as long as the children it describes are: a session whose whole fan-out
+    // has aged out of the roster is forgotten with it, rather than held for the life of the daemon.
+    for (const dir of metaFiles.keys()) {
+        if (!known.has(dir)) {
+            metaFiles.delete(dir);
+        }
+    }
+    await Promise.all([...unpaired].map(pair));
 };
 
 /**
@@ -703,7 +792,8 @@ export const closeSubagents = (conversationId: string): AgentEvent[] => {
 export const resetSubagents = (): void => {
     records.clear();
     tasks.clear();
-    backgrounded.clear();
+    spawns.clear();
+    metaFiles.clear();
     waiters.clear();
     resetChildVerification();
 };

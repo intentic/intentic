@@ -100,8 +100,8 @@ const providerOf = (session: SubagentSession): AgentProvider =>
     session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : (session.provider ?? `claude`);
 
 // Which model the card shows, in the chat rail's own label; never left blank.
-// 1. what the child itself reported (an explicit override).
-// 2. the parent's model, inherited when the child named none (`inherited: true`).
+// 1. the child's own, filed by its spawning call or by its meta file (the only rung that names an override).
+// 2. the parent's model, inherited when nothing named one for the child (`inherited: true`).
 // 3. the provider's own name, when the identity tile shows a category glyph instead of it.
 const modelOf = (session: SubagentSession): { label: string; inherited: boolean } | undefined => {
     const provider = providerOf(session);
@@ -362,7 +362,7 @@ watch(
                                         v-if="modelOf(session) !== undefined"
                                         class="max-w-24 truncate"
                                         v-tooltip.top="
-                                            modelOf(session)!.inherited ? `Its parent's model: this agent reported none of its own` : undefined
+                                            modelOf(session)!.inherited ? `Its parent's model: nothing named one for this agent` : undefined
                                         "
                                         >{{ modelOf(session)!.label }}</span
                                     >

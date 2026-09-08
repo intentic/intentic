@@ -139,14 +139,20 @@ export const providerGroup = (provider: AgentProvider): string => (isLocalModelP
 // What a group is called; takes a group key, not a provider, since the folded group has no single card.
 export const providerGroupLabel = (group: string): string => (group === LOCAL_MODELS_GROUP ? LOCAL_MODELS_LABEL : providerDisplayLabel(group));
 
-// Label for a model id: the catalog option's label, else the raw id (a custom model belongs to no
-// catalog), else the provider name for an empty id.
+// A bare tier, which is what the Agent tool takes for a subagent's model: capitalized, never resolved to a
+// version, since which build a tier points at is the harness's to decide.
+const TIERS: ReadonlySet<string> = new Set([`opus`, `sonnet`, `haiku`, `fable`]);
+const tierLabel = (modelId: string): string | undefined =>
+    TIERS.has(modelId) ? `${modelId.charAt(0).toUpperCase()}${modelId.slice(1)}` : undefined;
+
+// Label for a model id: the catalog option's label, else a bare tier, else the raw id (a custom model belongs
+// to no catalog), else the provider name for an empty id.
 export const modelLabelFor = (provider: AgentProvider, modelId: string): string => {
     const option = modelOptionsFor(provider).find((entry) => entry.value === modelId);
     if (option !== undefined) {
         return option.label;
     }
-    return modelId === `` ? providerDisplayLabel(provider) : modelId;
+    return modelId === `` ? providerDisplayLabel(provider) : (tierLabel(modelId) ?? modelId);
 };
 
 // Provider tabs for account pickers, derived from PROVIDER_SPECS so a new provider always gets a tab.

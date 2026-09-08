@@ -11,7 +11,7 @@ import {
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, type Caller, bearerFrom } from "../auth/auth.js";
-import { listSubagentSessions } from "../agent/subagents/subagents.js";
+import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { runDeviceCommand } from "../hosts/device-commands.js";
 import { manageDeviceSandbox, runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
@@ -380,8 +380,13 @@ export const createSystemRoutes = (services: Services) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
-        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's store.
-        subagents: i.subagents.handler(() => ({ sessions: listSubagentSessions() })),
+        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's
+        // store. Paired against the SDK's meta files on the way out, since for a child the daemon did not watch
+        // being spawned that file is the only place its model is written.
+        subagents: i.subagents.handler(async () => {
+            await pairLiveSubagents();
+            return { sessions: listSubagentSessions() };
+        }),
         subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
             messages: await readSubagentTranscript(
                 { root: services.workspace.root, conversation: (agent) => services.transcripts.read(agent) },
