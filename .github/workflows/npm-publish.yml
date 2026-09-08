@@ -17,9 +17,12 @@
 #
 # Auth is TOKENLESS. `id-token: write` lets npm exchange this run's OIDC token for a short-lived publish
 # credential, which is also what makes the provenance attestation possible: the attestation names this
-# repository, this workflow file, and this commit. Registering the trusted publisher is a ONE-TIME manual step
-# per package on npmjs.com (Settings -> Trusted publisher -> GitHub Actions, workflow `npm-publish.yml`); a
-# package that is missing it fails the exchange rather than falling back to anything.
+# repository, this workflow file, and this commit. Registering the trusted publisher is a ONE-TIME step per
+# package, from an authenticated maintainer machine —
+#   npm trust github <name> --file npm-publish.yml --repo intentic/intentic --allow-publish
+# — or the same thing by hand on npmjs.com (Settings -> Trusted publisher -> GitHub Actions); a package that is
+# missing it fails the exchange rather than falling back to anything. The package has to EXIST first, which is
+# what check-publishable.mjs reads at plan time.
 #
 # PROVENANCE NEEDS A PUBLIC REPOSITORY. The attestation is published to a public transparency log, so npm
 # refuses `--provenance` from a private repo — this repository is public, which is what makes the attestation
