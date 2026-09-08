@@ -160,6 +160,54 @@ it(`replaces a run's rows on every head and keeps what sits above them`, () => {
     ]);
 });
 
+/* THE SAME RUN, IN A WINDOW THAT NEVER DREW IT. Where a window put a run is the window's own memory, and a
+ * transcript arrives without it three ordinary ways: painted from the local mirror, redrawn from the daemon's
+ * record, or opened fresh (every popped-out window). All three show the run already, and remember nothing about
+ * having drawn it, so the head's rows have to find their own place — or the run lands a second time underneath
+ * itself, which on a conversation of one long turn is the entire chat, twice, and again per attach that gets in.
+ *
+ * The rows settle it: the tail that IS this head's opening rows is the run's own work, already on screen. */
+it(`reclaims the rows it is already showing when it holds no base for the run`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.rebuild([
+        { role: `user`, text: `fix it`, sentAt: 1_000 },
+        { role: `assistant`, text: `Tracing.` },
+    ]);
+    const drawnAnswer = clock.messages.value[1]?.id;
+
+    clock.attachRun(
+        head([
+            { role: `user`, text: `fix it`, sentAt: 1_000 },
+            { role: `assistant`, text: `Tracing.` },
+            { role: `assistant`, text: `Found it.` },
+        ]),
+    );
+
+    expect(clock.messages.value.map((message) => message.text)).toEqual([`fix it`, `Tracing.`, `Found it.`]);
+    // RECLAIMED, not redrawn: the rows keep the ids they were already carrying, so a card answered by id is
+    // still answering the same row, and a view keyed on it repaints rather than remounting.
+    expect(clock.messages.value[1]?.id).toBe(drawnAnswer);
+});
+
+// And it takes only the tail that matches: what sits above is earlier turns and this window's own lines, which
+// no head has any claim on.
+it(`reclaims only as far back as the head's rows reach`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.rebuild([{ role: `assistant`, text: `earlier answer` }]);
+    clock.notice(`Switched to opus.`);
+    clock.append({ role: `user`, text: `fix it`, sentAt: 1_000 });
+    clock.append({ role: `assistant`, text: `Tracing.` });
+
+    clock.attachRun(
+        head([
+            { role: `user`, text: `fix it`, sentAt: 1_000 },
+            { role: `assistant`, text: `Tracing.` },
+        ]),
+    );
+
+    expect(clock.messages.value.map((message) => message.text)).toEqual([`earlier answer`, `Switched to opus.`, `fix it`, `Tracing.`]);
+});
+
 // A row the daemon replaces whole already holds every word this window was still revealing for it, so the
 // buffer for that row is dropped rather than typed on top of text that already contains it.
 it(`drops the typewriter's buffer for a row the daemon replaced whole`, () => {

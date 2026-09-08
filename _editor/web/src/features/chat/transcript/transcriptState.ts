@@ -48,14 +48,58 @@ const mapMessage = (state: TranscriptState, id: number, fn: (message: ChatMessag
 
 // --- the attached run -------------------------------------------------------------------------------------------
 
+/* A ROW'S CONTENT AS ONE COMPARABLE VALUE, without the two fields this window adds on top of the daemon's row:
+ * the id it hands out, and the mark saying this window wrote the row itself.
+ *
+ * Fields in a fixed order, and absent ones read the same as undefined ones, because the two sides of every
+ * comparison here reach it from different places — the daemon's live head, its record, the local mirror — and a
+ * value that went through JSON on the way lost its undefined keys and may have kept its own key order. What they
+ * agree on is the content; anything stricter would answer "different" for rows that are the same row. */
+const rowKey = (row: TranscriptRow | ChatMessage): string =>
+    JSON.stringify(
+        Object.entries(row)
+            .filter(([key, value]) => value !== undefined && key !== `id` && key !== `local`)
+            .sort(([left], [right]) => (left < right ? -1 : 1)),
+    );
+
+/* WHAT OF THIS RUN THE TRANSCRIPT IS ALREADY SHOWING, as the base its rows should be drawn over.
+ *
+ * A window remembers where it put a run BY ID (`attached`), and three ordinary things drop that memory while
+ * keeping the messages: a paint from the local mirror (transcriptClock's `adopt`), a redraw from the daemon's
+ * record (`rebuild`), and a window that never attached to this run in the first place, which every newly opened
+ * one is. The head's rows then arrive with no base to sit at and land at the END of a transcript that is already
+ * showing them, drawing the run a second time underneath itself: on a single-turn conversation that is the whole
+ * chat twice over, and once more again per hydrate that gets in.
+ *
+ * So the rows answer it themselves. The LONGEST tail of the transcript that is this head's opening rows, by
+ * content, is this run's own work already drawn, and the head replaces it. Nothing matching means none of it is
+ * drawn yet — a run found already going, under history that belongs to earlier turns — and the rows go at the end
+ * as before. A row this window wrote on its own clock (`local`) is not the daemon's and so never matches, which
+ * is what keeps a reclaim from swallowing a notice standing between turns.
+ *
+ * A false reclaim would need the transcript to END with rows identical to this head's opening ones, and a run
+ * opens on its user row, whose `sentAt` no other send shares. */
+const reclaimedBase = (messages: readonly ChatMessage[], rows: readonly TranscriptRow[]): number => {
+    const most = Math.min(messages.length, rows.length);
+    const shown = messages.slice(messages.length - most).map(rowKey);
+    const arriving = rows.slice(0, most).map(rowKey);
+    for (let taken = most; taken > 0; taken -= 1) {
+        if (shown.slice(most - taken).every((key, index) => key === arriving[index])) {
+            return messages.length - taken;
+        }
+    }
+    return messages.length;
+};
+
 /* TAKE A RUN'S ROWS, WHOLE. The head carries the run's transcript so far, so attaching is a replacement, never a
  * merge: everything from the run's base is this run's, and the base is where this window last put this very run
  * (re-attaching), else the bubble this window drew ahead of the head (`drawn`, the send path's own user bubble),
- * else the end of what it holds (a run found already going). Ids are kept by position, so that bubble keeps its
- * id when the daemon's row replaces it, and anything answered by id stays answered. */
+ * else wherever the transcript is already showing this run's rows (`reclaimedBase`, which answers with the end of
+ * what it holds when none of them are). Ids are kept by position, so that bubble keeps its id when the daemon's
+ * row replaces it, and anything answered by id stays answered. */
 export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: number): TranscriptState => {
     const drawnAt = drawn === undefined ? -1 : state.messages.findIndex((message) => message.id === drawn);
-    const base = state.attached?.run === head.run ? state.attached.base : drawnAt >= 0 ? drawnAt : state.messages.length;
+    const base = state.attached?.run === head.run ? state.attached.base : drawnAt >= 0 ? drawnAt : reclaimedBase(state.messages, head.rows);
     const kept = state.messages.slice(0, base);
     let nextId = state.nextId;
     const rows = head.rows.map((row, index): ChatMessage => {
@@ -162,7 +206,3 @@ const enqueueText = (state: TranscriptState, id: number, delta: string): Transcr
     const flushed = state.pending !== undefined && state.pending.id !== id ? flushPending(state) : state;
     return { ...flushed, pending: { id, text: `${flushed.pending?.text ?? ``}${delta}` } };
 };
-
-// Whether a row the daemon sent is the same rows this window already holds, by content: what a head's rows are
-// compared against when nothing changed, so a reattach that brought nothing new repaints nothing.
-export const sameRow = (a: TranscriptRow, b: TranscriptRow): boolean => JSON.stringify(a) === JSON.stringify(b);

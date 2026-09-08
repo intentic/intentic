@@ -3274,6 +3274,47 @@ describe(`Conversation`, () => {
         ]);
     });
 
+    /* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. What a window holds for a run is remembered by RUN ID, and
+     * three ordinary things drop that memory while keeping the messages: the mirror paint (transcriptClock's
+     * adopt), a redraw from the daemon's record (rebuild), and a window that simply never attached to this run
+     * before, which is every popped-out window. The rows then arrive from a run this state has no base for, so
+     * they land at the END of a transcript that is already showing them.
+     *
+     * A single-turn conversation is where it reads worst, because that run's rows ARE the whole chat: the
+     * prompt and every answer under it, drawn again below itself, once per hydrate that got in. */
+    it(`reattach reclaims the rows already on screen instead of drawing the run a second time`, async () => {
+        const conversation = new Conversation(`c1`);
+        const rows: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
+        conversation.restoreMessages(rows);
+        sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ rows: structuredClone(rows) }) }));
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `fix the limit reset` },
+            { role: `assistant`, text: `Tracing the retries.` },
+        ]);
+    });
+
+    /* And the same run STILL GOING: the record holds what settled, the head carries that plus what has landed
+     * since, so the reclaim has to take the tail it recognises and let the rest through. */
+    it(`reattach draws only the part of the run the transcript is not already showing`, async () => {
+        const conversation = new Conversation(`c1`);
+        const shown: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
+        conversation.restoreMessages(shown);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([], { head: () => ({ rows: [...structuredClone(shown), { role: `assistant`, text: `Found it.` }] }) }),
+        );
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `fix the limit reset` },
+            { role: `assistant`, text: `Tracing the retries.` },
+            { role: `assistant`, text: `Found it.` },
+        ]);
+    });
+
     /* The daemon refused the turn before running any of it, so the message was never part of the conversation.
      * It comes back OUT of the transcript and into the queue, which is what makes reconnecting replay it,
      * rather than leaving the user to retype it into every chat the revocation hit. */
