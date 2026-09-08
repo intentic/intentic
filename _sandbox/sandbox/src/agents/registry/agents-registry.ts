@@ -107,7 +107,8 @@ interface RuntimeState {
     // Children started so far, flushed once at finish; the card counts them live via summaryOf.
     pendingSubagents: number;
     // The agent's own checklist, whole, as of the last `todos` frame; only `finish` reads it. `undefined` means this
-    // process has not seen the list yet, which is not the same as an empty one.
+    // turn has not seen the list, which is not the same as an empty one; what that silence says depends on how the
+    // turn ended (stepsLeft).
     checklist: readonly TodoItem[] | undefined;
     // How the end-of-turn check went, last run wins. Recorded here too since the land consumes and clears
     // turn-checks.ts before `finish` runs; unlike the checklist, a verdict is not carried into the next turn.
@@ -166,7 +167,7 @@ const failureOf = (
 };
 
 // What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing
-// checklist means this process has not seen it yet, a missing check means it was not re-run.
+// check means it was not re-run; what a missing checklist means depends on how the turn ended (`TurnEnding`).
 const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
     const open = list.filter((item) => item.status !== "completed");
     if (open.length === 0) {
@@ -180,14 +181,41 @@ const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
 // The check's verdict, only when it ran and failed; passed, cancelled, or never run leaves nothing.
 const failedCheck = (state: RuntimeState | undefined): string | undefined => (state?.check?.failed === true ? state.check.label : undefined);
 
+// How the turn now finishing ended, read before `finish` resets the flags that say so. What a turn can say about a
+// list it never saw depends on this: one that ran to its own end speaks for the whole list; one cut short (refused at
+// the door, errored, stopped, dismissed) learned nothing about what it did not see; a manual land is no turn at all.
+type TurnEnding = "clean" | "cut" | "none";
+
+const turnEndingOf = (state: RuntimeState | undefined): TurnEnding =>
+    state?.running !== true ? "none" : state.errored || state.stopping !== undefined ? "cut" : "clean";
+
 // The moment of measurement, not of the write: a finish that observed neither the list nor a check learned nothing new,
 // and stamping `now` there would restart the age of an old abandonment.
 const leftAt = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): number =>
     state?.checklist === undefined && state?.check === undefined ? (entry.unfinished?.at ?? now) : now;
 
-const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): UnfinishedWork | undefined => {
-    // Observed this turn, else whatever the last finish that did observe it wrote.
-    const steps = state?.checklist === undefined ? entry.unfinished?.steps : openSteps(state.checklist);
+/* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. The checklist is the harness's own
+ * state (Claude Code's task store, keyed by session id), re-seeded into a resumed session and published on the
+ * provider's first answer; a turn that resumes the same session sees it whether or not the agent touches it. A turn
+ * that could not see it is one of two things. Cut short (a spent allowance, a crash, a Stop) it never got to look, and
+ * the last measurement stands. Run to its own end, the list is genuinely out of reach: a fresh session after a
+ * hand-off or a move to another account starts its ids at 1 and reads the old list only as prose in the hand-off note.
+ * Carrying the old count through that turn is what left a landed session wearing "4 of 4 steps unfinished" from a
+ * turn the allowance refused, for good, with nothing the agent or the owner could do to clear it. */
+const stepsLeft = (entry: PersistedAgent, state: RuntimeState | undefined, ending: TurnEnding): UnfinishedWork["steps"] => {
+    if (state?.checklist !== undefined) {
+        return openSteps(state.checklist);
+    }
+    return ending === "clean" ? undefined : entry.unfinished?.steps;
+};
+
+const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, ending: TurnEnding, now: number): UnfinishedWork | undefined => {
+    // No turn ran: a land or a sweep finishing a resting card learned nothing about its work, and re-reading the
+    // runtime state left by the last turn would re-stamp an old abandonment with today's date.
+    if (ending === "none") {
+        return entry.unfinished;
+    }
+    const steps = stepsLeft(entry, state, ending);
     const check = failedCheck(state);
     if (steps === undefined && check === undefined) {
         return undefined;
@@ -1127,6 +1155,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const ranTurn = state?.running === true;
             // Captured for the same reason: a manual land's finish has no runtime state and chose no ending.
             const ended = state?.stopping;
+            // Read before the reset below for the same reason: whether this turn ran to its own end decides what its
+            // silence about the checklist means.
+            const ending = turnEndingOf(state);
             if (state !== undefined) {
                 state.running = false;
                 state.stopping = undefined;
@@ -1155,7 +1186,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 replace({
                     ...carried,
                     // The one field here that can be true even of a turn that ended perfectly cleanly.
-                    ...opt("unfinished", unfinishedOf(entry, state, now)),
+                    ...opt("unfinished", unfinishedOf(entry, state, ending, now)),
                     // How the turn ended: an error, the user's stop, or the clean ending that hands off to standing.ts.
                     // A dismissal takes the clean ending too, settling with the finished ones.
                     status: state?.errored === true ? "error" : ended === "stopped" ? "stopped" : "idle",

@@ -73,6 +73,7 @@ import { opt } from "./opt.js";
 import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
+import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
 import { sdkSystemPrompt } from "../prompt/system-prompt.js";
 import { noteChildWork } from "../subagents/child-verification.js";
@@ -483,6 +484,9 @@ const baseOptions = (
                 tests: request.verifyTests,
                 changedPaths: request.changedPaths,
             }),
+            // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
+            // the board reads that list to tell a finished session from one that stopped short.
+            checklistCloseHooks({ workspaceRoot: request.workspaceRoot }),
             // Only when isolated and unanchored; an anchor already resolves paths to the worktree, so rewriting doubles
             // it.
             request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},

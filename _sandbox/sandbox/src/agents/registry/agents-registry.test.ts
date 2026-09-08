@@ -1268,19 +1268,73 @@ describe("agents registry", () => {
             expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
         });
 
-        // Every turn starts with fresh runtime state, so no `todos` frame this turn does not mean nothing is left;
-        // treating it as empty would wipe the mark after a restart or a turn that never touched the list.
-        it("keeps what it knew through a turn that never touched the list", async () => {
+        /* A TURN THAT SAW NO LIST says something different depending on how it ended. Run to its own end, the list
+         * was out of reach (a fresh session after a hand-off starts its ids at 1; the old list reaches the agent only
+         * as prose), and the agent finishing on its own terms is the last word: the mark clears. Cut short, it never
+         * got to look, and the last measurement stands. This is what kept a landed session wearing "4 of 4 steps
+         * unfinished" from a turn the allowance refused: the successful retry ran in a new session and never touched
+         * the Task tools, so every later finish, the land included, copied the stale count forward. */
+        it("clears through a turn that ran to its own end without a list in view", async () => {
             const registry = createAgentsRegistry(memoryStore(), standings(), presences());
             await registry.init();
             await registry.begin(turn(), 1_000);
             registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
             await registry.finish("c1", 2_000);
 
-            await registry.begin(turn({ prompt: "what does this file do?" }), 3_000);
+            await registry.begin(turn({ prompt: "Continue" }), 3_000);
             await registry.finish("c1", 4_000);
-            // `at` stays the turn that measured the list; a question-only turn must not reset that clock.
+            expect(registry.get("c1")?.unfinished).toBeUndefined();
+        });
+
+        it("keeps what it knew through a turn the allowance refused", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
+            await registry.finish("c1", 2_000);
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            registry.observe("c1", { kind: "error", message: "Individual quota reached." });
+            await registry.finish("c1", 4_000);
+            // `at` stays the turn that measured the list; a refusal must not reset that clock.
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 2, next: "Draw the mark" } });
+        });
+
+        it("keeps what it knew through a turn the user stopped before it looked", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"]));
+            await registry.finish("c1", 2_000);
+
+            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            registry.stopping("c1", "stopped");
+            await registry.finish("c1", 4_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 1, next: "Draw the mark" } });
+        });
+
+        // A cut-short turn that did see the list reports what it saw: the measurement is the turn's, whatever ended it.
+        it("measures a list a refused turn had already moved", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]));
+            registry.observe("c1", { kind: "error", message: "Individual quota reached." });
+            await registry.finish("c1", 2_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
+        });
+
+        // A manual land finishes the card without a turn; the runtime state it reads is the last turn's, checklist
+        // included, and re-measuring that would stamp an old abandonment with the land's date.
+        it("leaves the mark exactly as it was through a land, which is no turn", async () => {
+            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            await registry.init();
+            await registry.begin(turn(), 1_000);
+            registry.observe("c1", list(["Draw the mark", "pending"]));
+            await registry.finish("c1", 2_000);
+
+            await registry.finish("c1", 9_000);
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 1, next: "Draw the mark" } });
         });
 
         // The workspace's own end-of-turn check, independent of any todo list: a turn gets two rounds to repair a
@@ -1332,8 +1386,11 @@ describe("agents registry", () => {
             expect(registry.get("c1")?.unfinished).toBeUndefined();
             expect(registry.entry("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
 
+            // The resumed session re-publishes its list on the provider's first answer; still open, it is reported
+            // again the moment the turn settles, dated to the turn that last saw it.
+            registry.observe("c1", list(["Draw the mark", "in_progress"]));
             await registry.finish("c1", 4_000);
-            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
+            expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: left });
         });
     });
 

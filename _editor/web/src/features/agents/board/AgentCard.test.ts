@@ -22,7 +22,8 @@ const NO_ATTENTION: AgentSummary[`attention`] = {
     question: false,
     permission: false,
     capability: false,
-    credential: false, conflict: false,
+    credential: false,
+    conflict: false,
 };
 
 // Agent holding finished work on its branch, auto-land off; the one status the card offers "Land now" for.
@@ -104,6 +105,34 @@ const refused = (): FleetAgent => ({
     open: true,
     unread: false,
     unsent: false,
+});
+
+// The corner's status glyph: the one element that says how the card settled, by its accessible name.
+const corner = (el: HTMLElement): HTMLElement | null => el.querySelector(`[role="img"]`);
+
+/* ONE CORNER, BOTH FACTS. A finished lane of cards each wearing a green check in the corner and an amber
+ * "Unfinished" pill in the body was two answers to one question; the pill is gone, and a turn that stopped short
+ * is a dot on the glyph with the sentence in the hover. The glyph itself is unchanged, since "landed" is still
+ * where the work is. */
+it(`marks a turn that stopped short on the status glyph, not on a chip of its own`, () => {
+    const el = mount({
+        ...ready(`landed`),
+        // Dated now: the card's clock is the real one for a resting card, and the hover ages the mark against it.
+        unfinished: { at: Date.now(), steps: { open: 1, total: 5, next: `Restore reachability so radarsu-omen can pair` } },
+    });
+    expect(el.textContent).not.toContain(`Unfinished`);
+    const glyph = corner(el)!;
+    expect(glyph.querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
+    expect(glyph.querySelector(`[data-unfinished]`)).not.toBeNull();
+    expect(glyph.getAttribute(`aria-label`)).toBe(
+        `Landed. Stopped with 1 of 5 steps unfinished, just now: Restore reachability so radarsu-omen can pair`,
+    );
+});
+
+it(`wears a plain glyph once nothing was left open`, () => {
+    const glyph = corner(mount(ready(`landed`)))!;
+    expect(glyph.querySelector(`[data-unfinished]`)).toBeNull();
+    expect(glyph.getAttribute(`aria-label`)).toBe(`Landed`);
 });
 
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>

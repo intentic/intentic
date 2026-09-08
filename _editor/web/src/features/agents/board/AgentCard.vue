@@ -9,7 +9,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import OriginMark from "../../../components/OriginMark.vue";
 import StartedByMark from "./StartedByMark.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
-import UnfinishedMark from "./UnfinishedMark.vue";
+import StatusGlyph from "../fleet/StatusGlyph.vue";
 import WorkflowMark from "../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "./laneDrop";
 import {
@@ -467,20 +467,14 @@ const grab = (event: PointerEvent): void => {
                 >{{ unread.label }}</span
             >
             <!--
-                The resting standing for a card with no reason or unread mark; now carries meta.label as a word, not
-                just a glyph.
+                The resting standing for a card with no reason or unread mark; carries meta.label as a word in its
+                hover, not just a glyph, and the one thing a resting status can't say alone: that the turn which
+                settled it stopped short (a dot on the glyph, the sentence in the hover). The daemon sends
+                `unfinished` only for a card at rest, so no status check is needed here.
                 Deliberately not chip-styled like the exceptions above: a board of forty "Idle" pills would spend its
-                whole attention budget on nothing.
+                whole attention budget on nothing, and an "Unfinished" pill per stopped-short card was the same spend.
             -->
-            <Icon
-                v-else
-                :name="meta.icon"
-                :spin="meta.spin"
-                :aria-label="meta.label"
-                v-tooltip.top="meta.label"
-                class="shrink-0 text-xs"
-                :class="meta.class"
-            />
+            <StatusGlyph v-else :meta="meta" :unfinished="agent.unfinished" :now="now" class="text-xs" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
@@ -504,12 +498,6 @@ const grab = (event: PointerEvent): void => {
                 Shape and wording live in UnsentMark, shared with the rail row.
             -->
             <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
-
-            <!--
-                Mirror of UnsentMark for the agent's own unfinished business; the daemon sends this only for a card at
-                rest, so no status check is needed here.
-            -->
-            <UnfinishedMark v-if="agent.unfinished !== undefined" :work="agent.unfinished" :now="now" />
 
             <!--
                 `failure` is present only while the card reads as failed, so no extra status check is needed here.

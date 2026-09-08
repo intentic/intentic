@@ -89,6 +89,19 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   Seeding off that directory makes the daemon's list the CLI's list from the turn's first moment, so the mark is
   measured on every turn's ending rather than on the last turn that happened to call `TaskList`. The seed is
   dropped when the stream names a different session (a CLI that could not resume mints fresh ids from 1).
+  That dropped seed is the other half: a turn in a fresh session (a hand-off after a spent allowance, a move to
+  another account) reads the old list only as prose in its hand-off note, so unless the agent re-creates it the
+  turn ends having observed no list at all, and the carry rule kept copying the old count through every later
+  finish, the land included. A CI-fix conversation refused twice for capacity wore "4 of 4 steps unfinished"
+  from the refused turn after its retry had fixed the test, landed, and said so. The registry's finish now reads
+  silence by how the turn ended (`stepsLeft`): a turn that ran to its own end with no list in view has no open
+  steps, a turn cut short (refused, errored, stopped, dismissed) keeps the last measurement, and a manual land
+  (no turn) leaves the mark exactly as it was rather than re-dating it off the runtime state the last turn left.
+  The other stale mark is honest measurement of dishonest bookkeeping: a session that did its last step and
+  never ticked it, or whose step the owner redirected away from and never deleted, wears "1 of 5" after landing.
+  [src/agent/run/checklist-close.ts](../src/agent/run/checklist-close.ts) says the open items back to the agent
+  once at Stop, off the CLI's own store, with the three honest ways out (finish, tick, delete) and leave to say
+  so if stopping short on purpose; the board's mark is only as good as the list it reads.
 - **A turn that ends with nothing to show for it is a failure, not a finish** (`silentEnding` in
   [src/agent/routes/agent.routes.ts](../src/agent/routes/agent.routes.ts)). A Gemini turn on the OpenCode runtime read and
   grepped 59 times, changed no file, wrote not one word, and was ended by an ordinary `session.idle`: no error
