@@ -119,9 +119,12 @@ vi.mock(`../extensions/useCloudflareZones`, () => ({
 // Which installer this reader's machine can run decides whether the own-computer lane leads with a download or
 // with the command, so it is a knob every test below can turn. Undefined by default: the Mac-shaped world,
 // where the command is still the path, which is what most of these tests were written against.
-const desktopInstaller = vi.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
-vi.mock(`../../app/environments/desktop`, () => ({
-    DESKTOP_DOWNLOADS: [],
+const desktopInstaller = vi.fn<() => { platform: "windows" | "linux"; label: string; href: string } | undefined>(() => undefined);
+// Only the four reads that ask something of the machine are stubbed; the rest of the module comes through as
+// itself. A listed-exports-only mock made every new export the page reaches for an import-time crash in a file
+// that tests none of it (DESKTOP_SETUP_EVENT, which useDesktopSetup subscribes to, arrived exactly that way).
+vi.mock(import(`../../app/environments/desktop`), async (importOriginal) => ({
+    ...(await importOriginal()),
     desktopInstaller: () => desktopInstaller(),
     desktopSetupLink: () => ``,
     desktopVersion: () => undefined,
