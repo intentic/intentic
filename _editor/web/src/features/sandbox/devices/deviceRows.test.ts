@@ -19,7 +19,8 @@ import { manageBlock } from "./deviceFacts";
 // The board's and the device page's shared rules, checked without mounting either: which machine reads as
 // live, what a card says about it, and what it wants from the reader.
 
-// One instant for every judgement below, so a threshold is crossed on purpose.
+// One instant for every judgement below, so a threshold is crossed on purpose. It stands for when the reading
+// landed here (readAt), which is what every freshness rule is measured against.
 const NOW = 1_700_000_000_000;
 
 type Report = NonNullable<Device[`report`]>;
@@ -48,7 +49,7 @@ const device = (overrides: Partial<Device> = {}): Device => ({
 
 // Two axes, kept apart: what the daemon says about the machine, and what the machine said about itself.
 const row = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string) =>
-    deviceRow(device({ report: report(held), ...overrides }), latest, NOW);
+    deviceRow(device({ report: report(held), ...overrides }), latest);
 
 // ── which machine reads as live ─────────────────────────────────────────────
 
@@ -73,6 +74,23 @@ test(`calls a live process with a dead loop the same errand as a stopped one`, (
     const stalled = device({ report: report({ agent: { running: true, lastTickAt: NOW - 61_000 } }) });
     expect(deviceState(stalled, NOW)).toBe(`needs attention`);
     expect(deviceTone(stalled, NOW)).toBe(`warning`);
+});
+
+// The verdict is a function of the reading and its arrival, never of the clock: a reading that was fresh when it
+// landed stays fresh however long the list is held, and only one that arrives already old reads as quiet.
+test(`judges a machine as of the reading's arrival, not as of now`, () => {
+    const fresh = device({ report: report({ capturedAt: NOW }) });
+    expect(deviceState(fresh, NOW)).toBe(`live`);
+    // The same reading handed over an hour after the machine took it: that machine really has gone quiet.
+    expect(deviceState(fresh, NOW + 60 * 60_000)).toBe(`gone quiet`);
+});
+
+// Both stamps are the machine's own, so the loop is judged on the machine's clock: an old reading of a healthy loop
+// is old, not dead, and says so once ("gone quiet") rather than twice.
+test(`does not read an old reading of a ticking loop as a dead one`, () => {
+    const old = report({ capturedAt: NOW - 19 * 60_000, agent: { running: true, lastTickAt: NOW - 19 * 60_000 - 3_000 } });
+    expect(deviceRow(device({ report: old }), undefined).agent?.stalled).toBe(false);
+    expect(deviceState(device({ report: old }), NOW)).toBe(`gone quiet`);
 });
 
 test(`keeps an asleep machine neutral: offline is a state, not a fault`, () => {
@@ -228,7 +246,7 @@ const GRANTED = { sandboxes: `on`, sandboxRemove: `on` };
 
 const concernsOf = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string, scopes?: Record<string, string>) => {
     const entry = row(overrides, held, latest);
-    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), latest, now: NOW });
+    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), latest, readAt: NOW });
 };
 
 test(`says nothing at all about a healthy, fully-permitted machine`, () => {

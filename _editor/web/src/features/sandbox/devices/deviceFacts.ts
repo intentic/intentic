@@ -1,9 +1,12 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, isBehind } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, isBehind, reportQuiet } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
 // (folders, ports, containers). Every fact comes from the daemon's own row (DeviceSchema), the capability
 // card's platform, what the machine announced on connect, and the two agent versions.
+
+// `readAt` throughout is when this reading reached the browser, not the wall clock: every judgement here is about what
+// the machine was doing when we last heard from it, so a list nobody has re-read cannot age into a verdict of its own.
 
 // Platform slugs from the capability cards; an unknown slug is shown verbatim rather than as nothing.
 const PLATFORM_NAMES: Record<string, string> = { windows: `Windows`, linux: `Linux`, macos: `macOS` };
@@ -89,17 +92,17 @@ const SYNC_STALE_MS = 5 * 60 * 1000;
 
 // An enrollment that has never checked in also counts as stopped: indistinguishable from a working one on
 // every other signal the row has.
-export const syncStopped = (device: Device, now: number): boolean =>
-    device.sync !== undefined && (device.sync.seenAt === undefined || now - device.sync.seenAt > SYNC_STALE_MS);
+export const syncStopped = (device: Device, readAt: number): boolean =>
+    device.sync !== undefined && (device.sync.seenAt === undefined || readAt - device.sync.seenAt > SYNC_STALE_MS);
 
 // The one line a folded row carries about its enrollment: which half it holds, and whether it's still active.
 // Silent when there is no enrollment.
-export const syncNote = (device: Device, now: number): string | undefined => {
+export const syncNote = (device: Device, readAt: number): string | undefined => {
     if (device.sync === undefined) {
         return undefined;
     }
     const what = device.sync.mode === `mirror` ? `mirroring ports` : `syncing files and ports`;
-    if (!syncStopped(device, now)) {
+    if (!syncStopped(device, readAt)) {
         return what;
     }
     return device.sync.seenAt === undefined ? `enrolled for ${what}, never checked in` : `${what}: stopped`;
@@ -109,26 +112,27 @@ export const syncNote = (device: Device, now: number): string | undefined => {
 // agentBuildSkew's restart instead.
 export const agentBehind = (device: Device, latest?: string): boolean => isBehind(device.report?.agent.installed, latest);
 
-// Past this, a device is treated as gone quiet rather than merely between reports.
-const REPORT_STALE_MS = 60_000;
+// Whether the machine had gone quiet by the time this reading reached us (REPORT_QUIET_AFTER_MS). Aged against the
+// reading, never the clock, so a cached list painted on open says what it said, instead of inventing a silence.
+export const deviceQuiet = (device: Device, readAt: number): boolean =>
+    device.report !== undefined && reportQuiet(device.report, readAt);
 
-export const reportStale = (device: Device, now: number): boolean =>
-    device.report !== undefined && now - device.report.capturedAt > REPORT_STALE_MS;
-
-// Same rule the terminal uses (agentStalled), so a row and `intentic-machine status` cannot disagree.
-export const agentHalted = (device: Device, now: number): boolean => device.report !== undefined && agentStalled(device.report.agent, now);
+// Same rule the terminal uses (agentStalled), so a row and `intentic-machine status` cannot disagree. Judged on the
+// machine's own clock, which stamps both the tick and the capture: an old reading of a healthy loop is old, not dead.
+export const agentHalted = (device: Device): boolean =>
+    device.report !== undefined && agentStalled(device.report.agent, device.report.capturedAt);
 
 // What is wrong with the machine itself, as distinct from what is wrong with one of its sandboxes: a board
 // card states these under the sandbox lines, which carry their own.
-export const machineWarnings = (device: Device, now: number): readonly string[] => {
+export const machineWarnings = (device: Device, readAt: number): readonly string[] => {
     const warnings: string[] = [];
     // An unused enrollment reads as healthy everywhere else, so it has to warn here.
-    const note = syncNote(device, now);
-    if (note !== undefined && syncStopped(device, now)) {
+    const note = syncNote(device, readAt);
+    if (note !== undefined && syncStopped(device, readAt)) {
         warnings.push(note);
     }
     // A dead loop leaves every fact beneath it reading as it did the moment before; said once, here.
-    if (device.report !== undefined && (!device.report.agent.running || agentHalted(device, now))) {
+    if (device.report !== undefined && (!device.report.agent.running || agentHalted(device))) {
         warnings.push(`agent stopped`);
     }
     return warnings;

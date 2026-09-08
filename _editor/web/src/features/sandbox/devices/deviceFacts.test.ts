@@ -3,7 +3,9 @@ import { expect, test } from "vitest";
 import {
     agentBehind,
     agentChip,
+    agentHalted,
     deviceDoors,
+    deviceQuiet,
     hostCard,
     lastSeenNote,
     deviceHardware,
@@ -11,12 +13,12 @@ import {
     manageBlock,
     osLabel,
     osTitle,
-    reportStale,
     syncNote,
     syncStopped,
 } from "./deviceFacts";
 
-// One instant for every judgement below, so a threshold is crossed on purpose.
+// One instant for every judgement below, so a threshold is crossed on purpose. It stands for when the reading landed
+// here (readAt), which every rule about age is measured against.
 const NOW = 1_700_000_000_000;
 
 // Covers the two arrival doors, including rows with no report at all (no sync agent installed, or asleep).
@@ -268,9 +270,33 @@ test(`warns about an enrollment that has gone quiet, in the same words it reads 
     ]);
 });
 
-test(`counts a reading older than a minute as stale, and a fresh one as current`, () => {
-    expect(reportStale(device({ report: watching() }), NOW)).toBe(false);
-    expect(reportStale(device({ report: watching({ capturedAt: NOW - 61_000 }) }), NOW)).toBe(true);
-    // No report is not a stale one: the row already says the machine has never described itself.
-    expect(reportStale(device(), NOW)).toBe(false);
+test(`counts a machine unheard-from for a minute when the reading landed as quiet, and a fresh one as current`, () => {
+    expect(deviceQuiet(device({ report: watching() }), NOW)).toBe(false);
+    expect(deviceQuiet(device({ report: watching({ capturedAt: NOW - 61_000 }) }), NOW)).toBe(true);
+    // No report is not a quiet machine: the row already says it has never described itself.
+    expect(deviceQuiet(device(), NOW)).toBe(false);
+});
+
+// The clock is the reading's arrival, so holding a list (a tab left open, a cache restored on load) can never turn a
+// machine that was answering into one that has gone quiet.
+test(`ages a reading by when it landed, not by how long it has been held`, () => {
+    const held = device({ report: watching({ capturedAt: NOW }) });
+    expect(deviceQuiet(held, NOW)).toBe(false);
+    expect(deviceQuiet(held, NOW + 60 * 60_000)).toBe(true);
+});
+
+// Both stamps come off the machine's own clock; comparing the tick against ours made every old reading, and every
+// device whose clock is off, read as a dead loop.
+test(`judges the agent's rounds on the machine's own clock`, () => {
+    const ticking = watching({ capturedAt: NOW - 19 * 60_000, agent: { running: true, lastTickAt: NOW - 19 * 60_000 - 3_000 } });
+    expect(agentHalted(device({ report: ticking }))).toBe(false);
+    const halted = watching({ agent: { running: true, lastTickAt: NOW - 61_000 } });
+    expect(agentHalted(device({ report: halted }))).toBe(true);
+    // A stopped loop is a different sentence (`agent stopped`), decided on `running`, not on the tick.
+    expect(agentHalted(device({ report: watching({ agent: { running: false, lastTickAt: NOW - 61_000 } }) }))).toBe(false);
+});
+
+test(`says nothing about an old reading of a machine that was syncing and answering`, () => {
+    const old = { capturedAt: NOW - 19 * 60_000, agent: { running: true, lastTickAt: NOW - 19 * 60_000 } };
+    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching(old) }), NOW)).toEqual([]);
 });

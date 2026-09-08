@@ -10,15 +10,16 @@ import { lastSeenNote, osLabel, osTitle } from "./deviceFacts";
 // here expands and nothing here is a control — the whole card is one link into that machine's own page —
 // so a reader answering "which machine has 8788" never has to press anything.
 
-const { row, needle, ownSlug, now } = defineProps<{
+const { row, needle, ownSlug, readAt } = defineProps<{
     row: DeviceRow;
     /** The board's filter, lower-cased; every matching sandbox is drawn while it is set. */
     needle: string;
     ownSlug: string | undefined;
-    now: number;
+    /** When this reading landed; the machine is judged as of then, not as of now. */
+    readAt: number;
 }>();
 
-const body = computed(() => boardBody(row, needle, ownSlug, now));
+const body = computed(() => boardBody(row, needle, ownSlug, readAt));
 </script>
 
 <template>
@@ -59,7 +60,13 @@ const body = computed(() => boardBody(row, needle, ownSlug, now));
 
             <template #meta>
                 <span v-if="lastSeenNote(row.device)" class="shrink-0">{{ lastSeenNote(row.device) }}</span>
-                <StatusBadge :variant="deviceTone(row.device, now)" size="xs" :dot="true" :label="deviceState(row.device, now)" class="shrink-0" />
+                <StatusBadge
+                    :variant="deviceTone(row.device, readAt)"
+                    size="xs"
+                    :dot="true"
+                    :label="deviceState(row.device, readAt)"
+                    class="shrink-0"
+                />
             </template>
 
             <template #below>

@@ -34,12 +34,13 @@ import { useRole } from "../secrets/useRole";
 // sandbox has on it, and — last, and set apart — how to cut it off. Every button here acts on this one
 // machine, so one op at a time is the whole page's rule (see deviceOps.ts).
 
-const { row, latest, ownSlug, now, refetch } = defineProps<{
+const { row, latest, ownSlug, readAt, refetch } = defineProps<{
     row: DeviceRow;
     /** The release this sandbox knows about; undefined on a dev build or a sandbox that never reached the registry. */
     latest: string | undefined;
     ownSlug: string | undefined;
-    now: number;
+    /** When this reading landed; the machine is judged as of then, not as of now (see deviceFacts.ts). */
+    readAt: number;
     refetch: () => void;
 }>();
 
@@ -52,7 +53,7 @@ const scopes = computed<DeviceScopes | undefined>(() =>
     device.value.hostId === undefined ? undefined : capabilities.value.find((capability) => capability.id === device.value.hostId)?.config,
 );
 const block = computed(() => manageBlock(device.value, scopes.value));
-const concerns = computed(() => deviceAttention(row, { block: block.value, latest, now }));
+const concerns = computed(() => deviceAttention(row, { block: block.value, latest, readAt }));
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -120,7 +121,13 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 <template #meta>
                     <!-- Noise on a live machine, the most useful fact on one that isn't. -->
                     <span v-if="lastSeenNote(device)" class="shrink-0">{{ lastSeenNote(device) }}</span>
-                    <StatusBadge :variant="deviceTone(device, now)" size="xs" :dot="true" :label="deviceState(device, now)" class="shrink-0" />
+                    <StatusBadge
+                        :variant="deviceTone(device, readAt)"
+                        size="xs"
+                        :dot="true"
+                        :label="deviceState(device, readAt)"
+                        class="shrink-0"
+                    />
                 </template>
             </Row>
 
@@ -128,8 +135,8 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 What this device is doing for the sandbox: the one thing anybody opened the machine to read.
                 Warning ink when the enrollment has stopped checking in.
             -->
-            <p v-if="syncNote(device, now)" class="min-w-0 text-xs" :class="syncStopped(device, now) ? `text-warning` : `text-muted`">
-                {{ syncNote(device, now) }}
+            <p v-if="syncNote(device, readAt)" class="min-w-0 text-xs" :class="syncStopped(device, readAt) ? `text-warning` : `text-muted`">
+                {{ syncNote(device, readAt) }}
             </p>
 
             <!--

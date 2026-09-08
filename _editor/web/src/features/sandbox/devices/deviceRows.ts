@@ -1,4 +1,4 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, type DeviceCommand } from "@intentic/sandbox-contract";
+import { agentBuildSkew, type Device, type DeviceAgent, type DeviceCommand } from "@intentic/sandbox-contract";
 import type { StatusVariant, TallyItem } from "@intentic/ui";
 import {
     type DeviceFolderRow,
@@ -8,18 +8,20 @@ import {
     mirroringOff,
     sandboxGroups,
 } from "@intentic/ui/device";
-import { type AgentChip, agentChip, agentHalted, deviceDoors, machineWarnings, osLabel, reportStale } from "./deviceFacts";
+import { type AgentChip, agentChip, agentHalted, deviceDoors, deviceQuiet, machineWarnings, osLabel } from "./deviceFacts";
 
 // One machine as the board and the device page both read it: its state in one word and one colour, its
 // sandboxes folded into groups, and the agent verdicts a render needs. Pure throughout, so the same rules
 // can be checked without mounting anything (deviceRows.test.ts).
 
-export const deviceTone = (device: Device, now: number): StatusVariant => {
+// `readAt` is when the reading landed here, not the clock: see deviceFacts.ts.
+
+export const deviceTone = (device: Device, readAt: number): StatusVariant => {
     if (device.gap !== undefined) {
         return device.gap === `offline` ? `neutral` : `warning`;
     }
     // A stalled agent is the same errand as a stopped one: nothing is reaching that device's ports or clones.
-    if (reportStale(device, now) || device.report?.agent.running === false || agentHalted(device, now)) {
+    if (deviceQuiet(device, readAt) || device.report?.agent.running === false || agentHalted(device)) {
         return `warning`;
     }
     return `success`;
@@ -27,22 +29,22 @@ export const deviceTone = (device: Device, now: number): StatusVariant => {
 
 // The badge's word must agree with its colour: a dead sync agent is amber, so it reads "needs attention"
 // rather than "live".
-export const deviceState = (device: Device, now: number): string => {
+export const deviceState = (device: Device, readAt: number): string => {
     if (device.gap !== undefined) {
         return device.gap === `offline` ? `offline` : `needs attention`;
     }
-    if (reportStale(device, now)) {
+    if (deviceQuiet(device, readAt)) {
         return `gone quiet`;
     }
-    return device.report?.agent.running === false || agentHalted(device, now) ? `needs attention` : `live`;
+    return device.report?.agent.running === false || agentHalted(device) ? `needs attention` : `live`;
 };
 
 // Machines worth reading first: state leads, name breaks ties, so order only changes when a machine's state
 // does. Live ranks above needs-attention, since a live card is the point of the board.
 const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, offline: 3 };
 
-export const sortDevices = (devices: readonly Device[], now: number): Device[] =>
-    devices.toSorted((a, b) => (RANK[deviceState(a, now)] ?? 9) - (RANK[deviceState(b, now)] ?? 9) || a.label.localeCompare(b.label));
+export const sortDevices = (devices: readonly Device[], readAt: number): Device[] =>
+    devices.toSorted((a, b) => (RANK[deviceState(a, readAt)] ?? 9) - (RANK[deviceState(b, readAt)] ?? 9) || a.label.localeCompare(b.label));
 
 // The agent with this render's verdicts already attached; absent on a device that never reported.
 export type RowAgent = DeviceAgent & {
@@ -63,7 +65,7 @@ export interface DeviceRow {
 const groupsOf = (device: Device): DeviceSandboxGroup[] =>
     device.report === undefined ? [] : sandboxGroups(device.report.pairings, device.report.ports, device.report.sandboxes);
 
-export const deviceRow = (device: Device, latest: string | undefined, now: number): DeviceRow => {
+export const deviceRow = (device: Device, latest: string | undefined): DeviceRow => {
     const agent = device.report?.agent;
     // Whether this device serves an older build than the one installed (agentBuildSkew); no report means no
     // comparison.
@@ -72,15 +74,13 @@ export const deviceRow = (device: Device, latest: string | undefined, now: numbe
         device,
         groups: groupsOf(device),
         agent:
-            agent === undefined
-                ? undefined
-                : { ...agent, stalled: agentStalled(agent, now), ...(staleBuild === undefined ? {} : { staleBuild }) },
+            agent === undefined ? undefined : { ...agent, stalled: agentHalted(device), ...(staleBuild === undefined ? {} : { staleBuild }) },
         chip: agentChip(device, latest),
     };
 };
 
-export const deviceRows = (devices: readonly Device[], latest: string | undefined, now: number): DeviceRow[] =>
-    sortDevices(devices, now).map((device) => deviceRow(device, latest, now));
+export const deviceRows = (devices: readonly Device[], latest: string | undefined, readAt: number): DeviceRow[] =>
+    sortDevices(devices, readAt).map((device) => deviceRow(device, latest));
 
 // The sandbox you're looking at, matched by its container slug on the machine. Both sides must be known:
 // comparing two optionals let a pairing with no container on an unknown-URL sandbox match
@@ -167,7 +167,7 @@ export interface BoardBody {
 
 // While the filter is active every matching sandbox is drawn, however many: a port search whose answer was
 // the fourth line would otherwise land on a card that doesn't show it.
-export const boardBody = (row: DeviceRow, needle: string, ownSlug: string | undefined, now: number): BoardBody => {
+export const boardBody = (row: DeviceRow, needle: string, ownSlug: string | undefined, readAt: number): BoardBody => {
     const matched = needle === `` ? row.groups : row.groups.filter((group) => groupMatches(group, needle));
     const shown = needle === `` ? matched.slice(0, BOARD_LINES_MAX) : matched;
     return {
@@ -184,7 +184,7 @@ export const boardBody = (row: DeviceRow, needle: string, ownSlug: string | unde
             };
         }),
         more: matched.length - shown.length,
-        warnings: machineWarnings(row.device, now),
+        warnings: machineWarnings(row.device, readAt),
     };
 };
 

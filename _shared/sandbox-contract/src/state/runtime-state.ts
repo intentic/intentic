@@ -31,7 +31,8 @@ const RUNTIME_DOMAINS = [
     { domain: "subagents", invalidates: [["subagents"]] },
 
     // Machines on the other end of a socket (devices, browsers, runners); "online" is the socket itself, never sampled.
-    // hosts/webext land on capabilities since a pairing card's state is literally the hub's online answer.
+    // hosts/webext land on capabilities since a pairing card's state is literally the hub's online answer. `hosts` also
+    // carries a device reading that landed too late for the reader waiting on it (hosts/device-reports.ts).
     { domain: "hosts", invalidates: [["capabilities"], ["devices"]] },
     { domain: "webext", invalidates: [["capabilities"]] },
     { domain: "runners", invalidates: [["runners"]] },

@@ -1,7 +1,7 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
-import { agentBehind, type ManageBlock, reportStale } from "./deviceFacts";
+import { agentBehind, deviceQuiet, type ManageBlock } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age
@@ -147,7 +147,7 @@ const updateConcern = (row: DeviceRow, latest: string | undefined): DeviceConcer
 
 export const deviceAttention = (
     row: DeviceRow,
-    { block, latest, now }: { block: ManageBlock | undefined; latest: string | undefined; now: number },
+    { block, latest, readAt }: { block: ManageBlock | undefined; latest: string | undefined; readAt: number },
 ): readonly DeviceConcern[] => {
     const concerns: DeviceConcern[] = [];
     const { device } = row;
@@ -156,13 +156,14 @@ export const deviceAttention = (
         concerns.push({ key: `gap`, tone: GAP_TONE[device.gap], text: GAP_TEXT[device.gap] });
     }
     // A report is a snapshot of a device that may since have closed its lid, so its age qualifies everything
-    // under it.
-    if (reportStale(device, now)) {
+    // under it. Aged against the reading, so this is what the machine was doing when we heard from it, not how long
+    // a cached page has been open.
+    if (deviceQuiet(device, readAt)) {
         concerns.push({
             key: `stale`,
             tone: `warning`,
-            // `reportStale` is false without a report, so the timestamp is there whenever this line is.
-            text: `Last heard from ${timeAgo(device.report?.capturedAt ?? now)}. What follows is what it looked like then.`,
+            // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
+            text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}. What follows is what it looked like then.`,
         });
     }
     const restart = restartConcern(row);

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { NoticeModel } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AddDeviceDialog from "./AddDeviceDialog.vue";
@@ -20,7 +19,10 @@ import { useSandboxVersion } from "../overview/useSandboxVersion";
 
 const route = useRoute();
 const router = useRouter();
-const { devices, error, isLoading, refetch } = useDevices();
+// `readAt` is the only clock this tab keeps: when the list landed, not the wall clock. Every machine is judged on
+// what it said when we last heard from it, so a list restored from cache or left on screen cannot age into "gone
+// quiet" by itself, and nothing here re-derives on a tick.
+const { devices, readAt, error, isLoading, refetch } = useDevices();
 
 // Pairing opens from the board, and from the Workspace's "Open in local editor" shortcut, which lands here
 // with the mint already asked for. Read before the redirects below, which rewrite the query out from under it.
@@ -34,12 +36,6 @@ const notice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your devices.`, detail: error.value },
 );
 
-// One quantised clock for the whole render: every derivation here hangs off it, and rounding to the poll
-// interval (10s) stops the cascade from re-deriving every second for data that arrives every ten.
-const CLOCK_STEP_MS = 10_000;
-const ticking = useNow();
-const now = computed(() => Math.floor(ticking.value / CLOCK_STEP_MS) * CLOCK_STEP_MS);
-
 // The release this sandbox knows about, from the shared /info query (same value as its own update badge);
 // undefined on a sandbox that hasn't reached the registry, or a dev build.
 const { latest } = useSandboxVersion();
@@ -49,7 +45,7 @@ const { latest } = useSandboxVersion();
 const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-const rows = computed(() => deviceRows(devices.value, latest.value, now.value));
+const rows = computed(() => deviceRows(devices.value, latest.value, readAt.value));
 
 // The machine on screen is whatever the URL names, and nothing else: no derived fallback, or pressing
 // "All devices" on a one-machine fleet would bounce straight back to it.
@@ -108,7 +104,7 @@ watch(
             :row="selected"
             :latest="latest"
             :own-slug="ownSlug"
-            :now="now"
+            :read-at="readAt"
             :refetch="refetch"
         />
         <DeviceBoard
@@ -118,7 +114,7 @@ watch(
             :notice="notice"
             :outline="outline"
             :own-slug="ownSlug"
-            :now="now"
+            :read-at="readAt"
             @add="adding = true"
         />
 

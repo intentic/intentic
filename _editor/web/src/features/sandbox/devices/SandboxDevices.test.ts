@@ -16,6 +16,8 @@ import { IconStub } from "@intentic/ui/testing";
 const paired = (mode: `sync` | `mirror` = `sync`, machine = `laptop`): Device[`sync`] => ({ machine, mode, seenAt: Date.now() });
 
 const devices = ref<Device[]>([]);
+// When the list landed here: the clock every row's freshness is judged against, set by `mount` below.
+const readAt = ref(Date.now());
 // The first read, not the ten-second poll; tests below assume the list has already arrived.
 const devicesLoading = ref(false);
 // The machine's own CLI, run from a button, recorded rather than performed: pins that it's offered, which way
@@ -33,11 +35,11 @@ vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
 vi.mock(`./useDevices`, async () => {
-    // reportStale is real, so a row's staleness reads the same rule the app uses.
+    // deviceQuiet is real, so a row's freshness reads the same rule the app uses.
     const real = await import(`./useDevices`);
     return {
         ...real,
-        useDevices: () => ({ devices, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
         manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown }) => {
             verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
             return Promise.resolve(`Reshaped sandbox "${slug}".`);
@@ -125,6 +127,8 @@ const mount = (rows: Device[], at: Record<string, string> = {}): HTMLElement => 
     // A mount is an arrival at the tab; `at` is the deep link it arrived on.
     route.query = { ...at };
     devices.value = rows;
+    // A mount is also a reading landing, which is the clock every row is judged against.
+    readAt.value = Date.now();
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxDevices) });
@@ -767,11 +771,10 @@ it(`offers to pair a first device once the read lands empty`, () => {
     expect(mount([]).textContent ?? ``).toContain(`No device is paired`);
 });
 
-// Every derivation on this tab hangs off the app's one-second clock, so a regression here silently re-renders
-// the whole list every tick for data that arrives every ten.
-it(`does not re-derive the whole list on every tick of the app clock`, async () => {
+// Nothing on this tab hangs off a clock: rows are derived from the reading that landed, so time passing alone must
+// re-render nothing. A regression here silently re-derives the whole list every tick for data that arrives every ten.
+it(`does not re-derive the whole list as time passes`, async () => {
     vi.useFakeTimers();
-    // A round instant, so three seconds of ticking can't cross a bucket boundary and legitimately re-derive.
     vi.setSystemTime(1_700_000_000_000);
     mount([managed(true), { ...managed(false), key: `desktop`, label: `desktop` }]);
     await nextTick();
@@ -973,6 +976,31 @@ it(`treats an enrollment last used hours ago as stopped`, () => {
     const row = mirrored(`on`);
     const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync`, seenAt: Date.now() - 3 * 60 * 60_000 } }]).textContent ?? ``;
     expect(text).toContain(`stopped`);
+});
+
+// Opening this tab paints the list restored from the last visit before the first read lands. Ageing that reading
+// against the clock accused a machine that was answering perfectly of having gone quiet, with a second warning about
+// its loop, for as long as the read took.
+it(`accuses a machine of nothing on a reading held since an earlier visit`, async () => {
+    const landed = Date.now() - 3 * 24 * 60 * 60_000;
+    const row = mirrored(`on`);
+    const held: Device = {
+        ...row,
+        sync: { machine: `laptop`, mode: `sync`, seenAt: landed },
+        report: { ...row.report!, capturedAt: landed, agent: { running: true, installed: `1.183.0`, lastTickAt: landed } },
+    };
+    const el = mount([held]);
+    readAt.value = landed + 1_000;
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).not.toContain(`Last heard from`);
+    expect(text).not.toContain(`gone quiet`);
+    expect(text).not.toContain(`stopped making rounds`);
+
+    // The same reading handed over now is a machine that really has stopped answering, and says so.
+    readAt.value = Date.now();
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Last heard from`);
 });
 
 // Pause had no button before: the row's own sandbox id travels with the command, same as mirroring's.

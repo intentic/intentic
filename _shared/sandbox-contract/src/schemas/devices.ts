@@ -224,6 +224,11 @@ export const DeviceReportSchema = z.object({
 });
 export type DeviceReport = z.infer<typeof DeviceReportSchema>;
 
+// Past this, a reading stops speaking for the machine and only says when it was taken. Read against the moment the
+// reading was received, never the wall clock: a copy nobody has re-read is old, not evidence the machine went quiet.
+export const REPORT_QUIET_AFTER_MS = 60_000;
+export const reportQuiet = (report: DeviceReport, receivedAt: number): boolean => receivedAt - report.capturedAt > REPORT_QUIET_AFTER_MS;
+
 // Compares running build against installed; silent when the loop is stopped, nothing installed, or installed is a dev
 // build. An unstamped `running` still counts as skew.
 export const agentBuildSkew = (agent: DeviceAgent): { readonly running: string | undefined; readonly installed: string } | undefined => {

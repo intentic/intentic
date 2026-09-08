@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
     type Device,
     type DeviceAgentFlow,
@@ -9,6 +10,7 @@ import {
     type DeviceSandbox,
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
+    REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
@@ -17,6 +19,7 @@ import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { hostSummaries } from "./host-peer.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
@@ -26,6 +29,11 @@ import { hostSummaries } from "./host-peer.js";
 
 // How old a served reading may be before re-asking; readers never wait on this, refresh runs behind it.
 const PULL_TTL_MS = 30_000;
+
+// How long a reader waits for the refresh once the held reading is old enough to read as quiet. Below that age the
+// old copy is served at once; past it, handing it over would only be contradicted a second later, which is what makes
+// a healthy machine look dead the moment its page opens.
+const PULL_SETTLE_MS = 2_000;
 
 // Deadline on one reading; the machine's own budget sits below it, so an overrun surfaces as its own answer.
 const COMMAND_TIMEOUT_MS = 5_000;
@@ -148,9 +156,18 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     return { report: { ...report, sandboxes } };
 };
 
+const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
+
+// A landing worth waking watchers for: the machine's first reading, a change in whether it answers at all, or a fresh
+// reading replacing one already old enough to read as quiet. A routine refresh of a healthy device announces nothing,
+// so an open Devices tab is not refetched every TTL for news it already has.
+const worthAnnouncing = (before: { at: number; result: PullResult | undefined }, after: PullResult, at: number): boolean =>
+    before.result === undefined || gapOf(before.result) !== gapOf(after) || at - before.at > REPORT_QUIET_AFTER_MS;
+
 // One refresh per machine, stamped when it lands, not when it started, so a slow pull's duration is already spent
 // against the reading's age.
 const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
+    const had = { at: entry.at, result: entry.result };
     const inflight = services.perf
         .track("devices.pull", { id }, () => pull(services, id))
         // Never rejects (an abandoned caller leaves nothing unhandled); a deadline miss reads as offline.
@@ -161,23 +178,35 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
             }
+            // Pushed on the existing /events stream, which maps `hosts` to the Devices read: a machine that answers
+            // after the reader gave up waiting is on screen in a second, not at the browser's next poll.
+            if (worthAnnouncing(had, result, entry.at)) {
+                publishRuntimeChange("hosts");
+            }
             return result;
         });
     entry.inflight = inflight;
     return inflight;
 };
 
-// Answers from memory while a refresh runs behind it; only a machine never read before blocks, bounded by
-// PULL_TIMEOUT_MS.
+// Answers from memory while a refresh runs behind it. Two readings block: a machine never read before (bounded by
+// PULL_TIMEOUT_MS) and one held long enough to read as quiet (bounded by PULL_SETTLE_MS, then served anyway).
 const pullCached = async (services: Services, id: string): Promise<PullResult> => {
     const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined };
     pulled.set(id, entry);
-    if (entry.result !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
-        return entry.result;
+    const held = entry.result;
+    if (held !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
+        return held;
     }
     const inflight = entry.inflight ?? refresh(services, id, entry);
-    // Stale but serving: the refresh is not awaited here, it lands in the map for the next reader to pick up.
-    return entry.result ?? (await inflight);
+    if (held === undefined) {
+        return await inflight;
+    }
+    if (Date.now() - entry.at <= REPORT_QUIET_AFTER_MS) {
+        // Stale but serving: the refresh is not awaited here, it lands in the map for the next reader to pick up.
+        return held;
+    }
+    return (await Promise.race([inflight, delay(PULL_SETTLE_MS, undefined, { ref: false })])) ?? held;
 };
 
 // Maps os.platform()'s spelling (win32, darwin) to capability-card slugs; unknown tokens pass through as-is.

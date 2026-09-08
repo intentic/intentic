@@ -9,7 +9,7 @@ import { desktopApp } from "../../../app/environments/desktop";
 // "what is on that computer and does it want anything"; pressing it opens that machine's own page, which
 // is where every button lives.
 
-const { rows, isLoading, notice, outline, ownSlug, now } = defineProps<{
+const { rows, isLoading, notice, outline, ownSlug, readAt } = defineProps<{
     rows: readonly DeviceRow[];
     /** The first read only; a refetch must never blank an already-populated board. */
     isLoading: boolean;
@@ -18,7 +18,8 @@ const { rows, isLoading, notice, outline, ownSlug, now } = defineProps<{
     // would be a guess, so the outline draws the board's shape instead.
     outline: boolean;
     ownSlug: string | undefined;
-    now: number;
+    /** When this reading landed; every card is judged as of then, not as of now. */
+    readAt: number;
 }>();
 
 const emit = defineEmits<{ add: [] }>();
@@ -89,7 +90,7 @@ const inDesktopApp = desktopApp() !== undefined;
             let the agent work there.
         </RowNote>
 
-        <DeviceBoardCard v-for="row in shown" :key="row.device.key" :row="row" :needle="needle" :own-slug="ownSlug" :now="now" />
+        <DeviceBoardCard v-for="row in shown" :key="row.device.key" :row="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
 
         <!-- A filter that matched nothing says so, rather than leaving a group that looks empty by accident. -->
         <RowNote v-if="shown.length === 0 && rows.length > 0" variant="empty">No device or sandbox here matches "{{ query }}".</RowNote>

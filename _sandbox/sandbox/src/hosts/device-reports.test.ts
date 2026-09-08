@@ -5,6 +5,11 @@ import type { Services } from "../composition.js";
 import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, reportFrom, sandboxesFromTool } from "./device-reports.js";
 
+// The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
+// sampler (tmux, procfs) for a fact this file states in one line.
+const { published } = vi.hoisted(() => ({ published: [] as string[] }));
+vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+
 const report = (hostname: string, overrides: Partial<DeviceReport> = {}): DeviceReport => ({
     hostname,
     os: "linux",
@@ -228,7 +233,10 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
     return { services, calls };
 };
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    published.length = 0;
+});
 
 test("waits for the first reading of a machine, then serves it while refreshing behind the answer", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -248,6 +256,47 @@ test("waits for the first reading of a machine, then serves it while refreshing 
     expect((await devices(services))[0]?.report?.hostname).toBe("first");
     await vi.waitFor(() => expect(calls).toHaveLength(4));
     expect((await devices(services))[0]?.report?.hostname).toBe("second");
+});
+
+// Handing over a reading the view would already call quiet is what made a healthy machine look dead the moment its
+// page opened: the answer was contradicted a second later by the refresh behind it.
+test("waits for the answer rather than serving a reading old enough to read as quiet", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let hostname = "before";
+    const { services } = fakeServices("quiet-pc", async (call) =>
+        call.tool === "run_command" ? answer(statusEnvelope(report(hostname, { capturedAt: Date.now() }))) : answer("[]"),
+    );
+
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+
+    hostname = "after";
+    vi.setSystemTime(Date.now() + 61_000);
+    expect((await devices(services))[0]?.report?.hostname).toBe("after");
+});
+
+// The browser maps `hosts` to its Devices read, so a machine that answers after the reader stopped waiting is on
+// screen in a second instead of at the next ten-second poll. Silent on a routine refresh: news it already has.
+test("announces only a landing that changes what the view says", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { services, calls } = fakeServices("push-pc", async (call) =>
+        call.tool === "run_command" ? answer(statusEnvelope(report("push", { capturedAt: Date.now() }))) : answer("[]"),
+    );
+
+    // The machine's first reading: nothing was known about it before, so watchers are told.
+    await devices(services);
+    expect(published).toEqual(["hosts"]);
+    published.length = 0;
+
+    // A refresh of a reading still young enough to serve: same answer, no frame.
+    vi.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await vi.waitFor(() => expect(calls).toHaveLength(4));
+    expect(published).toEqual([]);
+
+    // A reading that had gone quiet, replaced: the frame is the whole point of the wait ending early.
+    vi.setSystemTime(Date.now() + 61_000);
+    await devices(services);
+    expect(published).toEqual(["hosts"]);
 });
 
 test("coalesces concurrent readers into a single round trip", async () => {

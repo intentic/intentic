@@ -16,8 +16,9 @@ import { readIntenticLines } from "../../../lib/intenticStream";
 import { DEVICES, SYNC_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Polled, not pushed:
-// state is a snapshot cached by the daemon between polls, so an idle tab costs nothing extra.
+// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Polled on a slow cadence and
+// pushed on the `hosts` domain when a machine's reading actually moves, so state is a snapshot cached by the daemon
+// between polls and an idle tab costs nothing extra.
 
 const QUERY_KEY = DEVICES.of();
 const POLL_MS = 10_000;
@@ -25,6 +26,8 @@ const POLL_MS = 10_000;
 // Callers opt into polling; a non-polling reader still gets the shared cache, refreshed once on mount.
 export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     devices: ComputedRef<Device[]>;
+    /** When this list landed here: the clock every freshness verdict on a device is judged against. */
+    readAt: ComputedRef<number>;
     error: ComputedRef<string | undefined>;
     isLoading: Ref<boolean>;
     refetch: () => void;
@@ -36,6 +39,8 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     });
     return {
         devices: computed(() => query.data.value?.devices ?? []),
+        // Restored with the cache on reload, so a hydrated list is aged from when it was actually read, not from now.
+        readAt: computed(() => query.dataUpdatedAt.value),
         error,
         // True only for the first fetch; a refetch must never blank an already-populated list.
         isLoading: query.isLoading,
